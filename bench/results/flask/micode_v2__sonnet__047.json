@@ -1,0 +1,34 @@
+{
+ "answer": "The cost comes from the nested loops in `App._find_error_handler` (`src/flask/sansio/app.py:823-846`). It repeats an MRO walk for every scope it checks, and it does that on every error.\n\n**What the function does**\n1. `_get_exc_class_and_code(type(e))` gives the exception class and its HTTP code, if it has one.\n2. It builds `names = (*blueprints, None)`. Blueprint names come first, in order, and `None` stands for the app.\n3. The outer loop runs over `(code, None)` if the exception has a code, otherwise just `(None,)`.\n4. The middle loop runs over `names`. It reads `self.error_handler_spec[name][c]`, which is a dict mapping exception classes to handlers, and skips it if it is empty.\n5. The inner loop is `for cls in exc_class.__mro__: handler_map.get(cls)`. It returns the first hit.\n\n**Why this gets expensive**\n- **The MRO walk is linear.** Each non-empty handler map is probed with one `dict.get` per class in `exc_class.__mro__`, starting at the exception itself and going up to `Exception` and `BaseException`. Each lookup is O(1), but a deep inheritance chain makes the walk O(depth). A custom exception that is five or more levels deep, or one with multiple inheritance, makes the MRO longer.\n- **The walk is repeated for every scope.** The loops multiply. For an `HTTPException` with a code, the worst case is 2 \u00d7 (number of blueprints in the request, plus 1) MRO walks. With nested blueprints, `blueprints` holds several names. If the handler that matches is the generic one (`Exception`, or nothing at all), each walk runs to the end of the MRO before moving on to the next scope.\n- **Nothing is cached.** The result is not memoized per exception class and scope. The same walk is recomputed for every raised exception, even when the class and blueprints are identical to a previous request.\n- **It only skips empty maps.** The `if not handler_map: continue` check skips scopes that have no handlers. Once several scopes each register a few handlers, none of them can be skipped, so all of them get walked.\n- **The lookup is by exact class, not by nearest match.** The handler map is keyed by class, and Flask doesn't precompute which registered handler is closest for a given class. It probes every ancestor in order, so a missing or generic handler costs the full MRO length.\n\n**Where it runs**\n`Flask.handle_user_exception` and `Flask.handle_http_exception` (`src/flask/app.py`) call `_find_error_handler` on every error. That puts the cost on the error path itself. In a normal app the MRO is short (about 3 to 6 classes) and the cost is small.\n\nI haven't measured any of this. I read the function and the code around it, and didn't run a benchmark.",
+ "cost": 0.0460192,
+ "turns": 2,
+ "duration_s": 54.94,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7150,
+  "cache_read": 32856,
+  "output": 1084,
+  "total": 41094
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def _find_error_handler\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask\", \"output_mode\": \"content\", \"-A\": 28}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _find_error_handler create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

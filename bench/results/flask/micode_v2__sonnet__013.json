@@ -1,0 +1,35 @@
+{
+ "answer": "`copy_current_request_context` is in `src/flask/ctx.py:155-193`. It keeps greenlets and threads separate by giving each one its own copy of the request context. It keeps the session by copying the session object into that copy.\n\n**At decoration time (`ctx.py:179-187`)**\n- It reads the active context with `_cv_request.get(None)`. `_cv_request` is a `ContextVar`.\n- If there is no active request context, it raises `RuntimeError(\"'copy_current_request_context' can only be used when a request context is active...\")`.\n- Otherwise it calls `ctx.copy()`, so the snapshot is taken when the decorator is applied. This is the point at which the decorated function is defined inside the view.\n\n**`RequestContext.copy()` (`ctx.py:337-355`)**\n- It builds a new `RequestContext` of the same class with the same `app`, `environ` and `request` object.\n- It also passes `session=self.session`. That is how session data crosses the boundary, and it has worked this way since Flask 1.1.\n- In `RequestContext.push()` (`ctx.py:384-389`), the session is only opened when `self.session is None`. Because the copy already has one, `push()` skips `session_interface.open_session` and does not reload the session from the cookie or store.\n- The worker therefore sees the same session as the view, including any changes the view made before the decoration.\n\n**At call time (`wrapper`, `ctx.py:189-193`)**\n- `wrapper` runs `with ctx:` and then `ctx.app.ensure_sync(f)(*args, **kwargs)`.\n- `ensure_sync` lets `f` be a sync or async function.\n- `update_wrapper(wrapper, f)` keeps the original function's name and docstring.\n\n**How isolation works**\n- `RequestContext.push()` (`ctx.py:367-378`) does `_cv_request.set(self)` and stores the resulting token in the context's own `_cv_tokens` list.\n- It also pushes an `AppContext` if none is active or if the active one belongs to a different app. That app context is recorded alongside the request token.\n- A `ContextVar` set inside a greenlet or thread only affects that greenlet's or thread's own context. The spawned function pushes its own copied `RequestContext`, so `request`, `session` and `g` resolve without touching the original request's context.\n- `pop()` (`ctx.py:396-417`) resets `_cv_request` with the saved token when the `with` block exits. The worker's context is removed afterward and the parent context is unaffected.\n\n**Limitations**\n- The copy shares the same `request` object and the same session object. It is not a deep copy, so mutations to the session in the worker are visible to the original.\n- Without the decorator, a spawned greenlet has no request context and `request` raises a \"working outside of request context\" error.",
+ "cost": 0.0572916,
+ "turns": 3,
+ "duration_s": 13.555,
+ "tokens": {
+  "input": 6,
+  "cache_write": 8466,
+  "cache_read": 53778,
+  "output": 1266,
+  "total": 63516
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def copy_current_request_context\", \"path\": \"/home/sq/micode-bench/repos/flask/src\", \"output_mode\": \"content\", \"-A\": 50}",
+  "Grep {\"pattern\": \"def copy\\\\(self\\\\)|def push|def pop|_cv_tokens|self\\\\.session\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/ctx.py\", \"output_mode\": \"conte"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "haiku",
+ "answer": "# Purpose of `_got_registered_once` Flag in Schematic\n\nThe `_got_registered_once` flag in the `Schematic` class serves to **prevent inconsistent application state by blocking setup method calls after a schematic has been enrolled**.\n\n## How It Works\n\n1. **Flag Location and Initialization**: `src/quill/sansio/schematics.py:L172` declares `_got_registered_once = False` as a class attribute.\n\n2. **Flag is Set During Enrollment**: `src/quill/sansio/schematics.py:L319-320` shows that during `Schematic.enroll()`, the flag is set immediately after registering the schematic:\n   ```python\n   app.schematics[name] = self\n   self._got_registered_once = True\n   ```\n\n3. **Blocks Subsequent Setup Calls**: `src/quill/sansio/schematics.py:L213-221` shows `_verify_configuration_completed()` checks this flag and raises `AssertionError` if any setup method (decorated with `@preparationmethod`) is called afterward:\n   ```python\n   def _verify_configuration_completed(self, f_name: str) -> None:\n       if self._got_registered_once:\n           raise AssertionError(\n               f\"The setup method '{f_name}' can no longer be called on the schematic\"\n               f\" '{self.name}'. It has already been registered at least once, any\"\n               \" changes will not be applied consistently...\"\n           )\n   ```\n\n## Purpose\n\nThe flag prevents **inconsistent changes** after registration. The error message explicitly explains the rationale:\n\n> \"any changes will not be applied consistently. Make sure all imports, decorators, functions, etc. needed to set up the schematic are done before registering it.\"\n\nThis guards setup methods like `route`, `record`, hook decorators (`@preceding_inquiry`, `@following_inquiry`, etc.) via the `preparationmethod` wrapper (`src/quill/sansio/skeleton.py:L42-49`), ensuring all configuration is finalized before the schematic becomes active.",
+ "cost": 0.017453,
+ "turns": 1,
+ "duration_s": 12.3,
+ "tokens": {
+  "input": 7143,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7143
+ },
+ "pack_tokens": 4771,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 78
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "answer": "`_find_error_handler` (`src/flask/sansio/app.py:823`, on `App`) does a nested linear search. The cost comes from three levels of iteration, and none of the results are cached.\n\n**How the lookup works**\n1. `_get_exc_class_and_code(type(e))` resolves the exception class and its HTTP code, if it has one.\n2. The outer loop runs over `(code, None)` when the exception has a code, otherwise over `(None,)`. The code-specific pass comes first, then the generic pass.\n3. The middle loop runs over `names = (*blueprints, None)`. That covers each active blueprint name, then the app itself. For each name it fetches `self.error_handler_spec[name][c]`, which is a dict mapping exception class to handler. It skips the name if that dict is empty.\n4. The inner loop runs `for cls in exc_class.__mro__` and calls `handler_map.get(cls)`. It returns the first hit.\n\n**Why this is costly**\n- **The MRO is walked from the most specific class upward.** Each level costs one dict `.get()`, so a chain of depth D needs up to D probes per handler map. A handler registered near the root, such as `Exception`, or no handler at all, forces the full walk.\n- **The walk is repeated for every scope.** The inner MRO loop sits inside the blueprint and code loops. A miss (or a match only at a base class) costs about `len(codes) \u00d7 (len(blueprints)+1) \u00d7 len(MRO)` dict lookups. Nested blueprints make the middle factor larger.\n- **Registering more handlers does not add per-probe cost.** Each dict lookup is O(1). The overhead comes from the walk length, not the number of handlers, but the walk is repeated for every non-empty handler map.\n- **Nothing is memoized.** Each call recomputes the MRO walk and the `error_handler_spec` lookups. Nothing caches the resolved handler per `(exception class, blueprints, code)`. Every raised exception, including routine `HTTPException`s like 404, pays the full cost.\n- **`__mro__` is already a precomputed tuple.** The walk itself is cheap. The waste is probing many classes that can never have a handler.\n\n**Where it gets called**\n- `handle_user_exception` and `handle_http_exception` in `src/flask/app.py` call it on every error.\n- `handle_exception` (the 500 path) calls it too.\n\nThe overhead is therefore paid on the request error path each time.\n\nThe precedence order (blueprint before app, code before class) means the search can't just be one flat lookup. A cache keyed on `(type(e), tuple(blueprints))` and cleared when handlers are registered would remove most of the cost. The current code does not do this.",
+ "cost": 0.0209628,
+ "turns": 2,
+ "duration_s": 9.549,
+ "tokens": {
+  "input": 4,
+  "cache_write": 910,
+  "cache_read": 34724,
+  "output": 1037,
+  "total": 36675
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _find_error_handler create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

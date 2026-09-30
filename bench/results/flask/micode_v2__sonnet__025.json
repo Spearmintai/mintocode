@@ -1,0 +1,34 @@
+{
+ "answer": "The question's premise doesn't match this repository. Flask has no separate asynchronous method-view class and no synchronous \"dispatch base class\" that an async one inherits from. `src/flask/views.py` defines only two classes:\n\n- `View` (L16) is the generic base class. It has an abstract `dispatch_request` and a classmethod `as_view`.\n- `MethodView(View)` (L138) dispatches on the HTTP method. It is the only method-view class, and it is used for sync and async handlers alike.\n\n**How async works instead**\n\n- `MethodView.dispatch_request` (L182-191) looks up the handler with `getattr(self, request.method.lower())`. For HEAD it falls back to `get`.\n- It then calls the handler as `current_app.ensure_sync(meth)(**kwargs)` (L191).\n- `View.as_view` wraps `self.dispatch_request` the same way, through `current_app.ensure_sync` (L110 and L116).\n- `Flask.ensure_sync` (`src/flask/app.py:L966-978`) checks `inspect.iscoroutinefunction(func)`. If the function is a coroutine function, it returns `async_to_sync(func)`. Otherwise it returns the function unchanged.\n\n**Why there is no independent async dispatch**\n\n- Flask is a WSGI framework, so the request cycle is synchronous. Async support is a thin adapter at the point where a handler is called, and it does not need a parallel class hierarchy.\n- Because `ensure_sync` is applied at call time, one `MethodView` can mix `async def get` with `def post`.\n- Method discovery is also shared. `MethodView.__init_subclass__` (L165-180) builds `methods` from the handler names that exist, whether they are sync or async.\n- `ensure_sync` is an overridable hook on `Flask`, so an async-native framework can change how coroutines are run without touching the view classes.\n\nIf you meant another project, such as Quart, its class layout would need to be checked separately.",
+ "cost": 0.041072399999999995,
+ "turns": 2,
+ "duration_s": 8.708,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6463,
+  "cache_read": 32762,
+  "output": 866,
+  "total": 40095
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"ensure_sync|class \\\\w*View|async\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/views.py\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 25,
+ "question": "Why does the asynchronous HTTP method view class inherit from the synchronous HTTP method dispatch base class rather than implementing async dispatch independently?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 13,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 73
+ }
+}

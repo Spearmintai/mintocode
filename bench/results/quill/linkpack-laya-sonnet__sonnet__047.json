@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _locate_fault_processor create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "answer": "The material supports part of this premise: the lookup is a linear scan, and its cost grows with the shape of the hierarchy and the number of registration buckets. It does not show that this is a measurable performance problem. No profiling or benchmark appears in the excerpts.\n\n**What the code does (`src/quill/sansio/app.py:L823-846`, `App._locate_fault_processor`)**\n\n1. `_obtain_exception_type_and_status(type(e))` returns `(exc_class, code)` (L831).\n2. `names = (*schematics, None)` (L832). These are the schematic names for the request, plus the app level.\n3. The outer loop runs over `(code, None)` if `code` is not None, otherwise just `(None,)` (L834).\n4. For each `c`, the middle loop runs over `names` and fetches `handler_map = self.error_handler_spec[name][c]` (L835-836). It skips empty maps (L838-839).\n5. For each non-empty map, the inner loop walks `exc_class.__mro__` and calls `handler_map.get(cls)` on each class, returning the first hit (L841-845).\n6. If nothing matches, it returns `None` (L846).\n\n**Where the cost comes from**\n\n- Each `handler_map.get(cls)` is a dict lookup, so it is O(1). The cost comes from how many times it runs.\n- The worst case, when no handler matches or only a distant ancestor matches, is about `len(code passes) \u00d7 len(names) \u00d7 len(MRO)` lookups. That is up to 2 \u00d7 (schematics + 1) \u00d7 MRO length.\n- A deep exception inheritance chain lengthens `__mro__`, so the inner loop does more iterations.\n- More schematics on the request means more `names`, and each non-empty handler map gets its own full MRO walk.\n- The order of the search is by specificity (schematic + code, app + code, schematic + class, app + class). A match found late, or no match at all, means the scan has gone through every earlier combination.\n- Empty maps are skipped cheaply, so registering handlers in only a few buckets reduces the work.\n\n**Caveats**\n\n- The scan is repeated on every handled exception. The excerpts show no caching of the result, so the same lookup is redone each time. Only what is visible here supports that claim.\n- Exception handling is the error path, and each lookup is a small number of dict `get` calls. Whether this is noticeable depends on real MRO lengths and schematic counts, which the material does not quantify.\n- I can't tell from these excerpts what `_obtain_exception_type_and_status` costs, or whether `error_handler_spec` is a `defaultdict` that creates entries on access. That is the next place to look if you are profiling.\n- `manage_client_failure` and `manage_web_failure` (`src/quill/app.py:L744-809`) call this function once per exception. So it is not called repeatedly within a single handling step, except that `manage_failure` does its own lookup for a 500.\n\nTo confirm a real problem, profile `_locate_fault_processor` with a representative exception depth and schematic count. If it shows up, the natural fix is memoizing the result per `(type(e), tuple(schematics))`, invalidated whenever handlers are registered.",
+ "cost": 0.025892000000000002,
+ "turns": 1,
+ "duration_s": 17.1,
+ "tokens": {
+  "input": 4902,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 4902
+ },
+ "pack_tokens": 2220,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "answer": "The lookup sequence is in `App._find_error_handler`, at `src/flask/sansio/app.py:823-846`.\n\n**Setup (L831-832)**\n- `self._get_exc_class_and_code(type(e))` is a `Scaffold` helper. It returns the exception class and its HTTP status code. The code is `None` for non-`HTTPException` classes.\n- `names = (*blueprints, None)` is the list of scopes to search. `blueprints` is passed in from `request.blueprints`, so blueprint scopes come first. `None` stands for the app-level scope and comes last.\n\n**The three nested loops**\n1. **Status code (L834).** `for c in (code, None) if code is not None else (None,)` runs the specific status code first. It then falls back to `None`, which holds handlers registered by exception class. If the exception has no code, only `None` is tried.\n2. **Blueprint scopes (L835-836).** `for name in names` fetches `self.error_handler_spec[name][c]`. The blueprints are tried in order, then the app. L838-839 skips empty maps.\n3. **Exception MRO (L841-845).** `for cls in exc_class.__mro__` calls `handler_map.get(cls)`. The first non-`None` handler is returned. This makes the most specific class win, and the search then falls back to base classes.\n\nIf nothing matches, the method returns `None` (L846).\n\n**Resulting precedence (from the docstring, L826-829)**\n1. Blueprint handler for the specific code.\n2. App handler for the specific code.\n3. Blueprint handler for the exception class.\n4. App handler for the exception class.\n\nThe code loop is outermost, so a code-specific handler at app level beats a class-based handler in a blueprint. Within each code, the scope loop is outer and the MRO loop is inner.\n\n**Callers**\n- `Flask.handle_http_exception` (`src/flask/app.py:744-777`) calls it for `HTTPException`s.\n- `Flask.handle_user_exception` (`src/flask/app.py:779-809`) calls it for other exceptions.",
+ "cost": 0.0446014,
+ "turns": 2,
+ "duration_s": 8.29,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7488,
+  "cache_read": 32857,
+  "output": 807,
+  "total": 41156
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse blueprint scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 86
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "sonnet",
+ "answer": "Based on the material provided, the mechanism does not look like a performance problem. Repeating it across many schematics should be cheap.\n\n**What each registration does**\n\n- `Schematic.program_layout_sieve` (src/quill/sansio/schematics.py:L443-458) returns a decorator. The decorator calls `attach_program_layout_sieve(f, name=name)` and returns `f`.\n- `attach_program_layout_sieve` (L460-475) defines a small closure, `register_template(state)`. That closure does one dict assignment: `state.app.markup_engine_env.filters[name or f.__name__] = f` (L472-473).\n- It then passes the closure to `self.note_once_only(register_template)` (L475).\n- `note_once_only` (L232-244) wraps the function so it runs only when `state.first_registration` is True, then calls `record()`. The wrapping uses `update_wrapper`.\n\n**Cost per schematic**\n\n- At definition time: one closure, one wrapper and one `record()` append per filter.\n- At enroll time (`app.enroll_plan(bp, ...)`): the deferred callback runs once and does one dict store. The `first_registration` guard skips it on later registrations of the same schematic object.\n- The test at tests/test_schematics.py:L388-398 shows this. After `enroll_plan`, `app.markup_engine_env.filters[\"strrev\"]` is the function.\n\nThe total work is O(number of schematics \u00d7 filters per schematic), and each unit is a constant-time dict write. None of the provided material shows any per-request cost, template recompilation or cache invalidation triggered by this step.\n\n**Things that could matter in practice (not proven by the material)**\n\n- **Name collisions.** All schematics write into the same app-wide `markup_engine_env.filters` dict. Two schematics registering the same name means the last one enrolled silently overwrites the earlier one. That is a correctness problem, not a performance one.\n- **Enroll-time work beyond filters.** Enrolling does other things too, such as merging hook dicts in `_combine_schematic_functions` and applying link presets. The filter step is a small part of that. The material doesn't show how expensive those parts are.\n- **Jinja environment state.** Changing `env.filters` after templates have been compiled generally doesn't invalidate the compiled cache in Jinja. I can't confirm from the material how Quill's `markup_engine_env` is built, so check where it is created in `src/quill/app.py` if you suspect otherwise.\n- **Late registration.** Registering after the first request is a lifecycle error (docs/lifecycle.rst:L36-61), not a slowdown.\n\n**Conclusion**\n\nThe premise doesn't hold based on the code shown. Repeating the registration across distinct schematics adds only linear, constant-time-per-item startup work. If you saw an actual slowdown, profile `enroll_plan` and the other deferred callbacks. I can't say more without seeing that code, so the likeliest places to look are `_combine_schematic_functions` and the rest of `SchematicSetupStatus` handling in schematics.py.",
+ "cost": 0.038711999999999996,
+ "turns": 1,
+ "duration_s": 9.9,
+ "tokens": {
+  "input": 8155,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8155
+ },
+ "pack_tokens": 4180,
+ "score": {
+  "correctness": 10,
+  "completeness": 8,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 12,
+  "total": 60
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "The hidden coupling is in `after_this_request` (`src/flask/ctx.py:117-149`). It stores its state on the request context, and `Flask.process_response` (`src/flask/app.py:1298-1324`) is the only thing that reads it.\n\n**How the coupling works**\n\n- **Registration writes to the current request context.** `after_this_request(f)` calls `_cv_request.get(None)` and appends `f` to `ctx._after_request_functions`. That list is created empty in `RequestContext.__init__` (`ctx.py:~331`). The decorator returns `f` unchanged and does nothing else. It does not check the request's progress, and it does not record which view or scope registered `f`.\n- **Consumption is a single pass.** `process_response` (`app.py:1311-1314`) reads `request_ctx._get_current_object()._after_request_functions`. It runs them first, in registration order, each as `response = ensure_sync(func)(response)`. This happens before the `after_request_funcs` registered with `@app.after_request` or `@bp.after_request`. Those run in reverse order (`app.py:1316-1319`), and then the session is saved (`app.py:1321-1322`).\n- **Nothing clears the list.** `RequestContext.pop` (`ctx.py:396-431`) does not reset `_after_request_functions`. The list lives and dies with the `RequestContext` object. `RequestContext.copy` (`ctx.py:337-355`) builds a new instance, so its list starts empty.\n\n**Where this causes trouble with nested or conditional registration**\n\n1. **Registration only works while a request context is active.** The decorator raises `RuntimeError` otherwise, for example at import time or in a background thread. Registration and the response lifecycle are tied together through the `_cv_request` contextvar, not through the app.\n2. **Registration must happen before `process_response` runs.** Once `process_response` has iterated the list, a later call has no effect. This can happen when it is called from a teardown handler, from a streaming generator, or from an `after_request` handler. A generator wrapped with `stream_with_context` pushes the request context again, but by then the response has already been finalized.\n3. **The list has no scope.**\n   - The registration is not tied to the function that made it. If a helper or a decorator on a view registers a callback conditionally, that callback still runs for that whole request's response.\n   - A callback registered in one branch, or by a nested view or helper, stays active however the request is handled afterwards. Examples are an error handler, an internal redirect, or a `before_request` short-circuit.\n   - Each call to the same registration code appends another entry. The list does no de-duplication, so a callback runs once per registration.\n4. **Nested or re-pushed contexts share one list.** `RequestContext.push` and `pop` are re-entrant through `_cv_tokens`, and teardown runs only when the last token is popped (`ctx.py` `len(_cv_tokens) == 1`). Re-pushing the same `RequestContext`, as `copy_current_request_context` and `stream_with_context` do, shares the same list. Callbacks registered in an inner block therefore land in the outer request's list. A `RequestContext.copy()` gets an empty list of its own, so callbacks registered there are never run by the original request's `process_response`.\n5. **Order and errors depend on the lifecycle.** `after_this_request` callbacks run before every `after_request` handler. Each callback must return a response, because its return value replaces `response` for the next one. If the view raised and `handle_exception` or `handle_user_exception` produced the response, the callbacks still run through `finalize_request`. Conditional registration therefore changes the response even on error paths.",
+ "cost": 0.07267100000000001,
+ "turns": 4,
+ "duration_s": 13.308,
+ "tokens": {
+  "input": 6,
+  "cache_write": 11509,
+  "cache_read": 52665,
+  "output": 1609,
+  "total": 65789
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_after_request_functions|def after_this_request\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/ctx.py\", \"offset\": 115, \"limit\": 36}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/app.py\", \"offset\": 1295, \"limit\": 30}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

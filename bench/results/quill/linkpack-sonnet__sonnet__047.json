@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _locate_fault_processor create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "answer": "The material only partly supports the premise. The lookup is linear in a bounded way, but nothing in the provided code measures or demonstrates a real performance problem.\n\n**What the code does** (`src/quill/sansio/app.py:L823-846`, `App._locate_fault_processor`):\n\n1. It calls `_obtain_exception_type_and_status(type(e))` to get `(exc_class, code)`.\n2. It builds `names = (*schematics, None)`. Here `schematics` comes from `request.schematics`, which is the current schematic plus its parents.\n3. The outer loop runs over `c` in `(code, None)`, or just `(None,)` when `code is None`. That is at most 2 iterations.\n4. The middle loop runs over each `name` in `names`.\n5. For each pair it reads `self.error_handler_spec[name][c]`. If that map is empty it does `continue`, so it skips the MRO walk.\n6. Otherwise the inner loop runs `for cls in exc_class.__mro__`, calling `handler_map.get(cls)` and returning on the first non-None hit.\n\n**Where the cost comes from**\n\n- The worst case is a miss. That means no handler is registered anywhere, or the match is only at the far end of the MRO, such as a handler for `Exception` or `HTTPException`.\n- In that case the work is roughly (2 code passes) \u00d7 (number of schematic levels + 1) \u00d7 (MRO length) dict `.get` calls. Each `.get` is O(1).\n- A deeper exception inheritance chain lengthens the MRO and so adds a proportional number of lookups per non-empty handler map.\n- Many registered handlers do not lengthen the scan. The scan iterates over the MRO, not over the handlers, and the lookups are dict-based. More handlers only matter because more of the `(c, name)` maps are non-empty and therefore actually scanned.\n- Deep schematic nesting multiplies the work, because `names` grows with schematic depth.\n\n**Caveats**\n\n- The scan only runs on the error path. It is not in the normal request path.\n- MRO lengths are typically single or low double digits, so each lookup is very cheap. The material contains no benchmark or profiling, so I can't say the overhead is significant.\n- The lookup order (schematic and code first, then app and code, then schematic and class, then app and class) is deliberate. It gives specificity precedence, and the MRO walk is what makes parent-class handlers work. `tests/test_custom_fault_handler.py:L61-97` (`test_fault_catcher_descendant`) shows this: a `ParentException` handler catches an unregistered child.\n- The cache-free design means the result is recomputed on every error. Nothing in the provided code memoizes it. I can't see whether that is intentional.\n\n**Where to look next**\n\n- `Armature._obtain_exception_type_and_status` in `src/quill/sansio/skeleton.py:L656-698` is also called per lookup. Its cost isn't shown in the material.\n- `enroll_fault_responder`, which populates `error_handler_spec`, isn't shown either.\n- If you want to quantify the overhead, profile `_locate_fault_processor` with a deep exception chain and several nested schematics.",
+ "cost": 0.04011,
+ "turns": 1,
+ "duration_s": 10.5,
+ "tokens": {
+  "input": 8446,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8446
+ },
+ "pack_tokens": 4374,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

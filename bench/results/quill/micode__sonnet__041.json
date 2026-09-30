@@ -1,0 +1,35 @@
+{
+ "answer": "The test class is `TestAddressBuilding` in `tests/test_aids.py`, starting at line 102. It tests `quill.build_link_to`, which is Quill's `url_for`. Its methods are:\n\n- `test_link_for_with_fragment` (line 103) covers anchors. It checks that `build_link_to(\"index\", _anchor=\"x y\")` returns `/#x%20y`.\n- `test_link_for_with_protocol` (line 110), `test_link_for_with_protocol_not_outside` (line 120) and `test_link_for_with_swapping_protocols` (line 131) cover schemes. They exercise `_scheme=\"https\"` together with `_external=True` and `_external=False`.\n- `test_link_with_verb` (line 143) covers HTTP methods. It uses `_method=\"GET\"` and `_method=\"POST\"` on a view registered with different rules per method. The checks include `/myview/`, `/myview/42` and `/myview/create`.\n- `test_link_for_with_this` (line 164) is another method in the same class. I didn't read its body.\n\nThe tests use the `app` and `qry_scope` fixtures. The code under test is `helpers.build_link_to` (`src/quill/helpers.py`, lines 188-239), which forwards to `App.build_link_to` in `src/quill/app.py` (around lines 1003-1127).",
+ "cost": 0.046777,
+ "turns": 3,
+ "duration_s": 8.335,
+ "tokens": {
+  "input": 6,
+  "cache_write": 7259,
+  "cache_read": 52745,
+  "output": 718,
+  "total": 60728
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_anchor|_scheme\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"head_limit\": 30}",
+  "Grep {\"pattern\": \"^class |_method=|    def test_\", \"path\": \"/home/sq/micode-bench/repos/quill/tests/test_aids.py\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 41,
+ "question": "Where is the test class that validates URL generation with anchors, schemes, and HTTP methods defined?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

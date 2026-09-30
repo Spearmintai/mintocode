@@ -1,0 +1,31 @@
+{
+ "answer": "`TagBytes` in `src/flask/json/tag.py` (L159-170) keeps bytes reversible by pairing a base64 encode with a matching decode, and by marking the encoded value with a unique key so it can be recognised on the way back.\n\n**Encoding: `to_json`**\n- `to_json` returns `b64encode(value).decode(\"ascii\")`.\n- Base64 turns arbitrary bytes into ASCII-only text, so the result is always valid JSON string content.\n- The `.decode(\"ascii\")` step converts the base64 `bytes` into a `str`, which is what JSON can hold.\n\n**Decoding: `to_python`**\n- `to_python` returns `b64decode(value)`.\n- Base64 is lossless, so this gives back exactly the original bytes.\n\n**Tagging: `key = \" b\"`**\n- The key starts with a space, which makes it unlikely to collide with a real dict key.\n- `check` uses `isinstance(value, bytes)`, so only bytes values get this tag.\n- `JSONTag.tag` (in the same file) wraps the encoded value as `{\" b\": \"<base64>\"}`. That wrapper is what tells the reader the string was bytes rather than an ordinary string.\n\n**Where the serializer applies it**\n- `TaggedJSONSerializer` (`tag.py`, around L219-327) holds `TagBytes` in its `order`, after `TagDict`, `PassDict`, `TagTuple` and `PassList`.\n- `dumps` runs `tag()` on the value, which applies the first tag whose `check` matches, and then calls `flask.json.dumps`.\n- `loads` runs `flask.json.loads` and then `_untag_scan`. It untags bottom-up and converts a dict only if it has a single key that is registered in `self.tags`.\n- Since the `\" b\"` key is registered, `{\" b\": ...}` is passed back through `TagBytes.to_python` and becomes `bytes` again.\n\n**Protection against lookalike dicts**\n- `TagDict` comes first in `order`. If a user's own dict happens to have a single key that matches a tag key, such as `{\" b\": \"x\"}`, `TagDict` escapes it by wrapping it under its own key.\n- On load, the escaped dict is restored as a plain dict instead of being decoded as bytes.\n- Together with the single-key rule in `_untag_scan`, this stops user data from being mistaken for tagged bytes, so the round trip stays consistent.\n\nThis serializer is what Flask's session cookie uses (`src/flask/sessions.py`), which is why bytes stored in the session come back as `bytes`.",
+ "cost": 0.0427094,
+ "turns": 2,
+ "duration_s": 8.732,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6494,
+  "cache_read": 32927,
+  "output": 1014,
+  "total": 40439
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 16,
+ "question": "How does the tagged JSON serializer class that handles bytes maintain data consistency and reversibility when encoding binary data through base64?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

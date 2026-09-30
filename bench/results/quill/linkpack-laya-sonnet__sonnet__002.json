@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "The excerpts show the outline of this architecture but not the code that ties static serving to caching. Some of the mechanism is visible, and the rest I can only point to.\n\n**What the material shows**\n\n- **Shared base class:** `Armature` (`src/quill/sansio/skeleton.py:L52-698`) is the common base of `Quill` and `Schematic`. It owns the static and template configuration: `fixed_dir`, `fixed_address_route`, `template_folder` and `root_path` in `__init__` (L75-215). It also has the `fixed_dir` and `fixed_address_route` properties (L223-238, L248-269) and `owns_fixed_directory` (L240-246). The docstring says a static route is added when `fixed_dir` is set. Because both the app and schematics inherit this, each can carry its own static folder and URL prefix.\n- **Component registration:** `Schematic.enroll` (`src/quill/sansio/schematics.py:L273-377`) registers a schematic with the app.\n  - It builds a dotted name from `name_prefix` and `name` (L302-304).\n  - It raises `ValueError` if the name is already in `app.schematics` (L306-312).\n  - It creates a `SchematicSetupStatus` (L34-116). That object exposes `app`, `schematic`, `options`, `first_registration`, `subdomain` and `url_prefix` and is passed to every deferred function.\n  - `note_once_only` (L232-244) wraps a function so it runs only when `state.first_registration` is true. This lets a component register something, such as a static route, only once even if the schematic is enrolled several times.\n- **Static serving and caching on the app:** `Quill` (`src/quill/app.py:L81-1536`) has `fetch_file_transfer_ttl` (L281-306), `dispatch_fixed_document` (L308-328), `launch_asset` (L330-361) and `launch_deployment_asset` (L363-383). From the names, these are the file-transfer cache TTL, the static-file view and the resource loaders. That is my inference only, because their bodies are not in the material.\n- **Setup timing:** Per the precompiled answer, setup methods such as `route` cannot be called after the first request. Registration of static routes and schematics therefore has to happen before serving.\n\n**What the material does not settle**\n\n- **Where the static route is created:** I can't confirm whether it is added in `Armature.__init__` or in `Schematic.enroll`. Read `Armature.__init__` (L75-215) and the rest of `Schematic.enroll` (L313-377).\n- **How caching is kept consistent:** I can't confirm how a schematic's static view and the app's static view share cache behavior. Check whether `dispatch_fixed_document` (`app.py` L308-328) reads its TTL from `fetch_file_transfer_ttl` (L281-306), and whether the schematic's static view calls the same method through `current_app`. The config default for the TTL is likely in `Quill.default_config` (L178-210).\n- **Whether there is a separate static component:** The material shows no dedicated static-asset class separate from the main framework. Static handling appears to live in `Armature`, `Quill` and `Schematic` themselves.",
+ "cost": 0.037948,
+ "turns": 1,
+ "duration_s": 24.5,
+ "tokens": {
+  "input": 7448,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7448
+ },
+ "pack_tokens": 3697,
+ "score": {
+  "correctness": 9,
+  "completeness": 7,
+  "relevance": 12,
+  "clarity": 14,
+  "reasoning": 11,
+  "total": 53
+ }
+}

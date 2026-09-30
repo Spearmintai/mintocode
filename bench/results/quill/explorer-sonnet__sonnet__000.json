@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "answer": "`ensure_ascii` on `StandardJSONSupplier` decides whether non-ASCII characters come out as `\\uXXXX` escapes or as literal Unicode characters. It defaults to `True`. The attribute is defined at `src/quill/json/supplier.py:L144`.\n\n- **`True` (default):** every non-ASCII character is escaped. For example, `\u2603` is serialized as `\"\\u2603\"`. The output is pure ASCII, which the docstring says \"may be more compatible with some clients\".\n- **`False`:** characters are written as-is, so `\u2603` becomes `\"\u2603\"` and `\u20ac` becomes `\"\u20ac\"`. The docstring says this can be \"better for performance and size\".\n\n`dumps` (L166-179) applies the setting. It calls `kwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)` and then `json.dumps(obj, **kwargs)`. The method name `assumefallback` is the repo's own. It appears to set a value only when the caller hasn't given one, which matches the map's note that caller values aren't overridden. So a per-call `ensure_ascii=...` argument beats the class or instance attribute.\n\n`response()` (L189-215) builds its output through `self.dumps`, so it follows the same setting. The setting is therefore also read when JSON responses are produced.\n\nTwo tests show the behavior:\n- `tests/test_objtext.py:L48-54` sets `app.json.ensure_ascii` to `True` and `False`. It expects `\"\\u2603\"` and `\"\u2603\"` respectively.\n- `tests/test_trialing.py:L110-114` sets `ensure_ascii=False`. A response body built from `json='\u20ac'` then reads `\"\u20ac\"`.",
+ "cost": 0.029387000000000003,
+ "turns": 2,
+ "duration_s": 8.8,
+ "tokens": {
+  "input": 14203,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14203
+ },
+ "pack_tokens": 1577,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 81
+ }
+}

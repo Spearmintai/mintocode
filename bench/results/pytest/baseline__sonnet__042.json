@@ -1,0 +1,35 @@
+{
+ "answer": "The wrapping logic is in `ReprFuncArgs.toterminal()` in `src/_pytest/_code/code.py`. The class is defined at line 1455 and the method starts at line 1458. `ReprFuncArgs` is a `@dataclasses.dataclass(eq=False)` subclass of `TerminalRepr`. Its only field is `args: Sequence[tuple[str, object]]`, a list of (name, value) pairs.\n\nHow the method works (lines 1458\u20131474):\n\n1. If `self.args` is non-empty, it starts with an empty accumulator string, `linesofar`.\n2. For each `(name, value)` pair, it builds `ns = f\"{name} = {value}\"`.\n3. The width check is on line 1463: `if len(ns) + len(linesofar) + 2 > tw.fullwidth:`.\n   - The `+ 2` is the length of the `\", \"` separator.\n   - `tw.fullwidth` is the terminal width from the `TerminalWriter` passed in.\n4. If the check is true, the argument would overflow the line:\n   - If `linesofar` has content, it is written out with `tw.line(linesofar)`.\n   - `linesofar` is then reset to `ns`, so the argument starts a new line.\n5. Otherwise the argument is appended to the current line: `linesofar += \", \" + ns`, or `linesofar = ns` if the line is empty.\n6. After the loop, any remaining `linesofar` is flushed with `tw.line(linesofar)`. A final `tw.line(\"\")` adds a blank line.\n\nAn argument that is longer than the terminal width is not split. It is put on a line of its own.",
+ "cost": 0.037384600000000004,
+ "turns": 3,
+ "duration_s": 7.645,
+ "tokens": {
+  "input": 6,
+  "cache_write": 4952,
+  "cache_read": 48473,
+  "output": 787,
+  "total": 54218
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class ReprFuncArgs\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/_code/code.py\", \"offset\": 1453, \"limit\": 40}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 42,
+ "question": "Where is the line-wrapping logic that determines when function arguments exceed terminal width implemented in the ReprFuncArgs class?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 87
+ }
+}

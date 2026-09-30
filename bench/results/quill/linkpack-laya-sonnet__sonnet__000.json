@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "answer": "The control is the `ensure_ascii` class attribute on `StandardJSONSupplier`, and it decides whether non-ASCII characters are escaped or written literally in the serialized JSON.\n\n**Where it is defined and applied**\n- `src/quill/json/supplier.py:L144`: `ensure_ascii = True` is the class default.\n- `StandardJSONSupplier.dumps` (L166-179) calls `kwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)`. This fills in the value from the attribute only when the caller has not passed one. It then returns `json.dumps(obj, **kwargs)`. So the attribute is forwarded to the standard library's `ensure_ascii` argument.\n\n**Effect on output**\n- `True` (the default): non-ASCII characters are emitted as `\\uXXXX` escapes, so the output is pure ASCII. `tests/test_objtext.py:L48-54` (`test_objtext_as_universal_text`) shows `app.json.dumps(\"\\N{SNOWMAN}\")` giving `'\"\\\\u2603\"'`.\n- `False`: the characters are written as-is. The same test gives `'\"\u2603\"'`.\n\n**Where else it takes effect**\n- `StandardJSONSupplier.response` (L189-215) builds its body with `self.dumps(obj, **dump_args)`. `dump_args` only sets `indent` or `separators`, so `ensure_ascii` comes from the attribute here too.\n- `quill.json.dumps` (`src/quill/json/__init__.py:L13-44`) delegates to `current_app.json.dumps` when an app is available. The app's `ensure_ascii` therefore applies. Without an app it calls plain `json.dumps` with only a `_fallback` default, so the standard library's own `ensure_ascii` default applies rather than the supplier's attribute.\n- `tests/test_trialing.py:L110-114` (`test_ambientassembler_objtext_serializes`) sets `app.json.ensure_ascii = False`. It then checks that `SurroundingsConstructor(app, json=\"\u20ac\")` produces a body that reads as `'\"\u20ac\"'`, which shows the app's setting is used there.\n\n**Not settled by the material**\nThe abstract `JSONSupplier.dumps` (L41-47) only raises `NotImplementedError`. `ensure_ascii` is defined only on `StandardJSONSupplier`, so other suppliers would have to handle it themselves.",
+ "cost": 0.026594,
+ "turns": 1,
+ "duration_s": 26.9,
+ "tokens": {
+  "input": 5421,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5421
+ },
+ "pack_tokens": 2313,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

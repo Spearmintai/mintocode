@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295). It works by moving the `hashlib.sha1` lookup from import time to call time.\n\n**The function (L290-295):**\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    return hashlib.sha1(string)\n```\n- The attribute `hashlib.sha1` is only looked up inside the function body. Defining the function never touches it.\n- The docstring gives the reason. FIPS builds may not include SHA-1. If the code referenced `hashlib.sha1` directly, for example as a default, the import would fail before a developer could configure something else.\n- `string` defaults to `b\"\"`, so the function can be called with no arguments. That matches how a digest constructor is normally called.\n\n**How it is wired in (L307):**\n```python\ndigest_method = staticmethod(_postponed_sha1)\n```\nThis is on `ProtectedBiscuitSessionAdapter`, the default itsdangerous cookie adapter. `staticmethod` keeps the function from being bound to the instance, so it is called like `hashlib.sha1` itself. The class stores the wrapper, not the real `hashlib.sha1`. Loading `sittings.py` therefore never asks for SHA-1.\n\n**Effect:**\n- **Import time:** only the function object is created. Nothing checks whether SHA-1 is available, so a restricted or FIPS environment imports fine.\n- **Runtime:** SHA-1 is needed only when the adapter first calls `digest_method` to build a digest. If the build lacks SHA-1, the failure happens then, at the actual use.\n- **Configuration:** because import no longer fails, the developer can set a different `digest_method` before any digest is computed.\n\nThe wrapper doesn't run any validation. It just makes the `hashlib.sha1` lookup, and any error from it, happen at call time. The compiled material doesn't show where the adapter calls `digest_method`, so I haven't traced that call site.",
+ "cost": 0.0332164,
+ "turns": 1,
+ "duration_s": 8.0,
+ "tokens": {
+  "input": 9775,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9775
+ },
+ "pack_tokens": 3860,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

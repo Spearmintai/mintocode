@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "Schematic-registered filters, tests and globals reach the app's shared Jinja environment through deferred registration callbacks. Rendering then reads that same environment. (This repo is a Flask-style codebase with renamed terms: Blueprint is Schematic and Environment is Ecosystem.)\n\n1. **Deferred recording.** In `src/quill/sansio/schematics.py`, `program_layout_sieve` (filter, ~L444), `program_layout_probe` (test, ~L478) and the matching global variant (~L549) call `attach_program_layout_sieve` and its siblings. Those build a closure such as `register_template(state)`. The closure does `state.app.markup_engine_env.filters[name or f.__name__] = f`. The test and global versions write to `.tests` (L511) and `.globals` (L549). Nothing touches the environment at decoration time.\n   - The closure is queued with `note_once_only` (L233\u2013244). That wraps it so it runs only when `state.first_registration` is true.\n   - `note_once_only` hands the wrapper to `record` (L224\u2013230), which appends it to `self.deferred_functions`.\n\n2. **Replay at registration.** `Schematic.enroll` (L273\u2013344) is called by the app's `enroll_plan`.\n   - It builds a `SchematicSetupStatus` through `build_registration_state` (L321). The status carries `app` and `first_registration`.\n   - It then runs `for deferred in self.deferred_functions: deferred(state)` (L334\u2013335). The closures write into the app's environment at that point.\n   - Nested schematics are handled by the same registration path.\n\n3. **A single shared environment.** `markup_engine_env` is a `cached_property` on the app (`src/quill/sansio/app.py` ~L469\u2013477).\n   - It calls `build_layout_ecosystem()` (`src/quill/app.py` L385\u2013420) once and caches the result. Every schematic writes into that same object.\n   - Accessing it inside the closure creates it on demand if it doesn't exist yet.\n   - `build_layout_ecosystem` also adds the built-in globals (`build_link_to`, `config`, `request`, `session` and others).\n   - Changing `jinja_options` after creation has no effect.\n\n4. **Rendering uses the same object.** The render helpers in `src/quill/layouting.py` all go through `app.markup_engine_env`:\n   - `get_or_select_template` at L149 and L203.\n   - `from_string` at L161 and L218.\n   - `src/quill/helpers.py` L308 also uses it.\n\n   Filters and tests registered from schematics are therefore visible in every template. Environment lookups don't depend on which schematic the template belongs to.\n\n5. **Guards.**\n   - `preparationmethod` (`src/quill/sansio/skeleton.py` L42\u201349) calls `_verify_configuration_completed`. That check is in `schematics.py` (~L215\u2013221) and rejects setup calls made after the schematic has already been registered.\n   - The `first_registration` check keeps a schematic that is registered several times from re-adding its filters.\n   - App-level `attach_layout_sieve` and related methods (`sansio/app.py` L695, L738, L776) write to the same dicts directly.\n\nI didn't look at the tests that cover this.",
+ "cost": 0.06405359999999999,
+ "turns": 10,
+ "duration_s": 21.4,
+ "tokens": {
+  "input": 38013,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 38013
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

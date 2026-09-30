@@ -1,0 +1,36 @@
+{
+ "answer": "The `_HighlightFunc` protocol and every function that uses it are in `src/_pytest/assertion/util.py`. The diff-versus-python choice is made by whichever lexer argument each caller passes. The assertion module has no conditional that picks between them.\n\n**The protocol and its stand-ins**\n- `_HighlightFunc` (line 41) is a `Protocol` whose `__call__(source, lexer: Literal[\"diff\", \"python\"] = \"python\") -> str` applies highlighting.\n- `dummy_highlighter` (line 46) is a no-op implementation that returns the source unchanged. `_notin_text` (line ~604) passes it to `_diff_text`.\n- The real implementation is `config.get_terminal_writer()._highlight`. It is assigned to `highlighter` in `assertrepr_compare` (line 206), and it lives in the terminal writer, not this module.\n\n**Functions that call the highlighter with `lexer=\"diff\"`**\n- `_diff_text` (line 285) calls `highlighter(\"\\n\".join(ndiff(...)), lexer=\"diff\")` at lines 328-336.\n- `_compare_eq_iterable` (line 340) calls `highlighter(... difflib.ndiff ..., lexer=\"diff\")` at lines 357-363.\n\n**Functions that call the highlighter with the default `\"python\"` lexer**\n- `_set_one_sided_diff` (calls at lines ~420 and 424).\n- `_compare_eq_sequence` (lines ~398 and 420-424).\n- `_compare_eq_dict` (lines 513-539).\n- `_compare_eq_cls` (lines 578-588).\n- `_compare_eq_set`, `_compare_gte_set`, `_compare_lte_set`, `_compare_gt_set`, `_compare_lt_set` and `_notin_text` reach it only indirectly, by delegating to `_set_one_sided_diff` or `_diff_text`.\n\n**Functions that reach it only by passing `highlighter` down**\n- `assertrepr_compare` (line ~206) builds the highlighter and passes it to `_compare_eq_any` and to the `_compare_gte_set`, `_compare_lte_set`, `_compare_gt_set` and `_compare_lt_set` functions.\n- `_compare_eq_any` (line 249) passes it on to `_diff_text` for text, and to `_compare_eq_cls`, `_compare_eq_sequence`, `_compare_eq_set`, `_compare_eq_dict` and `_compare_eq_iterable` for the other types.\n- `_compare_eq_cls` also recurses into `_compare_eq_any` (line ~593) for nested fields.\n\nThe two functions that select the `\"diff\"` lexer are `_diff_text` and `_compare_eq_iterable`. The entry points that reach them indirectly are `assertrepr_compare` \u2192 `_compare_eq_any` \u2192 `_diff_text` / `_compare_eq_iterable`, plus `_notin_text` \u2192 `_diff_text`.",
+ "cost": 0.055172200000000005,
+ "turns": 4,
+ "duration_s": 11.927,
+ "tokens": {
+  "input": 6,
+  "cache_write": 7519,
+  "cache_read": 50621,
+  "output": 1496,
+  "total": 59642
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_HighlightFunc|_highlight|highlighter|def _diff_text|def _compare_eq_iterable\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/assertion\", ",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/assertion/util.py\", \"offset\": 38, \"limit\": 18}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/assertion/util.py\", \"offset\": 322, \"limit\": 42}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 43,
+ "question": "Where are the functions or methods in the assertion module that indirectly invoke the _HighlightFunc protocol through conditional lexer type selection between diff and python highlighting implementations?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 13,
+  "completeness": 13,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 14,
+  "total": 69
+ }
+}

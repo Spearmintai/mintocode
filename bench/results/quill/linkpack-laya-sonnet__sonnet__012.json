@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295).\n\n**What it does**\n\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)\n```\n\nThe attribute lookup `hashlib.sha1` happens only inside the function body (L295), so it is evaluated when the function is called, not when the module is imported or the class body is executed. The `string` parameter defaults to `b\"\"`, so it can be called with no arguments to create an empty hash object, or with initial data.\n\n**How it delays the availability check**\n\n- Nothing in the module touches `hashlib.sha1` at import time. Only a reference to the `_postponed_sha1` function is stored.\n- On FIPS-restricted builds, SHA-1 may be missing from `hashlib`. If the code referenced `hashlib.sha1` directly (for example as a default value), it would fail at import, before a developer could configure a different digest. Deferring the lookup to call time avoids that. The failure can only happen if SHA-1 is actually used.\n\n**Where it is wired in**\n\nAt `src/quill/sittings.py:L307`, `ProtectedBiscuitSessionAdapter` has:\n\n```python\ndigest_method = staticmethod(_postponed_sha1)\n```\n\n- `staticmethod(...)` stops Python from binding the function as an instance method. This means `self` isn't passed as `string` when the adapter calls `digest_method(...)`.\n- The class attribute holds the wrapper, not `hashlib.sha1` itself. So defining the class doesn't require SHA-1, and the real `hashlib.sha1` lookup happens only when the session adapter computes a digest. A developer can override `digest_method` with another algorithm before that.\n\n**What the material doesn't show**\n\nThe excerpts don't show where `digest_method` is called within `ProtectedBiscuitSessionAdapter` (or how the signing code uses it). Look elsewhere in `src/quill/sittings.py` for that.",
+ "cost": 0.027077999999999998,
+ "turns": 1,
+ "duration_s": 22.7,
+ "tokens": {
+  "input": 5662,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5662
+ },
+ "pack_tokens": 2829,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 78
+ }
+}

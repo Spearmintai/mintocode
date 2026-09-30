@@ -1,0 +1,31 @@
+{
+ "answer": "The lower-level helpers aren't in Flask's serialization pipeline. They sit outside it, on the value being serialized.\n\nThe class is `TagMarkup` in `src/flask/json/tag.py` (lines 173\u2013188). It is the `JSONTag` subclass for \"anything matching the `Markup` API\", with `key = \" m\"`.\n\n- **`check(value)`** (line 181) returns `callable(getattr(value, \"__html__\", None))`. It only tests whether the object has an `__html__` method.\n- **`to_json(value)`** (line 184) is `return str(value.__html__())`. It delegates to two things:\n  - `value.__html__()`, a method on the object being serialized. For `markupsafe.Markup` it is defined in the external `markupsafe` package, not in Flask. Any other object with an `__html__` method (for example, a template or form-field object) supplies its own.\n  - The builtin `str()`, which turns the result into a plain string.\n- **`to_python(value)`** (line 187) is the reverse direction. It calls `Markup(value)`, using `Markup` imported from `markupsafe` at line 52.\n\n`TagMarkup` is registered with `TaggedJSONSerializer` in the same file. The serializer's `tag()` method calls `to_json` and wraps the result as `{\" m\": ...}`. Its `untag()` method reverses that through `to_python`. Neither method adds helpers of its own.",
+ "cost": 0.022621799999999997,
+ "turns": 3,
+ "duration_s": 9.502,
+ "tokens": {
+  "input": 6,
+  "cache_write": 919,
+  "cache_read": 52519,
+  "output": 843,
+  "total": 54287
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 37,
+ "question": "Where in the serialization pipeline for the JSON tag class that handles Markup API objects are the lower-level helper functions that the conversion method delegates to?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 78
+ }
+}

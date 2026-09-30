@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "haiku",
+ "answer": "# Deferred Registration and Template Filter Accessibility\n\nThe mechanism ensures filter accessibility through a **deferred-execute-on-enrollment** pattern that registers filters at the **app-level** environment, independent of URL routing configuration.\n\n## How Deferred Registration Works\n\nWhen you call `@bp.program_layout_sieve('label')` on a Schematic (src/quill/sansio/schematics.py:L443-458):\n\n1. **Registration Phase (during Schematic setup)**: The decorator calls `attach_program_layout_sieve`, which creates a deferred function:\n   ```python\n   def register_template(state: SchematicSetupStatus) -> None:\n       state.app.markup_engine_env.filters[name or f.__name__] = f\n   \n   self.note_once_only(register_template)  # L475\n   ```\n   This deferred function is stored in `self.deferred_functions` (L204).\n\n2. **Replay Phase (during enrollment)**: When `Schematic.enroll` is called by `App.enroll_plan` (src/quill/sansio/app.py:L569-595), the enrollment process:\n   - Builds a `SchematicSetupStatus` object \n   - Calls each function in `deferred_functions` with that state (mentioned in the docstring at L277)\n   - This executes the captured `register_template` function\n\n## Filter Registration is App-Level, Not URL-Prefixed\n\n**Critical point**: Filters are registered on `state.app.markup_engine_env.filters` (L473), which is the **global application-level** Jinja2 environment, not a schematic-specific environment.\n\nThis means:\n- The URL path prefix (`url_prefix` parameter during enrollment) affects **routing only** \u2014 it's handled separately in `SchematicSetupStatus.attach_link_regulation` (L87-116)\n- Template filter registration bypasses URL prefix logic entirely and registers globally\n\nFrom tests/test_schematics.py:L414-428 (`test_layout_sieve_with_layout`):\n```python\n# Filter registered before route declaration\nbp.attach_program_layout_sieve(super_reverse, name='super_reverse')\n# Still works when template renders, regardless of schematic URL configuration\n```\n\n## One-Time Registration Guarantee\n\nThe `note_once_only` decorator (mentioned in the compiled knowledge) ensures filters are only registered **on the first enrollment of that schematic object**. If the same schematic is enrolled multiple times with different names/prefixes, the filter is registered only once on the app-level environment, making it available globally to all templates regardless of which schematic name was used to reach them.",
+ "cost": 0.023996999999999997,
+ "turns": 1,
+ "duration_s": 18.6,
+ "tokens": {
+  "input": 9371,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9371
+ },
+ "pack_tokens": 5814,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 76
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 41,
+ "question": "Where is the test class that validates URL generation with anchors, schemes, and HTTP methods defined?",
+ "model": "sonnet",
+ "answer": "The test class is `TestAddressBuilding` in `tests/test_aids.py`. The excerpts show only some of its methods, so I can't give its exact starting line:\n\n- `test_link_for_with_fragment` (L103-108) checks `_anchor`. `build_link_to(\"index\", _anchor=\"x y\")` returns `\"/#x%20y\"`.\n- `test_link_for_with_protocol` (L110-118) checks `_scheme` together with `_external`. `build_link_to(\"index\", _external=True, _scheme=\"https\")` returns `\"https://localhost/\"`.\n- `test_link_for_with_swapping_protocols` (L131-141) is listed as linked. It checks that external http, then https, then http again leaves no state leaking between calls.\n\n**HTTP methods (`_method`):** none of the `TestAddressBuilding` methods shown exercise `_method`. The excerpts don't include a test for it in this class. If one exists, it would be elsewhere in `tests/test_aids.py`, which I can't confirm from this material.\n\n**Related tests outside this class:**\n- `tests/test_elementary.py:L1339-1348`, `test_link_creation`, covers basic and `_external` URL building.\n- `tests/test_elementary.py:L1388-1400` checks that the fault handler receives `_external`, `_anchor`, `_method` and `_scheme` in `values`.\n- `tests/test_programscope.py:L8-18` covers `SERVER_NAME` and `PREFERRED_URL_SCHEME` outside a request.\n\n**Code under test:** `Quill.build_link_to` (`src/quill/app.py:L1003-1127`), reached through the `build_link_to` wrapper in `src/quill/helpers.py:L188-239`.",
+ "cost": 0.027198,
+ "turns": 1,
+ "duration_s": 16.6,
+ "tokens": {
+  "input": 5932,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5932
+ },
+ "pack_tokens": 3106,
+ "score": {
+  "correctness": 13,
+  "completeness": 11,
+  "relevance": 13,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 66
+ }
+}

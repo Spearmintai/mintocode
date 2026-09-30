@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "answer": "The code does not state a rationale in a comment. It does show what the restriction is and gives a strong hint about the intent through the docstrings and the sibling method.\n\n**What the restriction is** (`Quill.launch_asset`, `src/quill/app.py:L330-361`)\n- The guard is at L353-354: `if mode not in {\"r\", \"rt\", \"rb\"}: raise ValueError(\"Resources can only be opened for reading.\")`.\n- The path is `os.path.join(self.root_path, resource)` (L356), so it points into the application's package or source directory.\n- `\"rb\"` opens without an encoding (L358-359). Any other allowed mode, `\"r\"` or `\"rt\"`, is opened with `encoding=encoding` (L361).\n- The docstring (L333, L345-346) says the method opens a resource \"for reading\" and that \"Only reading is supported\".\n- `Schematic.launch_asset` (`src/quill/schematics.py:L104-128`) applies the same guard and the same wording.\n\n**What the material suggests about the reason**\n- `Quill.launch_deployment_asset` (`src/quill/app.py:L363-383`) has a docstring that contrasts the two: \"Unlike :meth:`launch_asset`, files in the instance folder can be opened for writing.\" It resolves paths against `instance_path` and accepts any mode.\n- That split implies a design intent. `root_path` holds the application's own bundled resources, such as the `schema.sql` next to `app.py` in the docstring example. Those are treated as read-only assets. The instance folder (`instance_path`) is the place meant for writable, deployment-specific files.\n- The tests confirm the behaviour: `tests/test_aids.py` `test_read_asset_failures` (L346-351) checks that `'w'`, `'x'`, `'a'` and `'r+'` raise `ValueError`, and `test_read_asset` (L338-343) checks that `'r'`, `'rb'` and `'rt'` work.\n\n**What the material does not settle**\nNothing in the provided code or docs gives an explicit reason, such as protecting packaged code, or the fact that installed packages may be read-only or zipped. The read-only-assets versus writable-instance-folder reading is an inference from the docstrings and the method pair, not a documented statement. If you need an authoritative rationale, check the project's changelog or design docs, and the git history around these lines.",
+ "cost": 0.030938,
+ "turns": 1,
+ "duration_s": 7.5,
+ "tokens": {
+  "input": 6558,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6558
+ },
+ "pack_tokens": 3314,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 77
+ }
+}

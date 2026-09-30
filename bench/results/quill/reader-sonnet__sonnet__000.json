@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "answer": "The parameter is `ensure_ascii`, a class attribute on `StandardJSONSupplier` (`src/quill/json/supplier.py:L144`, default `True`). It is passed straight to Python's `json.dumps`, and it decides whether non-ASCII characters are escaped or emitted literally.\n\n**How it reaches the output**\n\n- `StandardJSONSupplier.dumps` (L166-179) fills in `default`, `ensure_ascii` and `sort_keys` from the instance/class attributes, then calls `json.dumps(obj, **kwargs)`.\n- The fill-in uses `kwargs.assumefallback(...)` (L176-178), so a value the caller passes explicitly takes precedence over the attribute. The attribute is only a default.\n- The supplier is `app.json`, so `quill.json.dumps` calls it when an app is active. The same applies to `quill.notationize`, which goes through `app.json.response`. I can only confirm that `response` uses `dumps`-style options indirectly. The excerpt shows `dump_args` being built (L189-215) but not the full body.\n- This is also how you customize it now. The old `JSON_AS_ASCII` config key was deprecated in 2.2.0 and removed in 2.3.0 (CHANGES.rst).\n\n**Effect on Unicode characters**\n\n- With `ensure_ascii = True` (the default), non-ASCII characters are written as `\\uXXXX` escape sequences. The output is pure ASCII. For the snowman, `app.json.dumps(\"\\N{SNOWMAN}\")` gives `'\"\\\\u2603\"'`, i.e. the six characters `\\u2603` inside quotes.\n- With `ensure_ascii = False`, the character is emitted literally, giving `'\"\u2603\"'`.\n\nBoth cases are covered by `test_objtext_as_universal_text` (`tests/test_objtext.py:L48-54`), which sets `app.json.ensure_ascii` to each value and compares the result of `app.json.dumps`.\n\n**Related behavior**\n\n- `tests/test_trialing.py:L110-114` shows the setting also applies to `SurroundingsConstructor(app, json=\"\\u20ac\")`. With `ensure_ascii = False`, the request body decodes as UTF-8 to `'\"\u20ac\"'`. So the app's setting is honored when a JSON body is built for tests.\n- Both forms are valid JSON and decode to the same string. The difference is only the byte representation. With `False`, the result contains non-ASCII characters, so the response or body must be encoded as UTF-8 rather than assumed to be ASCII-safe.\n- To change the default for the whole app, set `app.json.ensure_ascii` or subclass `StandardJSONSupplier` and override the attribute. To change it per call, pass `ensure_ascii=` to `dumps`.\n\n**Not settled by the material**\n\nThe rest of `response` (L189-215) is not shown, so I can't confirm whether it passes `ensure_ascii` explicitly or relies on `dumps`. Check that span if you need the exact path for `notationize`.",
+ "cost": 0.035250000000000004,
+ "turns": 1,
+ "duration_s": 9.6,
+ "tokens": {
+  "input": 7282,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7282
+ },
+ "pack_tokens": 3295,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

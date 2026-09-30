@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The coupling is in `following_current_inquiry`, Quill's version of Flask's `after_this_request`. Its state lives on the request context, not on the response. I read the decorator and the response hook but did not read the tests. I did not check whether the context is ever copied.\n\n**How it works**\n- `src/quill/ctx.py:140-149`: the decorator looks up the active request context with `_cv_request.get(None)`. It appends `f` to `ctx._after_request_functions`, a plain list created per context at `ctx.py:331`. It then returns `f` unchanged.\n- `src/quill/app.py:1311-1314`: `treat_reply` reads the current request context again and runs every function in that list, in order, on the response. It does this before the app-level and schematic-level `after_request_funcs`, and before the session is saved (`app.py:1321-1322`).\n\n**The hidden coupling**\n- **Registration is a side effect of executing the decorator line.** Nothing is attached to the view or the response. The callback exists only if that line runs during the request, before `treat_reply` runs. Conditional registration (inside an `if`, or in a branch that raises early) therefore changes which callbacks run. A callback registered after the response has been built or handled is never called, because the list is read only once.\n- **The list belongs to the request context, not to the function that registered it.** When registrations are nested, for example a decorator that registers inside a view or a helper that registers inside another callback, every callback goes into the same flat list. The inner registration is not scoped to its caller. If the same code path runs twice in one request, the callback is appended twice and runs twice. Nothing deduplicates or unregisters.\n- **A callback registered during `treat_reply` is not reliably run.** The loop at `app.py:1313` iterates the live list. An `after` function that registers another one appends to the list being iterated. It may run in the same pass, but that depends on the iteration and is not a guaranteed contract.\n- **Ordering is inconsistent.** The `treat_reply` docstring says that since 0.5 after-request functions run in reverse order of registration. The context-level loop at line 1313 runs in registration order. Only `after_request_funcs` (line 1318) is reversed. Callers who rely on nesting order, with the inner callback wrapping the outer one, get the opposite of what the docs say.\n- **Context is required, and there is no response-level fallback.** The decorator raises `RuntimeError` if no request context is active (`ctx.py:142-146`). Registration from a background task, a streamed generator that runs after the context is popped, or app-context-only code fails or is silently lost. This is the same lifetime coupling as above.\n- **Errors skip the hook.** `treat_reply` only runs on the normal response path, so callbacks registered before an unhandled failure never run unless an error handler produces a response that goes through it. I did not verify that path.",
+ "cost": 0.0304088,
+ "turns": 5,
+ "duration_s": 17.0,
+ "tokens": {
+  "input": 18562,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 18562
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 76
+ }
+}

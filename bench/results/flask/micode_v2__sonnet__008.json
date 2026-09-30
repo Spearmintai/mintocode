@@ -1,0 +1,35 @@
+{
+ "answer": "The chain runs from the Flask app, to a Click runner subclass, to the app-loading helper. Each link hands the next one what it needs.\n\n1. **`Flask.test_cli_runner`** (`src/flask/app.py:727-742`) is the entry point.\n   - It picks `self.test_cli_runner_class`, which is declared as `None` on `sansio/app.py:277`. If that is unset, it falls back to `flask.testing.FlaskCliRunner`.\n   - It returns `cls(self, **kwargs)`, so the runner receives the app instance.\n\n2. **`FlaskCliRunner`** (`src/flask/testing.py:265-298`) subclasses `click.testing.CliRunner`.\n   - `__init__` stores `self.app = app` and passes the remaining kwargs to `CliRunner.__init__`.\n   - `invoke(cli=None, args=None, **kwargs)` fills in two defaults:\n     - `cli` becomes `self.app.cli`, the app's `AppGroup`, when it is `None`.\n     - `obj` becomes `ScriptInfo(create_app=lambda: self.app)` when `\"obj\"` is not in kwargs.\n   - It then calls `super().invoke(cli, args, **kwargs)`. Click's `CliRunner.invoke` supplies the isolation: it redirects stdio, sets up the environment, and returns a `click.testing.Result`.\n\n3. **`ScriptInfo`** (`src/flask/cli.py:293`) is the app-loading helper.\n   - Because the `create_app` lambda returns the test app, `ScriptInfo.load_app` (`cli.py:333-372`) gets exactly that app. It caches the app once loaded.\n   - `load_app` tries `create_app()` first. Only if that isn't set does it fall back to the `app_import_path` / `FLASK_APP` discovery path.\n   - The default `obj` means commands never discover a different app through `FLASK_APP`.\n\n4. **Command execution** uses that `ScriptInfo` (`cli.py:380-437`).\n   - `AppGroup.command` wraps callbacks in `with_appcontext` automatically.\n   - `with_appcontext` calls `ctx.ensure_object(ScriptInfo).load_app()`, which reads the `ScriptInfo` passed as `obj`. It then pushes `app.app_context()` if no `current_app` is active.\n   - Commands run inside the test app's context, isolated by Click's runner.\n\nOverall: `Flask` \u2192 `test_cli_runner()` \u2192 `FlaskCliRunner(app)` (extends Click's `CliRunner`) \u2192 `invoke()` builds `ScriptInfo(create_app=lambda: app)` \u2192 `with_appcontext` \u2192 `ScriptInfo.load_app()` returns the same `Flask` instance.\n\nTo test a standalone command instead of `app.cli`, pass it as the `cli` argument. `obj` is still supplied by default.",
+ "cost": 0.061731600000000005,
+ "turns": 3,
+ "duration_s": 10.791,
+ "tokens": {
+  "input": 4,
+  "cache_write": 10575,
+  "cache_read": 32968,
+  "output": 1283,
+  "total": 44830
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/testing.py\", \"offset\": 255, \"limit\": 50}",
+  "Grep {\"pattern\": \"def test_cli_runner|test_cli_runner_class|def load_app|class ScriptInfo\", \"path\": \"/home/sq/micode-bench/repos/flask/src\", \"output_mode\": \"content\""
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 8,
+ "question": "What is the dependency chain between the application loading helper, the Flask application instance, and the base Click testing runner that ensures proper CLI command execution in isolation?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

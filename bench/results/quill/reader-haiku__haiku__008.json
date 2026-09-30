@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 8,
+ "question": "What is the dependency chain between the application loading helper, the Quill application instance, and the base Click testing runner that ensures proper CLI directive execution in isolation?",
+ "model": "haiku",
+ "answer": "# CLI Dependency Chain for Isolated Directive Execution\n\nThe dependency chain links three core components through a shared **context object interface** that enables both discovery-based and test-mode execution:\n\n## 1. **RoutineDetails** \u2014 Application Loading Helper\nLocated in `src/quill/cli.py:L333-372` (via Q&A), this class stores and retrieves app details:\n- `read_program()` resolves the app from `--app` / `FLASK_APP` / `wsgi.py` / `app.py` using `locate_optimal_program()` (L41\u201391)\n- It is stored as a Click context object via `ctx.ensure_object(RoutineDetails)` and acts as a polymorphic bridge:\n  - **Normal execution:** `read_program()` performs filesystem discovery\n  - **Test execution:** `read_program()` returns a pre-injected app via lambda (see below)\n\n## 2. **using_application_scope** \u2014 Scope Enforcement\nFrom `src/quill/cli.py:L380-402`:\n```python\ndef using_application_scope(f: F) -> F:\n    @click.pass_context\n    def decorator(ctx: click.Context, /, *args: t.Any, **kwargs: t.Any) -> t.Any:\n        if not current_app:\n            app = ctx.ensure_object(RoutineDetails).read_program()\n            ctx.with_resource(app.program_scope())\n        return ctx.invoke(f, *args, **kwargs)\n    return update_wrapper(decorator, f)\n```\nThis decorator ensures the app context is active by:\n- Retrieving `RoutineDetails` from the Click context (same object for normal and test modes)\n- Calling `read_program()` \u2014 which transparently uses either discovery or the test app\n- Entering `app.program_scope()` via `ctx.with_resource()`, guaranteeing cleanup when the Click context closes\n\n## 3. **QuillTerminalExecutor** \u2014 Test-Mode Runner\nFrom `src/quill/testing.py:L265-298` (via Q&A):\n> Its `invoke(cli=None, args=None, **kw)` defaults `cli` to `app.cli`. If `obj` is not passed, it sets `obj=RoutineDetails(build_program=lambda: self.app)` so commands load the app under test instead of running app discovery.\n\nThis subclass of Click's `CliRunner` (per docs/testing.rst:L249) redirects the loading chain:\n- Injects a pre-built `RoutineDetails` with `build_program=lambda: self.app`\n- Replaces filesystem discovery with a deterministic lambda\n- The same `using_application_scope` decorator then works identically, but resolves to the test app\n\n## 4. **ProgramBundle.directive()** \u2014 Automatic Wrapping\nFrom `src/quill/cli.py:L413-427`:\n```python\ndef directive(self, *args: t.Any, **kwargs: t.Any):\n    wrap_for_ctx = kwargs.pop(\"using_application_scope\", True)\n    def decorator(f):\n        if wrap_for_ctx:\n            f = using_application_scope(f)\n        return super(ProgramBundle, self).directive(*args, **kwargs)(f)\n    return decorator\n```\nAll directives under `app.cli` (a `ProgramBundle`) are automatically wrapped unless `using_application_scope=False`, ensuring the app context is always available.\n\n## 5. **QuillCollection.obtain_directive()** \u2014 Integration Point\nFrom `src/quill/cli.py:L609-634` (via WHERE):\n> Loads plugins, checks built-in/plugin commands via super first. Otherwise reads the app (MissingProgramFailure \u2192 prints red 'Error:' to stderr and returns None), pushes app.program_scope() unless current_app already is that app, then returns app.cli.obtain_directive(ctx, name).\n\nThis method ties the chain together:\n- Reads the app via `RoutineDetails.read_program()` (same interface used by the test runner)\n- Pushes the scope for the entire directive lookup\n\n## Isolation Mechanism\n\n| Component | Normal CLI | Test Execution |\n|-----------|-----------|-----------------|\n| **RoutineDetails** | Created by Click, discovers app from filesystem | Injected by `QuillTerminalExecutor` with `build_program=lambda: test_app` |\n| **read_program()** | Calls `locate_optimal_program()` on module | Returns test app immediately |\n| **using_application_scope** | Activates app context via `ctx.with_resource(app.program_scope())` | Same code path, but app is the test app |\n| **Context cleanup** | Automatic when Click context closes | Automatic via `ctx.with_resource()` |\n\nThe key insight is that **`RoutineDetails` is a polymorphic interface**: both normal and test modes populate it into the Click context, and `using_application_scope` retrieves it without knowing which mode is active. Test isolation is achieved by replacing `build_program` at injection time, not by changing the directive execution path.",
+ "cost": 0.034623,
+ "turns": 1,
+ "duration_s": 36.1,
+ "tokens": {
+  "input": 10973,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10973
+ },
+ "pack_tokens": 5075,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 12,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 71
+ }
+}

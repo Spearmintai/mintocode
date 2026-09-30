@@ -1,0 +1,31 @@
+{
+ "answer": "Blueprint template filters, tests and globals reach the app's shared Jinja environment through four mechanisms. All of them are in `src/flask/`.\n\n**1. Deferred registration on the blueprint** (`sansio/blueprints.py`)\n- `Blueprint.app_template_filter`, `app_template_test` and `app_template_global` are decorators. Each calls the matching `add_app_template_filter`, `add_app_template_test` or `add_app_template_global` (around lines 444\u2013549).\n- Those `add_app_*` methods don't touch an app, because a blueprint has none when it is defined. Each one defines an inner `register_template(state: BlueprintSetupState)` function. That function writes `state.app.jinja_env.filters[name or f.__name__] = f`, or `.tests[...]` or `.globals[...]` for the other two.\n- The inner function is queued with `self.record_once(register_template)`.\n- `record_once` (line 233) wraps the function so it only runs when `state.first_registration` is true. It then hands the wrapper to `record` (line 224), which appends it to `self.deferred_functions`.\n\n**2. Replay at registration time** (`Blueprint.register`, line 273)\n- `Flask.register_blueprint` calls `Blueprint.register(app, options)`. That method builds a `BlueprintSetupState` through `make_setup_state(app, options, first_bp_registration)`. This state holds the `app`.\n- `first_bp_registration` is computed at line 316 as \"no blueprint in `app.blueprints` is this one\".\n- Later in `register`, past the section I read, each deferred function is called with the state. That is what makes `register_template` run and put the callable into `app.jinja_env`. I read this from the docstring at lines 273\u2013277 and did not view the loop itself.\n- The `first_registration` flag means a blueprint registered twice, for example under different names, only registers its filters once.\n\n**3. A single shared, lazily built environment** (`sansio/app.py`, `app.py`, `templating.py`)\n- `App.jinja_env` (`sansio/app.py:470`) is a `cached_property` that calls `create_jinja_environment()`. `Flask.create_jinja_environment` (`app.py:385`) builds it with `self.jinja_environment(self, **options)`, which is `flask.templating.Environment`. The environment is built once per app and cached.\n- Both the deferred blueprint callbacks and `Flask.add_template_filter`, `add_template_test` and `add_template_global` (`sansio/app.py:686\u2013776`) write into `self.jinja_env.filters`, `.tests` or `.globals`. So there is one registry.\n- Rendering uses the same object. `render_template`, `render_template_string`, `stream_template` and `stream_template_string` in `templating.py` (lines 149, 161, 203, 218) call `app.jinja_env.get_or_select_template(...)` or `from_string(...)`. `helpers.get_template_attribute` (`helpers.py:308`) uses `current_app.jinja_env.get_template(...)` in the same way. Jinja resolves filters, tests and globals from that environment at render time.\n\n**4. Guard against late registration** (`setupmethod`, `_check_setup_finished`)\n- The `add_app_*` methods are decorated with `@setupmethod`. Once `_got_registered_once` is set (`register`, line 320), calling them raises `AssertionError` (`_check_setup_finished`, line 213). This stops a filter being added after the blueprint has already been applied to an app, where it would be missed.\n- On the app side, `@setupmethod` on `add_template_*` gives the equivalent check that the app has not yet handled a request.\n\n**Context processors** work differently, because they are not stored in the Jinja environment.\n- `Blueprint.app_context_processor` (`sansio/blueprints.py:584`) uses `record_once` to append the function to `s.app.template_context_processors[None]`.\n- `Blueprint.register` also merges the blueprint's own `template_context_processors` into the app's, using `extend` (line 410).\n- At render time `Flask.update_template_context` (`app.py:~528`) walks the processors for `None` and for each active blueprint name. The default processor `_default_template_ctx_processor` (`templating.py:24`) injects `g`, `request` and `session`.",
+ "cost": 0.0888354,
+ "turns": 9,
+ "duration_s": 18.509,
+ "tokens": {
+  "input": 8,
+  "cache_write": 11963,
+  "cache_read": 80187,
+  "output": 2493,
+  "total": 94651
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 16,
+  "total": 78
+ }
+}

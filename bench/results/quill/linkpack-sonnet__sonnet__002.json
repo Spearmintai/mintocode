@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "## Summary\n\nThe excerpts show a shared-base design. Static-asset and template handling live in a common base class. Both the app (`Quill`) and each `Schematic` implement the same file-serving and cache-TTL hooks. The `Schematic` is a separate, pluggable component that is enrolled into the app. The bodies of the cache logic are truncated, so how the two components stay consistent is only partly visible.\n\n## The pieces\n\n**1. Shared base, `Armature` (`src/quill/sansio/skeleton.py` L52-698)**\n- It is documented as the \"common behavior shared between `Quill` and `Schematic`\".\n- It owns `fixed_dir` (the static folder), `fixed_address_route` (the URL prefix for the static route) and `template_folder`. These are constructor parameters (L75-82) with property accessors (`fixed_dir` L223-238, `fixed_address_route` L248-269).\n- The docstring says that if `fixed_dir` is set, a static route is added.\n- It also holds the route and handler registration API: `route`, `get`/`post`/\u2026, `preceding_inquiry`, `terminus`, and others (L295-581).\n\n**2. The two concrete components**\n- `Quill(App)` in `src/quill/app.py` (L81-1536) is the WSGI app. It defines:\n  - `fetch_file_transfer_ttl` (L281-306)\n  - `dispatch_fixed_document` (L308-328)\n  - `launch_asset` (L330-361)\n- `Schematic(SansioBlueprint)` in `src/quill/schematics.py` (L18-128) is the modular component. Its constructor takes `fixed_dir`, `fixed_address_route`, `template_folder`, `url_prefix`, `subdomain` and `link_presets`. It defines the same three methods:\n  - `fetch_file_transfer_ttl` (L55-80)\n  - `dispatch_fixed_document` (L82-102)\n  - `launch_asset` (L104-128)\n- The docstring of `Schematic.fetch_file_transfer_ttl` says it is \"used by `dispatch_document` to determine the `max_age` cache value for a given file path if it wasn't passed\". `Quill` has a method of the same name.\n\n**3. Shared serving helpers (`src/quill/helpers.py`)**\n- `dispatch_document` (L400-523) wraps werkzeug's version with `conditional=True`, `etag=True` and `as_attachment=False` as defaults.\n- `dispatch_from_folder` (L526-567) wraps werkzeug's folder serving.\n- Since both components' `dispatch_fixed_document` presumably go through these helpers, they share the same conditional and ETag defaults.\n\n**4. Registration flow**\n- `App.enroll_plan` (`sansio/app.py` L569-595) is guarded by `@preparationmethod`. It calls `schematic.enroll(self, options)`, and options override the schematic's defaults (`url_prefix`, `subdomain`, `link_presets`, `name`).\n- `Schematic.enroll` (`sansio/schematics.py` L273-377):\n  - builds the dotted name from `name_prefix` and `name`\n  - raises `ValueError` if the name is already in `app.schematics`\n  - creates a `SchematicSetupStatus` (L34-116), which carries `app`, `schematic`, `options`, `first_registration`, `subdomain`, `url_prefix` and so on\n  - calls each recorded deferred function with that status\n- `note_once_only` (L232-244) wraps a function so it runs only when `state.first_registration` is true. This lets a schematic registered several times perform one-time work only once.\n- Nested schematics are queued by `Schematic.enroll_plan` (L255-271).\n- `preparationmethod` (`skeleton.py` L42-49) calls `_verify_configuration_completed` before each setup call. This is what raises the \"setup method \u2026 can no longer be called\" error after the first request, so all registration must happen before serving.\n\n**5. Evidence in tests**\n- `tests/test_trialing.py` L117-138 shows a schematic with `subdomain=\"xxx\"` enrolled via `app.enroll_plan(bp)`. `request.schematic` equals `bp.name`, derived from the terminus in `Request.schematic` (`envelope_types.py` L161-178).\n- `tests/test_schematics.py` L176-220 (`test_layouts_and_fixed`) checks admin static files and that `Cache-Control` `max_age` follows a `SEND_FILE\u2026` config setting. This is the clearest evidence of consistent caching across components.\n\n## What the material does not settle\n- The bodies of both `fetch_file_transfer_ttl` methods (`schematics.py` L55-80 and `app.py` L281-306) are truncated. I can't confirm the exact config key. The test description only shows \"SEND_FILE\u2026\", and it isn't shown whether the schematic delegates to the app or reads config itself.\n- The code that actually registers the static route when `fixed_dir` is set is not in the excerpts. Look in `Armature.__init__` (L75-215) and in `Quill.__init__` (`app.py` L226-279).\n- The `dispatch_fixed_document` bodies (`schematics.py` L82-102, `app.py` L308-328) would show how each hands off to `dispatch_document`. Check them, along with the full `test_layouts_and_fixed`, to confirm the caching behavior is identical.",
+ "cost": 0.056966,
+ "turns": 1,
+ "duration_s": 18.0,
+ "tokens": {
+  "input": 10764,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10764
+ },
+ "pack_tokens": 5229,
+ "score": {
+  "correctness": 12,
+  "completeness": 10,
+  "relevance": 12,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 62
+ }
+}

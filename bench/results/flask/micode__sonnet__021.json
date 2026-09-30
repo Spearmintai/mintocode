@@ -1,0 +1,31 @@
+{
+ "answer": "`_AppCtxGlobals` in `src/flask/ctx.py` (L29-114) is the class behind `g`. `AppContext.__init__` creates it through `app.app_ctx_globals_class()`. It stores attributes in `self.__dict__`. Some methods raise on a missing name, and others accept a default, and the split follows the `dict` API.\n\n**Methods that raise an error**\n- `__getattr__` (L52-56) returns `self.__dict__[name]`. It catches the `KeyError` and raises `AttributeError(name) from None`. That is the exception Python expects from attribute access, so `getattr(g, \"x\", default)` and `hasattr(g, \"x\")` work, and the `KeyError` is hidden.\n- `__delattr__` (L61-65) does `del self.__dict__[name]` and converts a `KeyError` to `AttributeError(name) from None` in the same way. So `del g.x` on a missing name is an error.\n- `pop` (L78-90) without a default calls `self.__dict__.pop(name)`. A missing name raises a plain `KeyError`, not `AttributeError`. This is the exception to the pattern. `pop` acts like `dict.pop`, not like an attribute operation.\n\n**Methods that return a default**\n- `get(name, default=None)` (L67-76) returns `self.__dict__.get(name, default)`. It never raises, and the default is `None`.\n- `pop(name, default)` (L78-90) returns the default instead of raising when one is supplied. The module-level `_sentinel = object()` (L26) is the default, so an explicit `None` counts as a real default. The code checks `default is _sentinel` to tell \"no default given\" from \"default is `None`\".\n- `setdefault(name, default=None)` (L92-102) returns `self.__dict__.setdefault(name, default)`. It never raises. A missing name is created with the default value.\n\n**How the balance works**\n- Python's attribute protocol (`g.x`, `del g.x`) gets strict `AttributeError` behavior.\n- The named helper methods (`get`, `pop`, `setdefault`) copy `dict` semantics. They give a lenient path through an optional default.\n- `__setattr__` (L58-59) writes straight to `__dict__` and has no error case.\n- `__contains__` (L104-105) and `__iter__` (L107-108) give a non-raising way to check for a name and to list names.",
+ "cost": 0.0568864,
+ "turns": 2,
+ "duration_s": 9.736,
+ "tokens": {
+  "input": 4,
+  "cache_write": 10292,
+  "cache_read": 32902,
+  "output": 913,
+  "total": 44111
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 86
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "answer": "Template filters, tests and globals registered through a Schematic reach the shared Jinja environment through four mechanisms.\n\n1. **Deferred recording.** In `src/quill/sansio/schematics.py`, `Schematic.program_layout_sieve` (filters, L443-458) calls `attach_program_layout_sieve` (L460-475). That method defines a closure, `register_template(state)`, and passes it to `note_once_only` (L232-244). `note_once_only` wraps the closure so it only runs when `state.first_registration` is true, then stores it with `record` (L223-230) in `self.deferred_functions`. Nothing touches the app at decoration time. The sibling methods do the same for tests and globals: `program_layout_probe` writes to `.tests` (L511) and the global variant writes to `.globals` (L549).\n\n2. **Replay at enrollment.** When the app enrolls the schematic, `Schematic.enroll` (L273-377) builds a `SchematicSetupStatus` (L34-116) and calls every deferred function with it. That state exposes `state.app`. Each closure then writes into the app's environment:\n   - `state.app.markup_engine_env.filters[name or f.__name__] = f` (L473)\n   - `state.app.markup_engine_env.tests[name or f.__name__] = f` (L511)\n   - `state.app.markup_engine_env.globals[name or f.__name__] = f` (L549)\n\n3. **One shared environment per app.** `markup_engine_env` is a `cached_property` on `App` (`src/quill/sansio/app.py:L469-477`). It returns `build_layout_ecosystem()`, which is defined in `src/quill/app.py:L385-423`. It is built once on first access, so every registration mutates the same `Ecosystem` object. The app-level decorators `layout_sieve` and `attach_layout_sieve` (`sansio/app.py` ~L664-695), and the equivalent test and global methods, write to the same dictionaries (L695, L738, L776). Filters registered on the app and on schematics therefore end up in one place.\n\n4. **Rendering uses the same object.** `src/quill/layouting.py` renders through `app.markup_engine_env` in `draw_layout` (L138-150, via `get_or_select_template`), in the string-rendering variant (`from_string`, L161) and in the streaming variants (L203, L218). `helpers.py:L308` also uses it. Because rendering and registration share that one cached environment, a registered filter is available in every template. It isn't limited to the schematic's own templates, which is why the docstring says \"available in any template rendered by the application\".\n\nTwo guards support this:\n- `@preparationmethod` on these registration methods stops changes once the schematic has been registered.\n- The `first_registration` check means a schematic enrolled more than once on the same app only registers its filters once.\n\nI didn't read `Schematic.enroll` or `SchematicSetupStatus` directly. Their behaviour above comes from the compiled index.",
+ "cost": 0.0829476,
+ "turns": 6,
+ "duration_s": 15.07,
+ "tokens": {
+  "input": 6,
+  "cache_write": 13783,
+  "cache_read": 58268,
+  "output": 1615,
+  "total": 73672
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 420, \"limit\": 60}",
+  "Grep {\"pattern\": \"layout_sieve|jinja_env\\\\.filters|template_filter|def note_once_only|def record\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mod",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 222, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 385, \"limit\": 40}",
+  "Grep {\"pattern\": \"markup_engine_env|cached_property\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

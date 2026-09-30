@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 26,
+ "question": "Why does the CLI helper class that manages Quill application loading provide both a direct callable manufacturer parameter and an import path parameter as alternative instantiation mechanisms?",
+ "model": "sonnet",
+ "answer": "The material shows *what* the two parameters do, but it doesn't state the author's rationale, so the \"why\" below is inferred from the code.\n\n**What the code does** (`RoutineDetails.__init__`, `src/quill/cli.py:L305-331`, and `read_program`, L333-372)\n\n- `build_program` is a callable that returns a `Quill`. `read_program` checks it first (L341-342) and calls it with no arguments.\n- `app_import_path` is a string, set by `--app` through `_assign_program` (L440-446) or by `FLASK_APP`. It is only used if `build_program` is `None` (L343-349). It is split on `:(?![\\\\/])` into a path and an optional name. `ready_loading` turns the path into a module name, and `find_program` imports it and picks the app.\n- If neither is set, it falls back to trying `wsgi.py` and then `app.py` (L350-356).\n- If nothing yields an app, it raises `MissingProgramFailure` (L358-364).\n\nThe precedence is fixed: `build_program`, then `app_import_path`, then the default files. Both mechanisms end in the same cached `_loaded_app`.\n\n**Why both exist (inferred)**\n\n1. **Different callers.**\n   - An end user at a shell can only supply text, so `--app` and `FLASK_APP` give an import string that the CLI resolves lazily.\n   - Code that embeds or extends the CLI already has a Python object or factory. It can pass `build_program` to `QuillCollection.__init__` (L563-598), which stores it as `self.build_program`. The test at `tests/test_terminal_tool.py:L289-304` uses `QuillCollection(build_program=lambda: app)`. This avoids import-path resolution, `sys.path` changes and name lookup entirely.\n\n2. **Avoiding import machinery when it isn't needed.** The import-path route depends on `ready_loading` (L200-226), which modifies `sys.path`, and on `find_program`, which does `__import__`. A direct callable skips all of that.\n\n3. **Factories also work through the import path.** A `build_program`-style factory can be named on the command line too. `find_program` looks for a manufacturer named `build_program` or `make_app`, per the first compiled answer. An example is `tests/test_programs/cliapp/manufacturer.py:L4-5`. So the `build_program` parameter is the programmatic counterpart of that command-line feature.\n\n**Not settled by the material**\n\n- Whether there is a documented design reason or history for the split. Look at the `QuillCollection` and `RoutineDetails` docstrings, and at `test_entrypointdetails` (`tests/test_terminal_tool.py:L247-286`), which exercises both routes.\n- The `find_program` body (L241-264) isn't shown in full, so its exact name-resolution details aren't confirmed here.",
+ "cost": 0.03838,
+ "turns": 1,
+ "duration_s": 9.9,
+ "tokens": {
+  "input": 8186,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8186
+ },
+ "pack_tokens": 4430,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 76
+ }
+}

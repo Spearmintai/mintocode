@@ -1,0 +1,35 @@
+{
+ "answer": "The code doesn't record a reason. I found no comment or docstring in `TestShowFixtures` that explains the design, so the following is inferred from the tests themselves.\n\nThe tests are in `testing/python/fixtures.py`:\n- `test_show_fixtures_trimmed_doc`\n- `test_show_fixtures_indented_doc`\n- `test_show_fixtures_indented_doc_first_line_unindented`\n- `test_show_fixtures_indented_in_class`\n\nEach one writes a small module with `pytester.makepyfile`, runs `pytester.runpytest(\"--fixtures\", p)`, and checks the output with `fnmatch_lines`.\n\nHere is why they probably aren't parameterized:\n\n1. **The inputs differ in structure, not just in value.** Each test builds a different source file:\n   - The trimmed-doc test has two fixtures whose docstrings end in blank lines.\n   - The indented-doc test has one fixture whose docstring starts on its own line and contains a nested indented line.\n   - The first-line-unindented test has one fixture whose text starts right after the opening `\"\"\"`.\n   - The class test nests the fixture as a method with `self` inside `TestClass`.\n\n   A parameterized version would have to pass in whole source strings and whole expected-output blocks. That would leave a generic body with two large parameters, which is harder to read than four short tests.\n\n2. **The expected output is tied to the test's own name.** `makepyfile` names the module after the test function, so the expected header is `* fixtures defined from test_show_fixtures_trimmed_doc *`. The line numbers are also hard-coded, for example `:10` and `:3` for the trimmed-doc test, and `:4` for the class test because the fixture sits one line lower. With parameterization, the module name would become something like `test_x[param]` and the expected strings would have to be built dynamically.\n\n3. **Each test documents a separate regression.** They cover different docstring-processing edge cases:\n   - trailing blank lines are trimmed;\n   - relative indentation is kept;\n   - the first line is handled differently from the rest;\n   - dedenting works for methods in a class.\n\n   Separate names show which case broke when a test fails. A failing parameter ID like `test_x[case3]` says less.\n\n4. **The style matches the rest of the file.** The neighbouring tests (`test_show_fixtures_testmodule`, `test_show_fixtures_different_files`, `test_show_fixtures_with_same_name`) also each build their own pytester project. The file uses `parametrize` where only a value varies, but not for these scenarios.\n\nConsolidating them would be possible, but it would gain little and cost readability.",
+ "cost": 0.0463154,
+ "turns": 3,
+ "duration_s": 15.014,
+ "tokens": {
+  "input": 6,
+  "cache_write": 6318,
+  "cache_read": 48607,
+  "output": 1131,
+  "total": 56062
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class TestShowFixtures|def test_show_fixtures\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/python/fixtures.py\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/python/fixtures.py\", \"offset\": 3650, \"limit\": 125}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 26,
+ "question": "Why does the TestShowFixtures class employ separate test methods for validating fixture documentation formatting across different contexts (trimmed docs, indented docs, first-line unindented, class-level fixtures) rather than consolidating these variations into parameterized tests?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 18,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 83
+ }
+}

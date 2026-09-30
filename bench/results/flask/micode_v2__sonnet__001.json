@@ -1,0 +1,32 @@
+{
+ "answer": "The flag is `Blueprint._got_registered_once`, defined in `src/flask/sansio/blueprints.py`. It is initialized to `False` in `Blueprint.__init__`.\n\n**Purpose:** it makes a blueprint effectively immutable once it has been registered on an app. A blueprint is a recorded set of deferred operations: routes, hooks, error handlers and nested blueprints. These are replayed through `BlueprintSetupState` each time `Blueprint.register(app, options)` runs. If you could add a route or hook after a registration, the change would be inconsistent:\n- Apps that already registered the blueprint would never get it, because the deferred functions had already been replayed for them.\n- Apps that registered it later would get it.\n\n**How it works:**\n- `Blueprint.register` sets `self._got_registered_once = True` on every registration. It does this before it runs the `deferred_functions`.\n- Setup methods such as `route`, `add_url_rule`, `before_request`, `errorhandler`, `record` and `register_blueprint` are decorated with `@setupmethod` (from `src/flask/sansio/scaffold.py`). The decorator calls `self._check_setup_finished(f_name)` before running the method.\n- `Blueprint._check_setup_finished` (around L213-221) raises an `AssertionError` when the flag is `True`. The message says the method \"can no longer be called on the blueprint '<name>'. It has already been registered at least once\", and it tells you to make all setup calls before registering.\n\n**Contrast with the app:** `App._check_setup_finished` in `src/flask/sansio/app.py` does the same job using `_got_first_request`. That flag is set when the app handles its first request. The blueprint version triggers on registration instead, because a blueprint has no request lifecycle of its own.\n\n**Related:** `record_once` and `BlueprintSetupState.first_registration` handle the separate case where the same blueprint is registered multiple times. That is allowed, with different names or prefixes. They make app-level hooks run only once. They do not relax the setup-freeze described above.",
+ "cost": 0.0334614,
+ "turns": 1,
+ "duration_s": 5.803,
+ "tokens": {
+  "input": 2,
+  "cache_write": 5977,
+  "cache_read": 13447,
+  "output": 686,
+  "total": 20112
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the blueprint collection class that prevents setup methods from being called after the blueprint has been registered once?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

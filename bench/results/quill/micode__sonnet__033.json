@@ -1,0 +1,34 @@
+{
+ "answer": "The class is `ForwardMapping` in `src/quill/json/tag.py:119-130`. Its `into_json` method is `{k: self.serializer.tag(v) for k, v in value.items()}`, and it says `tag = into_json`.\n\n**Why keys are not tagged**\n- The code comment at L126-127 gives the reason: \"JSON objects may only have string keys, so don't bother tagging the key here.\" Keys therefore always stay plain strings and never need a tag wrapper. Tagging a key would produce a dict or list, which JSON cannot use as an object key.\n- Values can be anything, such as tuples, bytes, datetimes, UUIDs or `Markings`. These have no native JSON form, so each value goes through `self.serializer.tag(v)`. That call is the recursion. It finds the right label for each value, and nested dicts end up back in `ForwardMapping`.\n\n**Why it is a pass-through**\n- `ForwardMapping` has no `key` attribute, so it adds no tag wrapper. It only forwards the dict with its values tagged. On load there is nothing to undo, which is why it defines no `into_native`.\n- `tag = into_json` overrides the base `tag()`, so no `{key: ...}` wrapper is created.\n- `check()` matches any `dict`. In the serializer's order it comes after `LabelMapping` (`\" di\"`, L93-116). That earlier label handles the one case where a plain dict would be mistaken for a tagged one: a dict with exactly one key that is itself a registered tag name. `LabelMapping` renames that key to `key__` and tags the value with `self.serializer.tag(value[key])`. On load, `into_native` strips the `__`. All other dicts fall through to `ForwardMapping`.",
+ "cost": 0.0413324,
+ "turns": 2,
+ "duration_s": 7.252,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6849,
+  "cache_read": 32742,
+  "output": 738,
+  "total": 40333
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class ForwardMapping|class .*Mapping\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/json/tag.py\", \"output_mode\": \"content\", \"-A\": 25}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 77
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "answer": "`Blueprint.add_url_rule` in `src/flask/sansio/blueprints.py` (lines 412-441) defers the registration. It wraps the call to `BlueprintSetupState.add_url_rule` in a lambda and appends that lambda to `self.deferred_functions`, so nothing reaches the app when you call it.\n\n**When you call it**\n- `Blueprint.add_url_rule` is decorated with `@setupmethod`. That runs `Blueprint._check_setup_finished` (L213-221), which raises an `AssertionError` if the blueprint has already been registered (`_got_registered_once` is True).\n- It validates its arguments. `endpoint` and `view_func.__name__` may not contain a `.`, or it raises `ValueError`.\n- It then calls `self.record(...)` (L433-441) with an anonymous function:\n  ```python\n  self.record(\n      lambda s: s.add_url_rule(\n          rule, endpoint, view_func,\n          provide_automatic_options=provide_automatic_options,\n          **options,\n      )\n  )\n  ```\n- The lambda takes one argument, `s`, which is a `BlueprintSetupState`. The lambda closes over `rule`, `endpoint`, `view_func`, `provide_automatic_options` and `options`. No `BlueprintSetupState` or app exists at this point, so the lambda is only stored.\n\n**How it is stored**\n- `Blueprint.record` (L223-230) is also a `@setupmethod`. It does `self.deferred_functions.append(func)`.\n- `deferred_functions` is a list initialised to `[]` in `Blueprint.__init__` (L174-211).\n- Its entries are typed as `DeferredSetupFunction`, which is `Callable[[BlueprintSetupState], None]`.\n- `record_once` (L232-244) is the sibling used by the `app_*` methods. It wraps the function so it only runs when `state.first_registration` is true, then calls `record`. `add_url_rule` uses plain `record`, so its rule is added on every registration.\n\n**When the lambda runs**\n1. `App.register_blueprint` in `src/flask/sansio/app.py` calls `Blueprint.register(app, options)` (L273-377).\n2. `register` sets `_got_registered_once = True`. It then builds the state with `make_setup_state(app, options, first_bp_registration)` (L246-253), which returns `BlueprintSetupState(self, app, options, first_registration)`.\n3. After the static route and `_merge_blueprint_funcs`, it runs `for deferred in self.deferred_functions: deferred(state)`. This is where the stored lambda finally executes.\n4. The lambda calls `BlueprintSetupState.add_url_rule` (L87-116). That method:\n   - joins `url_prefix.rstrip('/') + '/' + rule.lstrip('/')`, or uses just `url_prefix` when the rule is empty;\n   - sets a default `subdomain`;\n   - merges `url_defaults` with any per-rule `defaults`;\n   - calls `app.add_url_rule` with the endpoint `f\"{name_prefix}.{name}.{endpoint}\".lstrip('.')`.\n\n**Why it is deferred**\nThe prefix, subdomain, name and name prefix depend on the `options` passed to `register_blueprint`, and on nesting. None of these are known when the decorator runs. The same blueprint can also be registered several times, or under different names or prefixes. Storing a function of `state` lets each registration replay the same rule with its own `BlueprintSetupState`.\n\n`Blueprint` in `src/flask/blueprints.py` (the Flask-level subclass) inherits this behaviour. Its `route` decorator goes through `Scaffold`'s `route`, which calls `add_url_rule`.",
+ "cost": 0.0619286,
+ "turns": 3,
+ "duration_s": 10.481,
+ "tokens": {
+  "input": 4,
+  "cache_write": 10045,
+  "cache_read": 32953,
+  "output": 1515,
+  "total": 44517
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 18,
+ "question": "How does the method that registers URL rules on blueprint objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 82
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 26,
+ "question": "Why does the CLI helper class that manages Quill application loading provide both a direct callable manufacturer parameter and an import path parameter as alternative instantiation mechanisms?",
+ "model": "haiku",
+ "answer": "# Why `RoutineDetails` Provides Both `build_program` and `app_import_path`\n\nThe `RoutineDetails` class supports both mechanisms to serve different usage contexts:\n\n## 1. **`build_program` (Direct Callable)** \u2014 Programmatic Usage\nThe `build_program` parameter accepts a callable that directly creates the Quill instance. This is used when:\n- The CLI is invoked programmatically from Python code rather than the command line\n- Custom app instantiation logic needs to be injected at runtime\n- You want to avoid the overhead of module import machinery\n\nFrom `src/quill/cli.py:L305-331`, the parameter is documented as:\n> Optionally a function that is passed the script info to create the instance of the application.\n\n## 2. **`app_import_path` (Import String)** \u2014 CLI Usage\nThe `app_import_path` parameter accepts a string specifying where to find the app, typically from:\n- The `--app` command-line option\n- The `FLASK_APP` environment variable\n\nThis is documented in `src/quill/cli.py:L312-313` as:\n> Optionally the import path for the Quill application.\n\n## 3. **Priority and Fallback Chain**\nPer `src/quill/cli.py:L333-372` (`read_program` method), they are checked in order:\n\n1. If `build_program` is set, call it (line 341-342)\n2. Otherwise, if `app_import_path` is set, parse it and import (lines 344-349)\n3. Otherwise, search for default files `wsgi.py` or `app.py` (lines 351-356)\n\nThis layered design allows the framework to support:\n- **Declarative configuration** via strings (suitable for CLI arguments and environment variables)\n- **Imperative injection** via callables (suitable for programmatic use and testing)\n- **Automatic discovery** as a fallback (for simple cases)",
+ "cost": 0.021441,
+ "turns": 1,
+ "duration_s": 21.1,
+ "tokens": {
+  "input": 7913,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7913
+ },
+ "pack_tokens": 4526,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 78
+ }
+}

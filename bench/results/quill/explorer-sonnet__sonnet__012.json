@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "**Short version:** the wrapper doesn't validate anything. It moves the `hashlib.sha1` lookup from import time to call time. That way a missing SHA-1 can't break the import, and you get a chance to configure something else first.\n\n**The wrapper**, `_postponed_sha1` in `src/quill/sittings.py` (L290-295):\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    return hashlib.sha1(string)\n```\n- The `hashlib.sha1` attribute is only looked up inside the function body, when the function is called.\n- Some FIPS builds don't include SHA-1. If the class attribute were `hashlib.sha1` itself, that lookup would run while the module was being imported. The import would then fail before a developer could pick a different algorithm.\n- With the wrapper, importing `quill.sittings` never touches SHA-1.\n\n**Where it is used**, in `ProtectedBiscuitSessionAdapter` (L298+):\n- `digest_method = staticmethod(_postponed_sha1)` (L307) makes the wrapper the default digest.\n- `staticmethod` stops Python from binding `self` as the first argument when the attribute is accessed on an instance.\n- At L333 the adapter passes `self.digest_method` to itsdangerous in the `signer_kwargs` dict, next to `key_derivation`. itsdangerous calls the digest only when it signs or verifies a session cookie.\n\n**When a failure can happen:**\n- On a FIPS build without SHA-1, the error is raised the first time a cookie session is signed or read. That is when `_postponed_sha1` is called and `hashlib.sha1(...)` fails.\n- Apps that don't use the default cookie sessions never hit the error.\n- Apps that do use them can set `digest_method` to another algorithm, for example on a `ProtectedBiscuitSessionAdapter` subclass, before any signing happens.",
+ "cost": 0.028473000000000002,
+ "turns": 3,
+ "duration_s": 10.2,
+ "tokens": {
+  "input": 14086,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14086
+ },
+ "pack_tokens": 1788,
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 81
+ }
+}

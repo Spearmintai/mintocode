@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "sonnet",
+ "answer": "The method is `CertificateOptionKind.transform` in `src/quill/cli.py` (L791-825). `CertificateOptionKind` is a `click.ParamType` (L780-825) whose class attribute `name` is `'path'` (L786). The fallback chain is built from a `try/except click.BadParameter` around the file-path check.\n\n**Step 0: SSL guard (L794-801)**\n- It imports `ssl` first.\n- If the import fails, it raises `click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`.\n- `tests/test_terminal_tool.py` `test_launch_certificate_lacking_tls` (L641-645) covers this by setting `sys.modules['ssl']=None`.\n\n**Step 1: file path (L803-804)**\n- `return self.path_type(value, param, ctx)` runs inside a `try`.\n- `path_type` is a click path type. The material doesn't show where it is defined, but the `--cert` description says it accepts an existing file.\n- If the value is a valid existing file, it is returned as is and nothing further runs.\n\n**Step 2: adhoc (L805-818)**\n- On `click.BadParameter` from step 1, the `except` block normalizes the value with `click.STRING(value, param, ctx).lower()` (L806).\n- If the lowercased value is `\"adhoc\"` (L808), it tries `import cryptography`.\n  - If that import fails, it raises `BadParameter(\"Using ad-hoc certificates requires the cryptography library.\")`.\n  - Otherwise it returns the string `\"adhoc\"`.\n- Because of the `.lower()`, `ADHOC` is also accepted.\n- `test_launch_certificate_improvised` (L602-616) covers this.\n\n**Step 3: SSLContext import (L820-825)**\n- Otherwise it calls `import_string(value, silent=True)` (L820).\n  - `silent=True` means an unimportable name gives `None`, not an exception.\n- If the result is an `ssl.SSLContext` instance, it is returned (L822-823).\n- If not, a bare `raise` (L825) re-raises the original `BadParameter` from the path check. The user therefore sees the file-path error when none of the three forms matched.\n- `test_launch_certificate_loading` (L619-638) checks that:\n  - `not_here` (unimportable) raises `BadParameter`.\n  - `quill` (a module, not an `SSLContext`) raises `BadParameter`.\n  - A `sys.modules` entry holding an `SSLContext` is accepted, and `ctx.params['cert'] is ssl_context`.\n\n**Note on lowercasing:** the lowercased value is what gets passed to `import_string`, so the import string is lowercased too. The material doesn't say whether this matters for mixed-case module names.\n\n**Interaction with `--key` (`_check_token`, L828-864)**\n- The callback reads `ctx.params['cert']` and treats `\"adhoc\"` and `SSLContext` results specially.\n- If `--key` is given with adhoc or an `SSLContext`, it raises `BadParameter`.\n- If `--key` is given without `--cert`, it raises `'\"--cert\" must also be specified.'`.\n- If `--key` is given with a file, it sets `ctx.params['cert'] = (cert, key)`.\n- If `--key` is missing and `cert` is a file, it raises `'Required when using \"--cert\".'`.",
+ "cost": 0.035786,
+ "turns": 1,
+ "duration_s": 9.3,
+ "tokens": {
+  "input": 7233,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7233
+ },
+ "pack_tokens": 3495,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 78
+ }
+}

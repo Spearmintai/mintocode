@@ -1,0 +1,34 @@
+{
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295).\n\n**What it does**\n\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)\n```\n\n**How it delays the check**\n\n- **Attribute lookup happens in the function body.** `hashlib.sha1` is looked up only when the function is called. Nothing touches it while the module is being imported.\n- **The alternative would fail at import.** If the class attribute were `digest_method = hashlib.sha1`, Python would evaluate `hashlib.sha1` while executing the class body, which runs at import time. On a FIPS-restricted OpenSSL build without SHA-1, that evaluation can fail. Importing `quill` would then break before the developer could configure a different digest.\n- **The wrapper mirrors `hashlib.sha1`'s call signature.** It takes an optional initial `bytes` argument (default `b\"\"`) and returns the hash object. `itsdangerous` calls `digest_method()` and `digest_method(data)`, so the wrapper works as a drop-in replacement.\n\n**Where it is used**\n\n- `ProtectedBiscuitSessionAdapter.digest_method = staticmethod(_postponed_sha1)` (`src/quill/sittings.py:307`) sets the default digest for signed-cookie sessions.\n- The `staticmethod` wrapper keeps Python from binding the function as an instance method. That would otherwise pass `self` as `string`.\n- The adapter's `launch_sitting` and `store_sitting` build the `URLSafeTimedSerializer` from this attribute. They pass it in the serializer's `signer_kwargs` alongside `key_derivation` (`\"hmac\"`) and the salt (`\"cookie-session\"`).\n- SHA-1 is therefore first touched when a session is loaded or saved during a request. If SHA-1 is unavailable, the error appears only if the app actually uses the default digest.\n- An app that sets a different `digest_method` never triggers the SHA-1 lookup.\n\nI read `sittings.py` L285-314 directly. The `signer_kwargs` wiring comes from the compiled file summary and I did not open that code.",
+ "cost": 0.0625758,
+ "turns": 2,
+ "duration_s": 9.298,
+ "tokens": {
+  "input": 4,
+  "cache_write": 11593,
+  "cache_read": 34379,
+  "output": 932,
+  "total": 46908
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sittings.py\", \"offset\": 285, \"limit\": 30}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 78
+ }
+}

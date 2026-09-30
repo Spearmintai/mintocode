@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 3,
+ "question": "What architectural decisions are reflected by the dual inheritance from both AssertionError and UnicodeError in the debug-mode exception class for unexpected unicode or binary data regarding separation between validation failures and encoding issues in Quill's layered architecture?",
+ "model": "sonnet",
+ "answer": "`SurpriseCharsetFault` is defined at `src/quill/diagnosticassistants.py:17-20`, but nothing in the repo raises or catches it. I found no other references outside the `.micode` index files. So the design intent below is inferred from the class definition, its docstring and the sibling class. It isn't confirmed by any call site.\n\n```python\nclass SurpriseCharsetFault(AssertionError, UnicodeError):\n    \"\"\"Raised in places where we want some better error reporting for\n    unexpected unicode or binary data.\n    \"\"\"\n```\n\n**What the dual inheritance shows**\n\n- **The class is a marker with no body.** It adds no behaviour and only combines two existing categories.\n- **`AssertionError` marks it as a debug-time failure.** The module is a set of debug helpers. This is a \"your data isn't what we expected\" check, not a normal runtime error. It is meant to be caught and reported in debug mode, not handled as part of application flow.\n- **`UnicodeError` keeps it classified as an encoding problem.** Code that already does `except UnicodeError` (or `ValueError`, which `UnicodeError` subclasses) will still catch it. The debug-mode replacement therefore doesn't break existing handlers.\n- **The two categories stay separate but both apply.** A single exception type carries both \"assertion or validation failed\" and \"this is a charset or encoding fault\". It doesn't force one meaning onto the other.\n\n**Layering**\n\n- The class sits in the top-level `quill/diagnosticassistants.py`, outside the `sansio` core. That module imports `sansio.app.App` and `globals.request_ctx`. The `sansio` core and the request-handling code therefore don't need to know about it.\n- Diagnostics are an opt-in layer on top of the core, and the core keeps its ordinary exception semantics.\n- The same module has a sibling, `TroubleshootUploadsMissingKey(KeyError, AssertionError)` (line 23). It uses the same pattern: it keeps the natural error type (`KeyError`) and adds `AssertionError` to mark it as a debug-only, better-message variant. This suggests the multiple-inheritance approach is deliberate across the module.\n\nThe pattern looks borrowed from Flask's `UnexpectedUnicodeError(AssertionError, UnicodeError)`, which Quill appears to have renamed. That is my recollection of Flask, not something in this repo.",
+ "cost": 0.023677,
+ "turns": 3,
+ "duration_s": 13.2,
+ "tokens": {
+  "input": 14094,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14094
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 76
+ }
+}

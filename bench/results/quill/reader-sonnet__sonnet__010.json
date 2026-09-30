@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "answer": "**Short answer:** the material doesn't show a test class with a named architectural pattern. The closest match is `TestFlowing` in `tests/test_aids.py` (L236-307), which is a plain pytest grouping class. The isolation it tests comes from the wrapper in `src/quill/helpers.py`. I only have one-line summaries of `TestFlowing`, not its source, so I can't confirm details of how each test is written.\n\n**What `TestFlowing` covers (per the file card):**\n- `test_flowing_with_scope` (L237-248) wraps a generator and checks that `request.args` is readable while streaming. The body is `b'Hello World!'`.\n- `test_flowing_with_scope_as_wrapper` (L250-262) uses `flow_with_environment` as a decorator on a generator function that takes arguments.\n- `test_flowing_with_scope_and_bespoke_shutdown` (L264-293) passes a custom iterator and checks that its `close()` is called (`called == [42]`).\n\n**The pattern being tested:** `flow_with_environment` (`helpers.py` L62-136, typing overloads at L50-59) is a context-preserving wrapper (decorator/proxy) around an iterator. Per the card:\n- It accepts an iterator or a generator function. If the argument isn't iterable (a `TypeError`), it returns a decorator built with `update_wrapper`.\n- Otherwise it builds a wrapping generator that fetches `_cv_request` and raises `RuntimeError` if there is none. The message is \"'flow_with_environment' can only be used when a request context is active, such as in a view function.\" (L111-114).\n- It then enters `with ctx`, yields a dummy `None` (which eagerly primes the generator), and delegates to the wrapped generator.\n\nThis is what separates the two concerns. The view returns and its own context ends, while the wrapper keeps a request context alive for the generator. That is why `request` works during streaming (`docs/patterns/streaming.rst` L52-58). Without the wrapper, the generator hits the `RuntimeError` the docs describe (L52-54).\n\n**Related test, not a class:** `test_caller_remove_every_retained` (`tests/test_trialing.py` L382-396) checks context lifetime from the other side. `flow_with_environment(\"hello\")` in a route pushes an extra context that the response holds. After `rv.close()`, `_cv_request.get(None) is qry_scope`, so only the fixture's context remains.\n\n**Not settled by the material:** the actual bodies of the `TestFlowing` tests, and whether it uses any shared fixtures or setup. Read `tests/test_aids.py` L236-307 to confirm.",
+ "cost": 0.050528,
+ "turns": 1,
+ "duration_s": 11.6,
+ "tokens": {
+  "input": 10707,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10707
+ },
+ "pack_tokens": 5654,
+ "score": {
+  "correctness": 13,
+  "completeness": 11,
+  "relevance": 15,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 67
+ }
+}

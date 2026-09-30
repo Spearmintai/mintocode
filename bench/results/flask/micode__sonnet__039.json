@@ -1,0 +1,31 @@
+{
+ "answer": "The decision is made in two places. `add_url_rule` decides at registration time whether a rule gets OPTIONS. `dispatch_request` acts on that decision when a request arrives.\n\n## 1. Registration: `App.add_url_rule` in `src/flask/sansio/app.py` (L630\u2013651)\n\nThe branches run in this order:\n\n1. **Explicit argument.** `provide_automatic_options` is passed to `add_url_rule` (L610). It comes from `Scaffold.route`/`add_url_rule` in `sansio/scaffold.py` (L373, documented at L428), or from `Blueprint.add_url_rule` in `sansio/blueprints.py` (L418, forwarded at L438). If it is not `None`, the later branches are skipped.\n2. **View function attribute (L635\u2013638).** If the argument is `None`, it reads `getattr(view_func, \"provide_automatic_options\", None)`. Class-based views set this attribute in `View.as_view` (`src/flask/views.py`, class attribute at L56, assigned at L134).\n3. **Config setting (L640\u2013645).** If the value is still `None`, the code checks two things:\n   - If `\"OPTIONS\" not in methods` and `self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is true (L641), it sets `provide_automatic_options = True` and adds `\"OPTIONS\"` to `required_methods` (L642\u2013643).\n   - Otherwise it sets `provide_automatic_options = False` (L645). This happens when the user already listed OPTIONS, or when the config setting is off.\n4. **Building the rule (L648\u2013651).**\n   - `methods |= required_methods` adds OPTIONS to the rule's methods.\n   - The rule object is created with `self.url_rule_class(...)`.\n   - The flag is stored on it as `rule_obj.provide_automatic_options` (L651).\n\nBecause of step 3, the config value is only consulted when neither the argument nor the view attribute decided the question.\n\n## 2. Request time: `Flask.dispatch_request` in `src/flask/app.py` (L879\u2013902)\n\n- It first re-raises any routing exception (L890\u2013891).\n- It takes `rule = req.url_rule`.\n- **L895\u2013899.** If `getattr(rule, \"provide_automatic_options\", False)` is true and `req.method == \"OPTIONS\"`, it returns `self.make_default_options_response()`. The view function is never called.\n- Otherwise it calls `self.view_functions[rule.endpoint](**view_args)` (L901\u2013902).\n\nA rule with the flag `False` and OPTIONS in its methods goes to the user's view. That happens when the user handles OPTIONS explicitly, or when `PROVIDE_AUTOMATIC_OPTIONS` is disabled.",
+ "cost": 0.06376319999999999,
+ "turns": 4,
+ "duration_s": 11.378,
+ "tokens": {
+  "input": 6,
+  "cache_write": 10092,
+  "cache_read": 53016,
+  "output": 1278,
+  "total": 64392
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 88
+ }
+}

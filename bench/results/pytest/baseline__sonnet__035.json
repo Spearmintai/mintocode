@@ -1,0 +1,35 @@
+{
+ "answer": "Consistency holds because `snap()` and `writeorg()` never touch the same object. They also share a state guard. The code is in `src/_pytest/capture.py`, in `SysCapture`, which subclasses `SysCaptureBase[str]`.\n\n**Separate targets**\n- `SysCaptureBase.__init__` saves the real stream as `self._old = getattr(sys, name)`. It also creates a separate in-memory buffer, `self.tmpfile`, which is a `CaptureIO`, a `TeeCaptureIO` if `tee=True`, or `DontReadFromInput` for stdin.\n- `start()` points `sys.<name>` at `tmpfile`, so ordinary test output goes into the buffer.\n- `SysCapture.snap()` (line 450) works only on `tmpfile`:\n  - It reads the contents with `getvalue()`.\n  - It then calls `seek(0)` and `truncate()` to clear the buffer.\n  - So each snap returns exactly what was captured since the previous snap, and nothing is lost or repeated.\n- `SysCapture.writeorg()` (line 458) works only on `self._old`. It calls `self._old.write(data)` and then `self._old.flush()`.\n  - The data therefore goes straight to the real stream and never enters `tmpfile`.\n  - The immediate flush keeps it in order with anything else written to the original stream.\n- Because the two operations use disjoint objects, interleaving them cannot corrupt the captured content. Data sent through `writeorg` doesn't show up in a later `snap`, and the truncation in `snap` doesn't affect what `writeorg` has already emitted.\n\n**Shared state guard**\n- Both methods call `self._assert_state(..., (\"started\", \"suspended\"))` first.\n- `suspend()` and `resume()` swap `sys.<name>` between `_old` and `tmpfile`. `_old` and `tmpfile` themselves stay the same throughout, so `writeorg` and `snap` remain valid in either state.\n- `done()` restores `sys.<name>`, deletes `_old` and closes `tmpfile`. After that, both methods fail the state assertion instead of using dead objects.\n\n**The binary variant**\n`SysCaptureBinary` (line 429) follows the same pattern through `.buffer`. Its `writeorg` also calls `self._old.flush()` before writing to `_old.buffer`, so text already buffered on the original stream comes out before the raw bytes.\n\n**Callers**\n`CaptureBase` (line ~326) defines the abstract `writeorg`/`snap` interface. `MultiCapture` and `CaptureManager` are the callers that interleave these calls, for example when they print the captured output for a failing test.",
+ "cost": 0.046020200000000004,
+ "turns": 3,
+ "duration_s": 10.395,
+ "tokens": {
+  "input": 6,
+  "cache_write": 6127,
+  "cache_read": 48751,
+  "output": 1175,
+  "total": 56059
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class SysCaptureBase|class SysCapture\\\\b|def writeorg|def snap\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/capture.py\", \"output_mode\":",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/capture.py\", \"offset\": 360, \"limit\": 105}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 35,
+ "question": "Why does the SysCapture class maintain consistency between its captured buffer state and the original system stream when snap() and writeorg() operations are interleaved during test execution?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

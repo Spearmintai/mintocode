@@ -1,0 +1,34 @@
+{
+ "answer": "`ensure_ascii` is a class attribute on `DefaultJSONProvider` in `src/flask/json/provider.py`. It defaults to `True` (line 144). It decides whether non-ASCII characters in serialized JSON are written as `\\uXXXX` escapes or as literal Unicode.\n\n**How it works**\n- `DefaultJSONProvider.dumps` (lines 166-179) calls `kwargs.setdefault(\"ensure_ascii\", self.ensure_ascii)` and then `json.dumps(obj, **kwargs)`. The attribute is passed straight through to the standard library's `json.dumps` `ensure_ascii` argument.\n- `jsonify` and `response()` both go through `dumps`, so they follow the same setting.\n- The `dumps` docstring names `ensure_ascii` alongside `default` and `sort_keys` as attributes that supply the default keyword arguments.\n\n**Effect on output**\n- With `ensure_ascii = True`, every non-ASCII character is escaped. `\"\u00e9\"` comes out as `\"\\u00e9\"`, and characters outside the Basic Multilingual Plane come out as surrogate pairs. The output is pure ASCII, which the attribute's docstring says \"may be more compatible with some clients.\"\n- With `ensure_ascii = False`, characters are emitted as literal Unicode, for example `\"\u00e9\"`. This gives more compact and readable output. The response is still encoded as UTF-8.\n- The escaped and literal forms decode to the same string, so this changes only the representation, not the data.\n\n**Overriding it**\n- Set `app.json.ensure_ascii = False` on the provider instance, or subclass `DefaultJSONProvider` and assign it there.\n- Pass `ensure_ascii=` in a single `dumps` call, which wins over the attribute because `dumps` only uses `setdefault`.\n\nI read the `ensure_ascii` definition and `dumps` directly from the source. I did not run any code to confirm the output.",
+ "cost": 0.041164,
+ "turns": 2,
+ "duration_s": 8.884,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6554,
+  "cache_read": 32750,
+  "output": 839,
+  "total": 40147
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"ensure_ascii\", \"path\": \"/home/sq/micode-bench/repos/flask/src\", \"output_mode\": \"content\", \"-n\": true, \"-B\": 2, \"-A\": 2}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization provider and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "answer": "`Blueprint.add_url_rule` (`src/flask/sansio/blueprints.py:413`) doesn't register anything with the app. It only queues a lambda that runs later, when the blueprint is registered on an app.\n\n**What it does at call time**\n- The method is decorated with `@setupmethod`. That decorator (from `flask.sansio.scaffold`) raises an error if the blueprint has already been registered, so rules can't be added after the fact.\n- It checks that `endpoint` and `view_func.__name__` contain no `.`. If either does, it raises `ValueError`.\n- It then calls `self.record(...)` with a lambda (lines 433\u2013441):\n  ```python\n  self.record(\n      lambda s: s.add_url_rule(\n          rule, endpoint, view_func,\n          provide_automatic_options=provide_automatic_options, **options))\n  ```\n  The lambda closes over `rule`, `endpoint`, `view_func`, `provide_automatic_options` and `options`. Its parameter `s` is a `BlueprintSetupState`, which doesn't exist yet.\n\n**How the lambda is stored**\n- `Blueprint.record` (line 224, also `@setupmethod`) does `self.deferred_functions.append(func)`. That list holds the `DeferredSetupFunction` callables.\n- Nothing is called at this point.\n\n**When the lambda runs**\n- `Blueprint.register(app, options)` builds a state with `make_setup_state`, which returns a `BlueprintSetupState`. It then loops over `self.deferred_functions` and calls each one as `deferred(state)`.\n- I didn't open `register` itself, so this step comes from Flask's documented design rather than from reading that code.\n- At that moment `s` is the real state, so `s.add_url_rule(...)` runs `BlueprintSetupState.add_url_rule` (line 87).\n- That method applies the state's `url_prefix` to the rule and defaults `subdomain` from the state.\n- It merges `url_defaults` into `defaults`.\n- It builds the endpoint as `f\"{self.name_prefix}.{self.name}.{endpoint}\".lstrip(\".\")`, inferring the endpoint from the view function if none was given.\n- Finally it calls `self.app.add_url_rule(...)`.\n\n**Why it is deferred**\n- The blueprint has no app when the rule is declared. The URL prefix, subdomain, name prefix and URL defaults can all be overridden at registration, and the same blueprint can be registered several times, for example with different prefixes or nested in another blueprint.\n- Queuing a closure lets each registration replay the rule with its own `BlueprintSetupState`.",
+ "cost": 0.0323622,
+ "turns": 5,
+ "duration_s": 11.182,
+ "tokens": {
+  "input": 6,
+  "cache_write": 1939,
+  "cache_read": 52671,
+  "output": 1406,
+  "total": 56022
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 18,
+ "question": "How does the method that registers URL rules on blueprint objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

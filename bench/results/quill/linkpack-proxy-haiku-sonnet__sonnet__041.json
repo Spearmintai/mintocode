@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 41,
+ "question": "Where is the test class that validates URL generation with anchors, schemes, and HTTP methods defined?",
+ "model": "sonnet",
+ "answer": "The class is `TestAddressBuilding`, defined in `tests/test_aids.py` starting at line 102 and running through line 169 in the excerpt. It tests `quill.build_link_to`.\n\nWhat the tests cover:\n\n- **Anchors:** `test_link_for_with_fragment` (L103-108) checks that `build_link_to(\"index\", _anchor=\"x y\")` returns `/#x%20y`.\n- **Schemes:**\n  - `test_link_for_with_protocol` (L110-118) checks that `_external=True, _scheme=\"https\"` gives `https://localhost/`.\n  - `test_link_for_with_protocol_not_outside` (L120-129) checks that a scheme alone implies an external URL (`https://localhost/`). It also checks that `_scheme=\"https\"` with `_external=False` raises `ValueError`.\n  - `test_link_for_with_swapping_protocols` (L131-141) checks that the scheme does not carry over between calls. It goes http, then https, then http again.\n- **HTTP methods:** `test_link_with_verb` (L143-162) defines a `VerbPage` subclass (`MyView`) and registers it with `app.attach_link_regulation` for GET `/myview/`, GET `/myview/<int:id>`, and POST `/myview/create`. It then checks that `_method=\"GET\"` gives `/myview/`, that `id=42` with `_method=\"GET\"` gives `/myview/42`, and that `_method=\"POST\"` gives `/myview/create`.\n- **Route variable named `self`:** `test_link_for_with_this` (L164-169) checks that a `/<self>` route builds `/2` when called with `self=\"2\"`.\n\nThe tests use the `app` and `qry_scope` fixtures. Their definitions aren't in the excerpt, so I can't say where they live, though a `conftest.py` is a likely place to check.",
+ "cost": 0.012678,
+ "turns": 1,
+ "duration_s": 6.7,
+ "tokens": {
+  "input": 2248,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 2248
+ },
+ "pack_tokens": 699,
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 86
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "answer": "The lookup is in `Quill._locate_fault_processor(self, e, schematics)` at `src/quill/sansio/app.py:823-846`. This is the app's version of Flask's `_find_error_handler`, with different names.\n\n- **Setup (lines 831-832):** `_obtain_exception_type_and_status(type(e))` returns `exc_class` and an HTTP `code`. The code is `None` for non-HTTP exceptions. `names = (*schematics, None)` lists the schematic (blueprint) names first. The trailing `None` stands for the app-level handlers.\n- **Outer loop, HTTP status codes (line 834):** `for c in (code, None) if code is not None else (None,)`. It tries the specific status code first, then falls back to `None`, which means handlers registered without a code.\n- **Middle loop, schematic scopes (lines 835-836):** `for name in names` looks up `self.error_handler_spec[name][c]`. Schematics come before the app. It skips empty maps (lines 838-839).\n- **Inner loop, method resolution order (lines 841-845):** `for cls in exc_class.__mro__` calls `handler_map.get(cls)` and returns the first match. This covers the exception class, then its parents.\n- **No match (line 846):** it returns `None`.\n\nThe docstring gives the resulting precedence:\n1. Schematic handler for the specific code.\n2. App handler for the specific code.\n3. Schematic handler for the exception class.\n4. App handler for the exception class.\n\nThe order comes from the loop nesting, with code outermost, then scope, then MRO. The scope loop runs inside the code loop, so a code-specific app handler beats a class-only schematic handler.",
+ "cost": 0.0381996,
+ "turns": 3,
+ "duration_s": 9.14,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5111,
+  "cache_read": 48218,
+  "output": 810,
+  "total": 54145
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def _find_error_handler|def find_error_handler|_get_exc_class_and_code|__mro__\", \"output_mode\": \"content\", \"glob\": \"*.py\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/app.py\", \"offset\": 800, \"limit\": 60}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

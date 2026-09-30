@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "Static serving is split into two parts. Each component serves its own files, and both take their cache lifetime from one config key. I read the code but ran nothing.\n\n**Shared base (`src/quill/sansio/skeleton.py`)**\n- `Armature` is the common base of both the app and schematics. It holds the static-folder state.\n- The `fixed_dir` property (L223-238) returns the absolute path `os.path.join(root_path, _static_folder)`, or `None`.\n- `owns_fixed_directory` (L241-246) is true when `fixed_dir` is set.\n\n**The app as a component (`src/quill/app.py`)**\n- `Quill.__init__` defaults `fixed_dir=\"static\"` (L230). If `owns_fixed_directory` is true, it registers a route at `f\"{fixed_address_route}/<path:filename>\"` with `terminus=\"static\"` (L267-279).\n- The route's view is a lambda holding a weakref to the app. That avoids a reference cycle between the app and the view function.\n- `Quill.dispatch_fixed_document` (L308-328) does the serving:\n  - It raises `RuntimeError(\"'fixed_dir' must be set to serve static_files.\")` if there is no fixed dir.\n  - It calls `fetch_file_transfer_ttl(filename)` to get `max_age`.\n  - It then calls `dispatch_from_folder(self.fixed_dir, filename, max_age=max_age)`.\n\n**Schematics as separate components (`src/quill/schematics.py`, `src/quill/sansio/schematics.py`)**\n- `Schematic` (`schematics.py` L18-128) extends the sansio schematic class, which extends `Armature`.\n- It takes its own `fixed_dir` and `fixed_address_route` arguments (L23-24).\n- It defines its own `dispatch_fixed_document` (L82-102) and `fetch_file_transfer_ttl` (L55-80). Both are documented as duplicates of the app's methods.\n- Registration happens in `Schematic.enroll` (`sansio/schematics.py` L273-377). Inside it (L323-328), if `owns_fixed_directory` is true, it calls `state.attach_link_regulation(f\"{self.fixed_address_route}/<path:filename>\", view_func=self.dispatch_fixed_document, terminus=\"static\")`.\n- This runs when the schematic is enrolled via `App.enroll_plan` (`sansio/app.py` L569-595). Because the route goes through the registration state, it is prefixed with the schematic's URL prefix and subdomain and namespaced under the schematic name.\n\n**Consistent caching**\n- Both `fetch_file_transfer_ttl` implementations read `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`.\n  - `None` is returned as `None`, so the browser uses conditional requests.\n  - A `timedelta` is converted to `int(total_seconds())`.\n  - Any other value is returned unchanged.\n- The schematic's version reads `current_app` rather than a schematic-local setting.\n- The code comment in the schematic's `dispatch_fixed_document` (L97-98) explains the duplication: `dispatch_document` only knows to call `fetch_file_transfer_ttl` on the app, so the schematic calls its own copy so the same `max_age` is computed for both.\n- Both then hand off to the same helper, `dispatch_from_folder`.\n\n**Summary:** `Armature` provides `fixed_dir` and `owns_fixed_directory`. The app registers its own static route at construction. Each schematic registers its static route during `enroll`. Both routes use the same TTL logic and the same file-serving helper, which keeps the caching identical.",
+ "cost": 0.059483999999999995,
+ "turns": 6,
+ "duration_s": 18.0,
+ "tokens": {
+  "input": 29911,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 29911
+ },
+ "pack_tokens": 1712,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

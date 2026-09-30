@@ -1,0 +1,35 @@
+{
+ "answer": "**Where it happens**\n\nThe check is `Metafunc._validate_if_using_arg_names` in `src/_pytest/python.py:1456`. `Metafunc.parametrize` calls it at line 1264, after it has parsed the argnames and resolved `indirect`.\n\n**Mechanism**\n\n1. For each `arg` in `argnames`, the method tests `arg not in self.fixturenames`.\n2. `self.fixturenames` is set in `Metafunc.__init__` (line 1151) to `fixtureinfo.names_closure`. This is the closure of names the test needs: the function's own argument names (from `getfuncargnames`), plus `usefixtures` and autouse fixtures, plus the transitive fixture dependencies.\n3. If `arg` is missing from that closure, the method looks at the function's default-valued arguments:\n   - **The function has a parameter `arg` with a default value.** `get_default_arg_names(self.function)` (`compat.py:175`) returns it. The method calls `fail(f\"In {func_name}: function already takes an argument '{arg}' with a default value\", pytrace=False)`. Parameters with defaults are excluded from the function's argument names and never become fixtures, so they can't be parametrized.\n   - **The function has no such parameter at all.** The method calls `fail(f\"In {func_name}: function uses no {name} '{arg}'\", pytrace=False)`. `name` is `\"fixture\"` if `arg` is listed in `indirect` (or if `indirect` is `True`), and `\"argument\"` otherwise. So an indirect name with no matching parameter reports \"function uses no fixture 'x'\".\n\n**How it fails**\n\n`fail` is `_pytest.outcomes.fail`. It raises the `Failed` outcome exception, not a `ValueError`, even though the docstring says `:raises ValueError:`. With `pytrace=False` no Python traceback is shown, only the message. The failure happens during collection, so the test function's items are not generated and collection reports it as an error.\n\n**Dependence on the function signature**\n\n- A parameter counts as a fixture-argument only if it has no default. A default-valued parameter gives the \"already takes an argument \u2026 with a default value\" error.\n- An `indirect` name passes only if it is a real parameter, or if it is in the closure through `usefixtures`, an autouse fixture, or a fixture dependency. Otherwise it fails with \"function uses no fixture\".\n- The check uses `fixturenames`, not just the signature. A name absent from the signature can still pass if some fixture in the closure requires it.\n- The error is `Failed` regardless of `indirect`. The value of `indirect` only changes the wording (\"fixture\" versus \"argument\").\n\nI read the code but did not run any tests.",
+ "cost": 0.045337800000000004,
+ "turns": 3,
+ "duration_s": 13.629,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5583,
+  "cache_read": 49369,
+  "output": 1312,
+  "total": 56270
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def _validate_if_using_arg_names\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/python.py\", \"output_mode\": \"content\", \"-A\": 50}",
+  "Grep {\"pattern\": \"_validate_if_using_arg_names|def get_default_arg_names|self.fixturenames|def fail\\\\(\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest\", \"ou"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 12,
+ "question": "What is the failure mechanism when the parametrize method's validation of indirect parameter names detects that an indirect parameter references a non-existent function argument, and how does this depend on the function signature?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 85
+ }
+}

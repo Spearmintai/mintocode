@@ -1,0 +1,34 @@
+{
+ "answer": "`MockTiming.patch` is in `src/_pytest/timing.py:86-91`. I read only that file and did not trace callers or run anything.\n\n**Where the interception points are set up**\n\n```python\ndef patch(self, monkeypatch: MonkeyPatch) -> None:\n    from _pytest import timing  # noqa: PLW0406\n    monkeypatch.setattr(timing, \"sleep\", self.sleep)\n    monkeypatch.setattr(timing, \"time\", self.time)\n    monkeypatch.setattr(timing, \"perf_counter\", self.time)\n```\n\n- The import is inside the method, so it gets the real `_pytest.timing` module object. That module is the one that defines `MockTiming`.\n- Each `monkeypatch.setattr(timing, name, value)` call replaces a module-level attribute on `_pytest.timing`. Those attributes are the real `sleep`, `time` and `perf_counter` that the module re-exports from `time`. The module's `__all__` at line 94 lists exactly these three names.\n- The replacements are the bound methods `MockTiming.sleep` and `MockTiming.time`, which read and write the instance's `_current_time`.\n- The interception only works for code that accesses these names through the module at call time, as in `timing.time()`. The class docstring says pytest should always do this rather than use `time` directly. Code that did `from _pytest.timing import time` earlier keeps the original function.\n\n**Order and relationships of the three calls**\n\n1. `sleep` is patched first. It is replaced by `self.sleep`, which does `_current_time += seconds`. This is the only way the mock clock advances.\n2. `time` is patched second, with `self.time`, which returns `_current_time`.\n3. `perf_counter` is patched third, also with `self.time`. It is the same bound method as in step 2, so `timing.time()` and `timing.perf_counter()` return identical values.\n\nThe three calls don't depend on each other's results, so their order has no effect on behaviour. Nothing runs between them, so it's a purely sequential, single-threaded update. The one thing that follows from the order is that a failure part-way through (for example a missing attribute, since `setattr` raises by default) would leave the earlier calls applied.\n\n**Side effects on the timing module's state**\n\n- The patch is per-instance. Every patched function is bound to one `MockTiming` object, and all three share its `_current_time`. `_current_time` is a class attribute with a default of `datetime(2020, 5, 22, 14, 20, 50).timestamp()`. The first `sleep` does `+=`, which creates an instance attribute, so it never modifies the class default.\n- Mock time is frozen until `sleep` is called. Because `perf_counter` maps to the same wall-clock value, it is not monotonic in real time and only moves when `sleep` moves it.\n- Reversal is handled by `MonkeyPatch`. It records each original value as it goes, and `monkeypatch.undo()` (usually at fixture teardown) restores all three attributes in reverse order. `MockTiming` has no undo logic of its own.\n- Only names on `_pytest.timing` are affected. The standard library's `time` module is not touched.",
+ "cost": 0.0381142,
+ "turns": 2,
+ "duration_s": 11.849,
+ "tokens": {
+  "input": 4,
+  "cache_write": 5012,
+  "cache_read": 30891,
+  "output": 1188,
+  "total": 37095
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class MockTiming\", \"output_mode\": \"content\", \"-A\": 50, \"path\": \"/home/sq/micode-bench/base/pytest/src\"}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 45,
+ "question": "Where does the MockTiming.patch method's delegation to monkeypatch.setattr establish the interception points for timing module functions, and what is the relationship between the three separate setattr calls in terms of their execution order and potential side effects on the timing module's state?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

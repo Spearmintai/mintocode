@@ -1,0 +1,37 @@
+{
+ "answer": "The helper is `RoutineDetails` in `src/quill/cli.py` (the Quill counterpart of Flask's `ScriptInfo`). Its `__init__` (lines 305\u2013331) doesn't import the app. It only stores configuration and sets `self._loaded_app = None`. The actual discovery happens in `read_program()` (lines 333\u2013372), which returns `self._loaded_app` if it's already set and otherwise loads the app and caches it there.\n\nThis design is lazy and memoized for these reasons, which I inferred from the code rather than from a comment or commit message:\n\n1. **The CLI object is built before the app can be located.**\n   - `__init__` receives `app_import_path`, `build_program`, `set_debug_flag` and `load_dotenv_defaults`.\n   - The `--app` option callback (around line 445) later assigns `info.app_import_path = value`, after the object already exists.\n   - Loading in `__init__` would run before `--app`, the env-file options and the debug options have been parsed, so it would use incomplete or wrong settings.\n\n2. **Importing the app is expensive and can fail, and many commands don't need it.**\n   - `read_program()` imports user code through `ready_loading` and `find_program`. It tries `wsgi.py` and `app.py` when no path is given.\n   - It can raise `MissingProgramFailure`.\n   - Loading eagerly would make `quill --help` and other commands that don't need an app fail, or run user code, just because the collection was created.\n   - The app is only loaded when a command actually calls `read_program()`, for example via `pass_script_info`, `using_application_scope`, or the run command.\n\n3. **Post-load setup should happen once.**\n   - When `set_debug_flag` is true, `read_program()` sets `app.debug = obtain_diagnostic_switch()`.\n   - Because the result is cached in `_loaded_app`, repeated calls return the same instance without re-importing the module or re-applying that setup.\n   - Every command, and the reloader-related code, therefore sees one consistent app object.\n\n4. **The cache is a private attribute set only on success.**\n   - `_loaded_app` is assigned at the very end, after the `None` check and the debug flag.\n   - A failed load isn't cached, so the next call retries.",
+ "cost": 0.0527082,
+ "turns": 5,
+ "duration_s": 11.862,
+ "tokens": {
+  "input": 8,
+  "cache_write": 6563,
+  "cache_read": 66451,
+  "output": 1315,
+  "total": 74337
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class .*Helper|lazy|cached|_apps|_app_cache\", \"path\": \"/home/sq/micode-bench/base/quill\", \"glob\": \"*.py\", \"output_mode\": \"content\", \"head_limit\": 4",
+  "Grep {\"pattern\": \"ScriptInfo|_loaded_app|def load_app\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill/cli.py\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/cli.py\", \"offset\": 295, \"limit\": 100}",
+  "Grep {\"pattern\": \"load_app|ScriptInfo\\\\(|create_app|app_import_path\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill/cli.py\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 28,
+ "question": "Why does the CLI helper class that manages Quill application discovery implement lazy loading through a cached instance attribute rather than during initialization?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 12,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 75
+ }
+}

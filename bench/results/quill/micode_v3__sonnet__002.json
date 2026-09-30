@@ -1,0 +1,37 @@
+{
+ "answer": "Static serving is separated from the application core by a common base class plus two parallel runtime classes. Both runtime classes use the same TTL logic and the same file-sending helper. I read the app and schematic code directly. I did not read `dispatch_from_folder` or the tests.\n\n**Shared base (no I/O): `src/quill/sansio/skeleton.py::Armature`**\n- `Armature` is the parent of both `App` (`sansio/app.py`) and `Schematic` (`sansio/schematics.py`).\n- It holds the static configuration: the `fixed_dir` property and setter (L223-238) and `fixed_address_route`.\n- `owns_fixed_directory` (L240-246) is true when `fixed_dir` is not `None`. Both components use it to decide whether to register a static route.\n\n**Application registration: `src/quill/app.py::Quill.__init__` (L226-279)**\n- If `owns_fixed_directory` is true, `Quill.__init__` calls `attach_link_regulation(f\"{fixed_address_route}/<path:filename>\", terminus=\"static\", host=static_host, view_func=...)`.\n- The view is a lambda that calls `self_ref().dispatch_fixed_document(**kw)` through a `weakref`. This avoids a reference cycle between the app and the view function.\n- The route is added without checking that the directory exists.\n\n**Schematic (blueprint) registration: `src/quill/sansio/schematics.py::Schematic.enroll` (L273-377)**\n- After `app.schematics[name] = self` and `build_registration_state(...)`, `enroll` checks `owns_fixed_directory` (L323-328).\n- If true, it calls `state.attach_link_regulation(...)` with the same rule shape, `terminus=\"static\"`, and `view_func=self.dispatch_fixed_document`.\n- `SchematicSetupStatus.attach_link_regulation` (L34-116) adds the schematic's URL prefix and name prefix, then passes the rule to `app.attach_link_regulation`. Each schematic therefore gets its own namespaced static endpoint.\n\n**Consistent caching**\n- `Quill.fetch_file_transfer_ttl` (`app.py` L281-306) and `Schematic.fetch_file_transfer_ttl` (`src/quill/schematics.py` L55-80) are identical. Each reads `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`:\n  - `None` stays `None`, so the browser uses conditional requests.\n  - A `timedelta` becomes `int(total_seconds())`.\n  - Any other value is returned as-is.\n- `Quill.dispatch_fixed_document` (`app.py` L308-328) and `Schematic.dispatch_fixed_document` (`schematics.py` L82-102) are also identical. Each does the following:\n  - It raises `RuntimeError(\"'fixed_dir' must be set to serve static_files.\")` if there is no fixed directory.\n  - It computes `max_age = self.fetch_file_transfer_ttl(filename)`.\n  - It calls `dispatch_from_folder(self.fixed_dir, filename, max_age=max_age)`.\n- A comment in the code explains the reason for the duplication: the underlying dispatch helper only knows to call `fetch_file_transfer_ttl` on the app. The schematic therefore computes `max_age` itself and passes it in, so schematic static files get the same `Cache-Control` behaviour as app static files.\n- `tests/test_schematics.py::test_layouts_and_fixed` (L176-220) checks that the `Cache-Control` `max_age` follows `SEND_FILE_MAX_AGE_DEFAULT` for the admin schematic's static files.",
+ "cost": 0.0900738,
+ "turns": 5,
+ "duration_s": 13.202,
+ "tokens": {
+  "input": 6,
+  "cache_write": 14947,
+  "cache_read": 60469,
+  "output": 1818,
+  "total": 77240
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 226, \"limit\": 105}",
+  "Grep {\"pattern\": \"fixed_dir|dispatch_fixed_document|fixed_url_path|get_send_file_max_age\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"con",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/schematics.py\", \"offset\": 55, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 315, \"limit\": 18}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

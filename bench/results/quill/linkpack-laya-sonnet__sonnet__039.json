@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "answer": "The decision is made in two places: at registration time, where the rule gets its flag, and at dispatch time, where the flag is checked.\n\n## 1. Registration: `App.attach_link_regulation` (`src/quill/sansio/app.py:L604-661`)\n\nThe flag is computed and stored on the rule here.\n\n1. **Methods (L616-628).** `methods` is taken from `options.pop(\"methods\")`. If that is `None`, it falls back to `view_func.methods`, then to `(\"GET\",)`. A plain string raises `TypeError`. The methods are then upper-cased into a set.\n2. **Required methods (L631).** `required_methods` is read from `view_func.required_methods` (default empty).\n3. **Flag resolution (L635-645).**\n   - **Explicit argument.** If the `provide_automatic_options` argument is not `None`, it is used as given.\n   - **View attribute.** If the argument is `None`, the code reads `view_func.provide_automatic_options` (L636-638). For class-based views, `Page.provide_automatic_options` is a `ClassVar` defaulting to `None` (`src/quill/views.py:L56`).\n   - **Config fallback.** If the value is still `None` (L640), the config is consulted:\n     - If `\"OPTIONS\" not in methods` **and** `self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy (L641), the flag becomes `True` and `\"OPTIONS\"` is added to `required_methods` (L642-643).\n     - Otherwise, including when `\"OPTIONS\"` is already in `methods` or the config is false, the flag becomes `False` (L644-645).\n4. **Merge and store (L648-651).** `methods |= required_methods`, the `Rule` is created, and `rule_obj.provide_automatic_options` is set to the resolved flag.\n\nBecause the config is consulted only when the flag is still `None`, an explicit argument or a view attribute overrides `PROVIDE_AUTOMATIC_OPTIONS`. The config is also skipped when you list `OPTIONS` in `methods` yourself.\n\n## 2. Dispatch: `Quill.route_inquiry` (`src/quill/app.py:L879-902`)\n\n1. **Routing exception (L890-891).** If `req.routing_exception` is set, `throw_dispatch_fault` is called. It re-raises the exception (`app.py:L478-504`), or raises `FormPayloadPathForwarding` in the debug redirect case described there. So a 405 for an unallowed method happens here, before the flag is checked.\n2. **Automatic OPTIONS (L895-899).** If `getattr(rule, \"provide_automatic_options\", False)` is truthy **and** `req.method == \"OPTIONS\"`, the method returns `build_fallback_options_reply()` (`app.py:L953-964`). That builds an empty `response_class()` and updates its `allow` header from `request_ctx.url_adapter.allowed_methods()`.\n3. **Otherwise (L901-902).** The request goes to `view_functions[rule.terminus](**view_args)`. If `provide_automatic_options` is false and `OPTIONS` is in the rule's methods, your own view handles it.\n\n## Behaviour confirmed by the tests\n\n- **`tests/test_elementary.py:L70-89`:**\n  - `view.provide_automatic_options = False` gives a 405 for OPTIONS.\n  - `True` together with `methods=[\"OPTIONS\"]` gives `allow == [\"OPTIONS\"]`.\n- **`tests/test_elementary.py:L92-126`:**\n  - Passing `provide_automatic_options=False` to `attach_link_regulation` gives a 405 for OPTIONS.\n  - The `allow` lists then omit `OPTIONS`.\n\nThe material doesn't show where `PROVIDE_AUTOMATIC_OPTIONS` gets its default value. Look at the config defaults in the app setup code.",
+ "cost": 0.039948000000000004,
+ "turns": 1,
+ "duration_s": 17.8,
+ "tokens": {
+  "input": 8005,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8005
+ },
+ "pack_tokens": 3933,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

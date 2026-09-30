@@ -1,0 +1,31 @@
+{
+ "answer": "The `_got_registered_once` flag is a guard that stops a blueprint from being modified after it has been registered on an app. Without it, later changes would be applied inconsistently.\n\n**Where it lives** (`src/flask/sansio/blueprints.py`)\n- **Declaration:** `Blueprint._got_registered_once = False` is a class-level default at line 172. The `Blueprint` class subclasses `Scaffold`.\n- **Where it is set:** `Blueprint.register()` sets `self._got_registered_once = True` at line 320. This happens right after `app.blueprints[name] = self` and before the setup state is built and the deferred functions run.\n- **Where it is checked:** `Blueprint._check_setup_finished(f_name)` at lines 213\u2013221 raises an `AssertionError` if the flag is `True`.\n\n**How the check is reached**\n- Setup methods are decorated with `@setupmethod`. `record` is one example, and the route, error handler, `before_request`, and similar decorators work the same way.\n- `setupmethod` is defined in `sansio/scaffold.py`. It calls `self._check_setup_finished(f_name)` before running the wrapped method.\n- The application class has its own `_check_setup_finished` that does the equivalent check for the app. `Blueprint` overrides it to use this flag.\n\n**Why it exists**\nA blueprint's setup calls (routes, handlers, `record` callbacks) are stored and replayed onto an app when `register()` runs. Anything added after registration would be missed by apps that already registered the blueprint. It would only reach apps that register it later, so behaviour would differ between apps.\n\nThe error message says this directly: \"The setup method '\u2026' can no longer be called on the blueprint '\u2026'. It has already been registered at least once, any changes will not be applied consistently.\" It adds that all imports, decorators and functions needed to set up the blueprint must be done before registering it.\n\nThe flag is only ever set to `True`. It is never reset, so registering the blueprint on any app, even once, locks it permanently.",
+ "cost": 0.025222400000000002,
+ "turns": 2,
+ "duration_s": 7.839,
+ "tokens": {
+  "input": 4,
+  "cache_write": 2554,
+  "cache_read": 34692,
+  "output": 806,
+  "total": 38056
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the blueprint collection class that prevents setup methods from being called after the blueprint has been registered once?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 85
+ }
+}

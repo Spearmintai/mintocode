@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The material doesn't name one specific \"hidden coupling\". Here is what it does show, and what it leaves open.\n\n## What the code shows\n\n**1. Hooks are keyed by the dotted registration name, not by the schematic object.**\n- `Armature.following_inquiry` (skeleton.py L504) stores the function under scope `None` in the schematic's own `after_request_funcs`.\n- Nothing is attached to the app at decoration time.\n- `Schematic._combine_schematic_functions` (schematics.py L379-410) copies the hook at enrollment. It rekeys `None` to `name` and other keys to `name.key`, then extends `app.after_request_funcs[...]`.\n- So a hook's behavior depends on the name computed in `enroll` (L302-304). That name is `name_prefix + options.get(\"name\", self.name)`, and nested enrollment sets `name_prefix` to the parent's dotted name.\n- The same schematic enrolled twice, or nested at two places, gets separate hook lists under each dotted name.\n- Decoration-time code therefore depends on enrollment-time naming.\n\n**2. The copy is asymmetric.**\n- `error_handler_spec` is assigned (L397: `app.error_handler_spec[key] = value`) as a fresh copy.\n- Every other hook dict is extended (L402-410).\n- If two registrations resolve to the same key, error handlers are overwritten while before, after and teardown functions accumulate.\n- The duplicate-name `ValueError` (L306-312) is what normally prevents that collision.\n\n**3. Once-only app-wide registration depends on registration order.**\n- `note_once_only` (L232-244) wraps a function so it runs only when `state.first_registration` is true.\n- `program_faulthandler` (L595-610) uses it to call `state.app.faulthandler(code)(f)`.\n- The other `program_*` variants presumably work the same way (only `program_faulthandler` is shown). With nested or repeated registration, the app-wide effect is tied to whichever enrollment came first. Later registrations with different prefixes or subdomains don't re-apply it.\n- `first_registration` is computed in `enroll` from whether this object is already in `app.schematics` values. The exact computation is in the truncated part of L273-377.\n\n**4. Ordering with nesting.**\n- `enroll` runs the deferred functions and `_combine_schematic_functions` for the parent first, then recursively enrolls `self._blueprints` (per the enroll steps).\n- Nested schematics' hooks are appended after the parent's, so response-hook order follows enrollment order.\n- `Schematic.enroll_plan` (L255-271) only queues `(schematic, options)`. Nothing takes effect until the parent itself is enrolled.\n\n**5. Error handling and the response hooks.**\n- `test_fault_management_transforming` (test_elementary.py L905-923) shows that a 500 handler's response still passes through `following_inquiry`, which here changes the mimetype.\n- `following_inquiry`'s docstring says that if one hook raises, the remaining ones are skipped, so it must not be used for cleanup. That is what `dismantle_query` is for.\n- `test_call_handling` (test_schematics.py L696-724) confirms the order `before`, `after`, `teardown`.\n\n## What the material doesn't settle\n\n- **How a request picks which keys to run.** The dispatch code that looks up `app.after_request_funcs` for the current request's schematic names, including parent names for nested schematics, isn't shown. That is where the coupling would show up, probably in the app's response-finalizing and request-context code.\n- **What `preparationmethod` enforces.** Whether it blocks decorating after the first request, and how that interacts with conditional registration, isn't shown.\n- **`following_current_inquiry`.** `test_post_query_handling` (test_elementary.py L740-752) shows a hook registered inside a view applying to that response. Its storage mechanism isn't shown.\n- **The rest of `enroll`** (L313-377), including the `first_bp_registration` and `first_name_registration` computation.",
+ "cost": 0.048196,
+ "turns": 1,
+ "duration_s": 19.8,
+ "tokens": {
+  "input": 8963,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8963
+ },
+ "pack_tokens": 4373,
+ "score": {
+  "correctness": 5,
+  "completeness": 4,
+  "relevance": 7,
+  "clarity": 13,
+  "reasoning": 9,
+  "total": 38
+ }
+}

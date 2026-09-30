@@ -1,0 +1,31 @@
+{
+ "answer": "`PassDict.to_json` in `src/flask/json/tag.py:125` tags only the values because JSON object keys can only be strings, so a key never needs a tag.\n\n```python\nclass PassDict(JSONTag):\n    def check(self, value): return isinstance(value, dict)\n\n    def to_json(self, value):\n        # JSON objects may only have string keys, so don't bother tagging the\n        # key here.\n        return {k: self.serializer.tag(v) for k, v in value.items()}\n\n    tag = to_json\n```\n\n- **Keys:** Tags exist to round-trip Python types that JSON can't represent, such as tuples, bytes, `UUID`, `datetime`, and `Markup`. A JSON key can only be a string, and a plain `str` is already valid JSON, so tagging it would gain nothing. The comment in the code says this.\n- **Values:** A value can be any type, including a tuple or a datetime. `PassDict` therefore calls `self.serializer.tag(v)` on each value. That call lets `TaggedJSONSerializer` recurse and apply whichever tag matches, including inside nested dicts and lists.\n- **Pass-through:** `PassDict` handles ordinary dicts that need no tag of their own. It has no `key` and no `to_python`, so it leaves no marker in the output. It only walks the dict so the values get tagged. `tag = to_json` makes the serializer's `tag()` call use this same method.\n- **Contrast with `TagDict`:** `TagDict` (`tag.py:93`) handles the special case of a one-item dict whose only key matches a registered tag name, such as `\" t\"`. It escapes that key by appending `__`, so the key can't be mistaken for a tag on load. Every other dict goes through `PassDict`, and because their keys can't collide with a tag, they stay untouched.\n\nI read only `tag.py`. The claim that `TaggedJSONSerializer` recurses through `tag()` comes from the `self.serializer.tag(v)` call, not from reading that class.",
+ "cost": 0.020103199999999998,
+ "turns": 3,
+ "duration_s": 9.105,
+ "tokens": {
+  "input": 4,
+  "cache_write": 894,
+  "cache_read": 34696,
+  "output": 958,
+  "total": 36552
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 82
+ }
+}

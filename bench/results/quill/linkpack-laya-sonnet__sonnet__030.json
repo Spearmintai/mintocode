@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "sonnet",
+ "answer": "The material doesn't show any performance degradation from this pattern, so I can't confirm the premise. Here is what the code does and where a cost could arise.\n\n**What the registration does**\n\n- `Schematic.program_layout_sieve` and `attach_program_layout_sieve` register a `note_once_only` callback (`src/quill/sansio/schematics.py:L232-244`).\n- `note_once_only` wraps the function so it runs only when `state.first_registration` is True, then calls `self.record(...)`.\n- At `enroll_plan` time the callback executes `state.app.markup_engine_env.filters|tests|globals[name or f.__name__] = f`. That is a single dict assignment.\n- The tests in `tests/test_schematics.py` (L362-372, L388-398, L401-411) show the result: one entry in `app.markup_engine_env.filters` per registered filter.\n\n**Cost when repeated across many distinct schematics**\n\n- Each schematic adds one recorded closure, and each enrollment runs it once. Work grows linearly with the number of schematics and filters, and each unit is a dict write. Nothing in the excerpts suggests quadratic behavior or a heavy operation.\n- The \"only on first registration\" guard means enrolling the same schematic object a second time skips the callback. It does not deduplicate across distinct schematic objects, because each has its own `first_registration`.\n- Two distinct schematics registering the same filter name silently overwrite each other in `markup_engine_env.filters`. The last enrollment wins. That is a correctness and ordering hazard, not a performance one.\n\n**Where a real cost could come from (not settled by the material)**\n\n- Jinja environment behavior: whether changing `markup_engine_env.filters` invalidates cached compiled templates depends on the template engine and on `markup_engine_env`'s construction. Look at where `markup_engine_env` is created in `src/quill/app.py` and at the Jinja environment setup.\n- The body of `record` and the `SchematicSetupStatus` construction (in `src/quill/sansio/schematics.py`) and `Schematic.enroll` were not provided, so I can't rule out other per-schematic startup costs.\n- The registration must finish before the first request. The \"setup method can no longer be called\" error is about ordering, not speed.\n\nIf you saw a specific slowdown, profile startup and check the items above. The registration mechanism itself looks cheap.",
+ "cost": 0.030126,
+ "turns": 1,
+ "duration_s": 19.5,
+ "tokens": {
+  "input": 6349,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6349
+ },
+ "pack_tokens": 3121,
+ "score": {
+  "correctness": 13,
+  "completeness": 10,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 67
+ }
+}

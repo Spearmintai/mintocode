@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "answer": "The test is `test_periodic_title_forbidden` (tests/test_schematics.py:L254-256). It calls `quill.Schematic(\"app.ui\", __name__)` inside `pytest.raises(ValueError)`. It passes because `Schematic.__init__` (src/quill/sansio/schematics.py:L174-211) rejects dotted names.\n\n**What enforces it**\n\n- After calling `super().__init__` (Armature), `__init__` checks `if \".\" in name:` (L198-199).\n- It then raises `ValueError(\"'name' may not contain a dot '.' character.\")`.\n- The check runs before `self.name` is assigned (L201), so no half-built schematic with a dotted name is created.\n- The sibling test `test_vacant_title_forbidden` (L259-261) covers the empty-name case, which raises `ValueError(\"'name' may not be empty.\")` at L195-196.\n\n**Why the rule exists**\n\nThe material gives the reason in its version notes: the dot is the separator between nested schematic names and the terminus name.\n\n- `Schematic.enroll` (L273-377) builds the registered name as `f\"{name_prefix}.{self_name}\".lstrip(\".\")` (L302-304). Nested schematics are therefore registered under a dotted path (changed in 2.0.1).\n- `Request.schematic` (src/quill/envelope_types.py:L161-178) recovers the schematic name with `terminus.rpartition(\".\")[0]`. If a schematic's own name contained a dot, this split would give the wrong schematic, and nested names would be ambiguous.\n- `Quill.build_link_to` documents that a schematic's name is prepended to the terminus, separated by a `.`. A leading `.` in a terminus is resolved against the current request's schematic.\n\nThe test therefore guards an invariant that dotted-name registration, request schematic lookup and link building all depend on. If a dotted name were allowed, it could not be told apart from a nested path.\n\n**Related dot checks**\n\nThe same reasoning applies to terminus names. `Schematic.attach_link_regulation` (L427-431) raises `ValueError` if `terminus` or `view_func.__name__` contains a dot. `test_path_wrapper_bespoke_terminus_with_periods` (tests/test_schematics.py:L327-342) tests this through `route()`, through `attach_link_regulation(terminus=\"a.b\")`, and through a view function named `\"a.b\"`.\n\n**Not settled by the material**\n\nThe material does not show whether `Armature.__init__` does any name validation of its own. `Armature.name` is only declared as `name: str` at skeleton.py:L71. In this test the `ValueError` comes from the `Schematic.__init__` check.",
+ "cost": 0.034692,
+ "turns": 1,
+ "duration_s": 16.6,
+ "tokens": {
+  "input": 7339,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7339
+ },
+ "pack_tokens": 3776,
+ "score": {
+  "correctness": 15,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 76
+ }
+}

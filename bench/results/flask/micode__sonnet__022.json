@@ -1,0 +1,31 @@
+{
+ "answer": "The mechanism is in `src/flask/typing.py`, with the runtime handling in `Flask.make_response`. It is not a single class. It is a union type that keeps the body and the status apart.\n\n**The type aliases (`src/flask/typing.py`, lines 12\u201340)**\n- `ResponseValue` (line 12) is a union of the acceptable body types. It includes `Mapping[str, t.Any]`. The comment at line 17 says \"Only dict is actually accepted, but Mapping allows for TypedDict.\" A view can therefore be annotated as returning a `TypedDict` (a type-safe dictionary) and pass type checking. A `TypedDict` is a `Mapping` but not a `dict` to a type checker.\n- `HeadersValue` (line 29) is a separate alias for headers.\n- `ResponseReturnValue` (line 36) is a union of these shapes:\n  - `ResponseValue`\n  - `tuple[ResponseValue, HeadersValue]`\n  - `tuple[ResponseValue, int]`\n  - `tuple[ResponseValue, int, HeadersValue]`\n\n**How the decoupling works**\n- The JSON body and the HTTP status are separate members of the return type. The status is a plain `int` tuple element, not a field of the dict. A view can be typed as `-> MyTypedDict` and return `(payload, 404)` or `(payload, 201, headers)`.\n- The `TypedDict` therefore describes only the JSON payload, and the status and headers ride alongside it in the tuple. Nothing like a `\"status\"` key has to be put into the payload to carry HTTP state.\n- The same alias is used everywhere views and handlers are typed:\n  - route callables (line 85)\n  - error handlers\n  - `before_request` callables that may return `None` (line 56)\n  - `after_request` callables (line 80)\n  - `Scaffold.route`, so type checkers validate the return value\n\n**Runtime side (`Flask.make_response`, `src/flask/app.py`, about lines 1129\u20131269)**\n- A tuple return is unpacked into `(body, status, headers)`. A 2-tuple is read as `(body, headers)` if the second element is a `Headers`, dict, tuple or list, and as `(body, status)` otherwise.\n- A `dict` or `list` body is serialized by `self.json.response(rv)`, which goes through `JSONProvider` in `src/flask/json/provider.py`. `DefaultJSONProvider.response` builds the JSON `Response` from the body alone.\n- After that, the separate status is applied: a `str` sets `.status` and an `int` sets `.status_code`. Headers are then merged with `rv.headers.update`.\n\nI read `typing.py` directly. I did not open `app.py` or `provider.py`. The `make_response` and `JSONProvider` details come from precompiled notes, so the line numbers there are approximate.",
+ "cost": 0.0446304,
+ "turns": 2,
+ "duration_s": 11.318,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6598,
+  "cache_read": 32902,
+  "output": 1165,
+  "total": 40669
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 22,
+ "question": "How does the type-safe dictionary structure used as a view function return type annotation decouple JSON response serialization from HTTP status representation to maintain type safety?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

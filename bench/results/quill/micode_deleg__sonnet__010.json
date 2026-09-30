@@ -1,0 +1,37 @@
+{
+ "answer": "The test class is `TestFlowing` in `tests/test_aids.py` (L236-307). It tests `flow_with_environment`, Quill's rename of Flask's `stream_with_context`. I took this from the subagent's report and didn't open the files myself.\n\n**Pattern:** it is a plain pytest class that groups behaviour-focused tests, with no `setUp` or `tearDown`. Each test gets the shared `app` and `client` fixtures, and each uses a route-local nested generator.\n\n- **Streaming logic:** each test defines a nested `generate()` inside its `@app.route(\"/\")` view. It only yields strings and reads `quill.request.args` or `quill.session`.\n- **Context lifecycle:** the view wraps the generator in `quill.Response(quill.flow_with_environment(...))`. That call is the only place context handling appears.\n- **Assertion:** the test calls `client.get(...)` and checks `rv.data`. This shows the generator ran after the view returned, with `request` and `session` still available.\n\nThe four methods cover different ways of using `flow_with_environment`:\n- `test_flowing_with_scope` (L237-248) wraps a generator object directly.\n- `test_flowing_with_scope_as_wrapper` (L250-262) uses it as a decorator on a generator function that takes arguments.\n- `test_flowing_with_scope_and_bespoke_shutdown` (L264-293) uses an inner `Wrapper` iterator with its own `close()`. It asserts `called == [42]`, which shows that cleanup is delegated to the wrapped iterator.\n- `test_flow_retains_visit` (L295-307) writes `session[\"test\"]` in the view and reads it inside the generator.\n\n**What the tests isolate**, in `src/quill/helpers.py::flow_with_environment` (L62-136):\n- The `try: iter(...)` / `except TypeError` at L98-106 chooses between direct and decorator mode.\n- An inner `generator()` (L108-128) does the context handling:\n  - It gets `_cv_request.get(None)` and raises `RuntimeError` if there is no request context.\n  - It enters `with ctx:` and yields a dummy `None` so the context stays pushed.\n  - It then runs `yield from gen` in a `try/finally` that calls `gen.close()` if present.\n- L134-135 primes the wrapper with `next(...)`. This pushes the context before the view returns.\n- The user's generator never touches the context, because a wrapper generator holds it.\n\n**Related pieces:**\n- `test_caller_remove_every_retained` in `tests/test_trialing.py` (L382-396) is a function-level test. It uses the `qry_scope` fixture and checks that the context is released after `rv.close()`.\n- `_stream` in `src/quill/layouting.py` (L165-185) uses `flow_with_environment` for template streaming when a request is active.",
+ "cost": 0.1117444,
+ "turns": 1,
+ "duration_s": 6.195,
+ "tokens": {
+  "input": 12,
+  "cache_write": 22436,
+  "cache_read": 72427,
+  "output": 2745,
+  "total": 97620
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Agent {\"description\": \"Find test class pattern\", \"subagent_type\": \"micode:micode-explorer\", \"prompt\": \"What is the architectural pattern of the test class that isolat",
+  "mcp__micode__ask {\"question\": \"tests for stream_with_context and request context lifecycle vs streaming response generation\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_aids.py\", \"offset\": 232, \"limit\": 78}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/helpers.py\", \"offset\": 60, \"limit\": 78}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 13,
+  "completeness": 12,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 67
+ }
+}

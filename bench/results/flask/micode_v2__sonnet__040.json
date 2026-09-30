@@ -1,0 +1,34 @@
+{
+ "answer": "The lookup sequence is in `App._find_error_handler` in `src/flask/sansio/app.py` (L823-846), which `Flask.handle_http_exception` and `Flask.handle_user_exception` in `src/flask/app.py` call.\n\nThe method builds the search space from three nested loops:\n\n1. **Setup (L831-832).** `self._get_exc_class_and_code(type(e))` returns the exception class and its HTTP status code. The code is `None` for non-HTTP exceptions. The scope list is `names = (*blueprints, None)`. `blueprints` is `request.blueprints`, ordered from the most specific blueprint outward, and the trailing `None` is the app-level scope.\n\n2. **Outer loop, status code then class (L834).** `for c in (code, None) if code is not None else (None,)` tries the specific HTTP status code first. It then falls back to `None`, which holds handlers registered by exception class.\n\n3. **Middle loop, blueprint scopes (L835-836).** `for name in names` visits each blueprint, then the app. It reads `handler_map = self.error_handler_spec[name][c]` and skips empty maps (L838-839).\n\n4. **Inner loop, exception MRO (L841-845).** `for cls in exc_class.__mro__` calls `handler_map.get(cls)` and returns the first handler found. Subclass handlers therefore win over base-class handlers.\n\nThe resulting precedence matches the docstring at L826-829:\n- a blueprint handler for the specific code\n- an app handler for the specific code\n- a blueprint handler for the exception class, walked along its MRO\n- an app handler for the exception class, walked along its MRO\n\nIf nothing matches, the method returns `None` (L846).\n\nThe `error_handler_spec` registry it reads is keyed as `[scope][code][exception_class]`. It is populated by `Scaffold.register_error_handler` in `sansio/scaffold.py`.",
+ "cost": 0.044085,
+ "turns": 2,
+ "duration_s": 6.59,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7484,
+  "cache_read": 32855,
+  "output": 757,
+  "total": 41100
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sansio/app.py\", \"offset\": 820, \"limit\": 30}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse blueprint scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 18,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 87
+ }
+}

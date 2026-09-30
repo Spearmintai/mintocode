@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "answer": "The class is `ForwardMapping` in `src/quill/json/tag.py` (L119-130). Its `into_json` (L125-128) is:\n\n```python\ndef into_json(self, value):\n    # JSON objects may only have string keys, so don't bother tagging the\n    # key here.\n    return {k: self.serializer.tag(v) for k, v in value.items()}\n```\n\n**Why keys are left alone**\n\n- The source comment at L126-127 gives the reason: JSON objects may only have string keys. A key is already a JSON-native string, so there is nothing to convert. Tagging a key would produce a wrapper dict such as `{' t': [...]}`, and that cannot be used as an object key in the output.\n- Values can be any Python type (tuple, bytes, Markup, UUID, datetime, nested dicts or lists). They must go back through `self.serializer.tag(v)` so the appropriate label in `order` can wrap them.\n\n**Why it recurses only on values**\n\n- `ForwardMapping` has the inherited empty key `''` (L67), so it is only an intermediate step. It adds no wrapper of its own.\n- `tag = into_json` (L130) makes `tag()` return the plain converted dict directly.\n- Recursion on values means nested structures are processed at every level.\n\n**Related behaviour for keys that look like tags**\n\nKeys are not tagged, but a dict whose sole key collides with a registered tag key (for example `' t'`) could be mistaken for a tagged value on decode. `LabelMapping` (L93-116, key `' di'`) handles that case. It escapes such keys by appending `'__'`, and strips 2 characters on decode. In the default order it comes before `ForwardMapping`, so those dicts are handled there first. The tests in `tests/test_objtext_label.py` (`test_serialize_deserialize_identical`, L12-29) cover round trips of dicts with `' t'`, `' t__'` and `' di'` keys.\n\n**Decoding side**\n\n`_unlabel_sweep` (L309-319) rebuilds values with `{k: self._unlabel_sweep(v) ...}` and does not transform keys either. It then calls `untag` on the dict itself. That is consistent with keys never being tagged on the way out.",
+ "cost": 0.037284,
+ "turns": 1,
+ "duration_s": 8.3,
+ "tokens": {
+  "input": 8218,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8218
+ },
+ "pack_tokens": 4245,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

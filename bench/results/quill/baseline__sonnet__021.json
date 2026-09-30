@@ -1,0 +1,36 @@
+{
+ "answer": "The class is `_ProgramScopeShared` in `src/quill/ctx.py:29`. It is the default `Quill.app_ctx_globals_class` (`src/quill/sansio/app.py:185`), and `AppContext.__init__` instantiates it as `g` (`ctx.py:248`). Its strategy is that the attribute-protocol methods are strict and raise, while the named dict-style helpers are the ones that can supply defaults.\n\n**Strict methods (Python attribute semantics)**\n- `__getattr__` (`ctx.py:52`) looks the name up in `self.__dict__`. On a `KeyError` it raises `AttributeError(name) from None`. It translates the dict exception into the one Python expects for attributes, and `from None` hides the internal `KeyError`. This keeps `getattr(g, \"x\", default)` and `hasattr(g, \"x\")` working.\n- `__delattr__` (`ctx.py:61`) does the same with `del self.__dict__[name]`. Deleting a missing attribute raises `AttributeError`, never fails silently.\n- `__setattr__` (`ctx.py:58`) writes straight to `__dict__` and has no error path.\n\n**Default-providing methods (dict-like)**\n- `get(name, default=None)` (`ctx.py:67`) returns `self.__dict__.get(name, default)`. It never raises and falls back to `None`.\n- `pop(name, default=_sentinel)` (`ctx.py:78`) uses a module-level `_sentinel` to tell \"no default given\" from \"default is `None`\".\n  - With no default, it calls `self.__dict__.pop(name)`. A missing name raises `KeyError`, not `AttributeError`. The docstring says so.\n  - With a default, it calls `self.__dict__.pop(name, default)` and returns the default.\n  - This is the one inconsistency: `del g.x` raises `AttributeError`, but `g.pop(\"x\")` raises `KeyError`, because `pop` copies `dict.pop`.\n- `assumefallback(name, default=None)` (`ctx.py:92`) is meant to get the value or set and return the default. It delegates to `self.__dict__.assumefallback(...)`. A plain `dict` has no such method (the real one is `setdefault`), so this call will raise `AttributeError` at runtime. I only read the code and did not run it. The docstring's \"Like `dict.assumefallback`\" has the same problem.\n\n**Supporting methods**\n- `__contains__` and `__iter__` (`ctx.py:104`, `ctx.py:107`) let you check for an attribute without triggering an exception.\n- `__repr__` shows the app name if a context is active.\n\n**Summary:** implicit access and deletion (`g.x`, `del g.x`) fail loudly with `AttributeError`. Defaults are opt-in through the explicit `get` and `pop` methods (and `assumefallback`, if it worked). `pop` only raises when no default is passed, and it raises `KeyError`.",
+ "cost": 0.05471619999999999,
+ "turns": 4,
+ "duration_s": 17.634,
+ "tokens": {
+  "input": 8,
+  "cache_write": 6852,
+  "cache_read": 66111,
+  "output": 1407,
+  "total": 74378
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class _AppCtxGlobals\", \"output_mode\": \"content\", \"-A\": 80}",
+  "Grep {\"pattern\": \"class \\\\w*(Ctx|Context)\\\\w*Globals|app_ctx_globals|AppCtxGlobals\", \"output_mode\": \"content\", \"head_limit\": 20}",
+  "Grep {\"pattern\": \"class _ProgramScopeShared\", \"output_mode\": \"content\", \"-A\": 90}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

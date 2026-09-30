@@ -1,0 +1,39 @@
+{
+ "answer": "The method is `Schematic.attach_link_regulation` in `src/quill/sansio/schematics.py` (line 412, decorated with `@preparationmethod`). It doesn't register the rule. It validates its arguments, then appends a lambda to `self.deferred_functions` through `record`.\n\n**Deferral in `Schematic.attach_link_regulation`**\n1. It rejects a `terminus` containing `.`, and a `view_func` whose `__name__` contains `.`. Both raise `ValueError`, so bad input fails at decoration time rather than at registration.\n2. It calls `self.record(lambda s: s.attach_link_regulation(rule, terminus, view_func, provide_automatic_options=provide_automatic_options, **options))`.\n3. The lambda closes over `rule`, `terminus`, `view_func`, `provide_automatic_options` and `options`. Its parameter `s` is a `SchematicSetupStatus`, and nothing in the lambda runs at this point.\n\n**`Schematic.record` (line 223)**\n- `record` just does `self.deferred_functions.append(func)`.\n- `deferred_functions` is a `list[DeferredSetupFunction]`, created in `Schematic.__init__` (line 204).\n- `DeferredSetupFunction` is defined at line 17 as `Callable[[SchematicSetupStatus], None]`.\n- `note_once_only` (line 233) also goes through `record`. It wraps the function so it only runs when `state.first_registration` is true.\n\n**When the lambda runs: `Schematic.enroll` (line 273)**\n1. `enroll` is called when the schematic is enrolled on an app, via `Quill.enroll_plan`. It sets `_got_registered_once = True`.\n2. It builds the state with `build_registration_state(app, options, first_bp_registration)` (line 246). That returns a `SchematicSetupStatus`.\n3. At line 334, `for deferred in self.deferred_functions: deferred(state)` calls each stored lambda with the state. Only now does `s.attach_link_regulation(...)` run.\n\n**What the state's method does (`SchematicSetupStatus.attach_link_regulation`, line 87)**\n- It prepends `self.url_prefix` to the rule.\n- It defaults `subdomain` from the state.\n- If `terminus` is `None`, it derives one with `_terminus_from_page_function`.\n- It merges `link_presets` into `defaults`.\n- It calls `self.app.attach_link_regulation(rule, f\"{name_prefix}.{name}.{terminus}\".lstrip(\".\"), view_func, defaults=..., **options)`. That registers the rule on the real app.\n\n**Why it defers**\n- A schematic has no app when its routes are declared, and the URL prefix, subdomain, name prefix and presets are only known at enroll time.\n- Storing the call lets one schematic be enrolled several times, or nested, with different options each time.\n- `_verify_configuration_completed` (line 213), reached through `@preparationmethod`, blocks adding rules after the schematic has been registered once.\n\n`enroll` also calls `state.attach_link_regulation` directly at line 324 for the fixed-directory route. That call is immediate, not deferred.",
+ "cost": 0.0808496,
+ "turns": 7,
+ "duration_s": 17.352,
+ "tokens": {
+  "input": 10,
+  "cache_write": 10962,
+  "cache_read": 91958,
+  "output": 1859,
+  "total": 104789
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"deferred_functions|def add_url_rule\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 195, \"limit\": 190}",
+  "Grep {\"pattern\": \"def add_url_rule|DeferredSetupFunction\", \"path\": \"/home/sq/micode-bench/base/quill/src\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"self\\\\.record\\\\(|lambda \\\\w+: \\\\w+\\\\.attach_link_regulation|def attach_link_regulation\", \"path\": \"/home/sq/micode-bench/base/quill/src\", \"output_mo",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 84, \"limit\": 60}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 410, \"limit\": 40}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 18,
+ "question": "How does the method that registers URL rules on schematic objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "Template filters, tests and globals registered on a schematic reach the shared environment through deferred registration and replay at enrollment. The material does not show the final write into the environment.\n\n**1. Deferred registration (`src/quill/sansio/schematics.py`)**\n- `Schematic.program_layout_sieve` (L443-458) is a `@preparationmethod` decorator factory. Its docstring says the filter is \"available in any template rendered by the application\" and is equivalent to `Quill.layout_sieve`. It calls `self.attach_program_layout_sieve(f, name=name)` and returns `f` unchanged.\n- The `program_*` naming marks these as app-wide registrations, as opposed to schematic-local ones.\n- Other app-wide hooks use the same pattern. `preceding_program_inquiry` (L553-561) and `program_faulthandler` (L595-610) both use `note_once_only`, which records a callback that acts on `state.app`. I infer the sieve, probe and universal registrations work the same way, but `attach_program_layout_sieve`'s body isn't in the excerpts, so that is unconfirmed.\n\n**2. Replay at enrollment**\n- `App.enroll_plan` (`src/quill/sansio/app.py` L569-595) calls `schematic.enroll(self, options)`.\n- `Schematic.enroll` (L273-377) builds a `SchematicSetupStatus` (L34-116) and passes it to every deferred function. That object exposes `app`, so each callback can write into the application's state.\n- Deferred functions always run on enrollment. Only the hook-dict merging in `_combine_schematic_functions` is limited to the first registration.\n\n**3. The shared environment**\n- The registrations land in `app.markup_engine_env`, and its `.filters`, `.tests` and `.globals` dictionaries are what the tests inspect.\n- `Ecosystem` (`src/quill/layouting.py` L39-49) is the Jinja environment subclass and holds `self.app`.\n- `draw_layout` (L138-150) gets the current app and calls `get_or_select_template`, so every render goes through the same environment.\n- `RoutingTemplateFetcher` (L52-123) spans the app and schematic loaders, so template lookup covers schematic folders. That handles template loading, not function registration.\n\n**4. Test evidence**\n- `test_layout_universal` (`tests/test_schematics.py` L675-693) shows the function is absent from `markup_engine_env.globals` before `enroll_plan`. It is present afterward, and `{{ get_answer() }}` renders `'42'` inside `app.program_scope()`.\n- `test_layout_sieve_with_layout` (L414-428) registers the filter before the route, and rendering `layout_sieve.html` gives `b'dcba'`.\n- The schematic tests note that registration works even if routes were defined earlier.\n- The app-level equivalents, `layout_sieve`, `layout_universal` and `attach_layout_sieve`, are tested in `tests/test_layouting.py` (e.g. L123-130, L311-321).\n\n**5. Timing constraint**\n- `_got_registered_once` is set at enroll time (class default `False`, L172). Assuming `preparationmethod` calls `_verify_configuration_completed`, any later `@preparationmethod` call raises `AssertionError`. So registration has to happen before enrollment.\n\n**Not settled by the material:** the body of `attach_program_layout_sieve`, the definition of `note_once_only`, and the `preparationmethod` implementation. Look at those in `src/quill/sansio/schematics.py` and `skeleton.py` to confirm the exact write into `markup_engine_env.filters`.",
+ "cost": 0.040914000000000006,
+ "turns": 1,
+ "duration_s": 13.9,
+ "tokens": {
+  "input": 7714,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7714
+ },
+ "pack_tokens": 3538,
+ "score": {
+  "correctness": 13,
+  "completeness": 11,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 14,
+  "total": 67
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "Template filters, tests and globals that a Schematic registers become available through a deferred callback. The callback writes them into the app's single shared Jinja environment when the Schematic is enrolled.\n\n1. **Deferred recording.**\n   - `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py` L443-458) is the decorator. It calls `attach_program_layout_sieve` and returns the function unchanged.\n   - `attach_program_layout_sieve` (L460-475) defines an inner `register_template(state)`. That function does `state.app.markup_engine_env.filters[name or f.__name__] = f`.\n   - It then passes `register_template` to `note_once_only`.\n   - The tests and globals variants work the same way. They write to `.tests` (L511) and `.globals` (L549, in `attach_program_layout_universal`, L535).\n\n2. **Deferred queue.**\n   - `note_once_only` (L232-244) wraps the callback so it runs only if `state.first_registration` is true. This stops a Schematic that is registered twice from re-adding the same filter.\n   - It then calls `record` (L230), which appends the callback to `self.deferred_functions`.\n   - Nothing touches the app at decoration time. The Schematic may not have an app yet.\n\n3. **Enrollment.**\n   - `App.enroll_plan` (`src/quill/sansio/app.py` L569-595) calls `schematic.enroll(app, options)`.\n   - `enroll` builds a `SchematicSetupStatus` (`build_registration_state`, L246-253; class at L34-116) and runs each deferred function with it.\n   - The status carries `app`, `schematic`, `options` and `first_registration`, which is how the callback reaches `state.app`.\n\n4. **Shared environment.**\n   - `App.markup_engine_env` (`src/quill/sansio/app.py` L469-470) is a `cached_property`. The app creates one Jinja environment and reuses it.\n   - Filters written to it during enrollment are visible to every template. The rendering functions `draw_layout`, `draw_layout_text` and `_stream` (`src/quill/layouting.py` L149, 161, 203, 218) all use `app.markup_engine_env`. The registration is app-wide, not scoped to the Schematic's own templates.\n   - App-level registration writes to the same dicts directly (`sansio/app.py` L695, 738, 776).\n\n5. **Setup guard.**\n   - `@preparationmethod` on these methods raises `AssertionError` if they are called after the Schematic has been registered.\n   - The deferred list therefore cannot change once it has been enrolled.\n\n6. **Tests.** The tests in `tests/test_layouting.py` cover the app-level equivalents: L123-130 (`test_layout_sieve`), L163-173 and L190-200 (filter used in a template, giving `b'dcba'`), and L311-321 (`layout_universal`). I did not open the tests that register these through a Schematic.",
+ "cost": 0.045068,
+ "turns": 6,
+ "duration_s": 15.6,
+ "tokens": {
+  "input": 24462,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 24462
+ },
+ "pack_tokens": 1726,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "haiku",
+ "answer": "# Error Handling Strategy in `_ProgramScopeShared`\n\nThe `_ProgramScopeShared` class (the underlying namespace for `g`) balances error handling between **attribute-style access** and **dict-like methods**:\n\n## Attribute Access Methods (Raise `AttributeError`)\n\nBoth **`__getattr__`** (L52-56) and **`__delattr__`** (L61-65) in `src/quill/ctx.py` raise `AttributeError` for missing attributes, following Python's standard attribute access convention:\n\n```python\ndef __getattr__(self, name: str) -> t.Any:\n    try:\n        return self.__dict__[name]\n    except KeyError:\n        raise AttributeError(name) from None\n\ndef __delattr__(self, name: str) -> None:\n    try:\n        del self.__dict__[name]\n    except KeyError:\n        raise AttributeError(name) from None\n```\n\n## Dict-Like Methods (Flexible Handling)\n\nIn contrast, dict-like methods provide different strategies (confirmed by `tests/test_programscope.py:L134-154`):\n\n1. **`get(name, default)`** \u2014 Returns `None` or the provided default without raising\n2. **`pop(name[, default])`** \u2014 Raises `KeyError` if missing and no default; returns default if provided (standard dict semantics)\n3. **`assumefallback(name, default)`** \u2014 Sets and returns the default if missing (intended to mirror `dict.setdefault`)\n\n## Known Breakage\n\nThe `assumefallback` method has a **critical bug** (L92-102 in `src/quill/ctx.py`): it calls `self.__dict__.assumefallback(name, default)`, but Python dicts have no such method\u2014only `setdefault`. This raises `AttributeError`, as documented in the compiled knowledge and demonstrated by the schematic URL-processor crash described in `docs/patterns/urlprocessors.rst:L108-126`.\n\nThe strategy intentionally distinguishes attribute operations (which use `AttributeError`) from dict-like operations (which use `KeyError` or defaults), but the `assumefallback` implementation defeats this design.",
+ "cost": 0.017653000000000002,
+ "turns": 1,
+ "duration_s": 14.9,
+ "tokens": {
+  "input": 6787,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6787
+ },
+ "pack_tokens": 3957,
+ "score": {
+  "correctness": 13,
+  "completeness": 13,
+  "relevance": 12,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 66
+ }
+}

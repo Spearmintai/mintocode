@@ -1,0 +1,31 @@
+{
+ "answer": "Repeating this registration across many distinct blueprints costs extra work at startup, but the cost is small and grows linearly with the number of blueprints. It is not a large slowdown in itself. I read the source and did not run any benchmark.\n\n**How registration works**\n\n- `Blueprint.app_template_filter()` in `src/flask/sansio/blueprints.py:444` is a decorator that calls `add_app_template_filter()` (line 461).\n- `add_app_template_filter()` does not touch the app. It defines a closure, `register_template(state)`, and passes it to `self.record_once()`.\n- `record_once()` (line 233) wraps the closure so it only runs when `state.first_registration` is true. It then calls `record()` (line 224), which appends the wrapper to that blueprint's own `deferred_functions` list.\n- The filter is only installed when `Blueprint.register(app, options)` runs (line 273). That method builds a `BlueprintSetupState` and loops over `self.deferred_functions` (line 334). Inside the loop, `register_template` runs `state.app.jinja_env.filters[name or f.__name__] = f` (line 473).\n\n**Why repeating it across distinct blueprints adds cost**\n\n1. **Per-blueprint overhead.** Every blueprint has its own `deferred_functions` list, and `record_once` deduplicates only per blueprint and per app. Because `first_registration` is tracked per blueprint, N distinct blueprints that each register the same filter give N closures, N `update_wrapper` calls and N list entries. Each of these runs once at `register()` time.\n2. **Redundant writes and shadowing.** Each closure writes to the same `jinja_env.filters` dict under the same key. The last blueprint registered wins, and the other N\u22121 writes are wasted.\n3. **The first access builds the Jinja environment.** `state.app.jinja_env` is a `cached_property` on `App` (`src/flask/sansio/app.py:469`). It calls `create_jinja_environment()`, which is implemented in `src/flask/app.py:385`. The environment is built once, on the first access. Registering a filter from a blueprint therefore forces that construction during startup instead of lazily at the first render. Later blueprints only do a dict assignment.\n4. **The `@setupmethod` guard runs on every call.** `app_template_filter`, `add_app_template_filter`, `record_once` and `record` are all wrapped in `@setupmethod`. It checks whether the blueprint has already been registered, and that check is repeated on every call.\n\n**Why the cost is small in practice**\n\n- The work is a dict assignment plus one closure per blueprint, all done once at startup.\n- The tests in `tests/test_blueprints.py` (lines 362\u2013492, such as `test_template_filter` and `test_add_template_filter_with_template`) each register a single filter on one blueprint. That is cheap.\n- Repeating the pattern only becomes noticeable with a very large number of blueprints. The same is true if the blueprint is registered many times, where `record_once` skips the call after the first time.\n\nIf you need to avoid the duplication, register the filter once with `app.add_template_filter` or `app.template_filter`. Alternatively, put it on a single blueprint.",
+ "cost": 0.0531138,
+ "turns": 8,
+ "duration_s": 17.047,
+ "tokens": {
+  "input": 10,
+  "cache_write": 3384,
+  "cache_read": 96389,
+  "output": 2028,
+  "total": 101811
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in blueprint test cases were repeated across multiple distinct blueprint objects during application startup?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 74
+ }
+}

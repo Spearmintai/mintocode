@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The question is a little ambiguous. I read it as being about `Schematic.program_faulthandler` and the `note_once_only` mechanism behind it. The coupling comes from the `first_registration` flag and from the split between two kinds of state.\n\n**How the coupling works**\n\n1. `program_faulthandler` (schematics.py L595-610) doesn't register the handler when you call it. It wraps `state.app.faulthandler(code)(f)` in a closure and passes that to `note_once_only`.\n2. `note_once_only` (L233-244) wraps the closure so it only runs `if state.first_registration`. It then appends the wrapper to `deferred_functions`.\n3. `state.first_registration` is set in `enroll` (L316-321). It is `first_bp_registration`, which is true only if this schematic object isn't already among the values of `app.schematics`.\n4. So whether an app-wide fault handler exists depends on enrollment history, not on the decorator call. Enroll the same schematic a second time under a different `name=`, or reach it through a second parent. `first_registration` is then false, and the app-wide handler isn't re-registered. That is intentional deduplication, but it is invisible at the decorator.\n\n**Two state paths with different guards**\n\n- **Schematic-scoped state.** This covers `error_handler_spec`, `before_request_funcs`, `after_request_funcs` and `teardown_request_funcs`. `_combine_schematic_functions` (L379-410) copies it into the app under dotted keys such as `name.key`. It runs only `if first_bp_registration or first_name_registration` (L331).\n- **Deferred functions.** These always run (L334-335), and each one decides for itself, for example via `note_once_only`.\n\nThese two paths use different guards. In the ordinary re-enroll case (same object, new name) they agree, because `first_name_registration` is true on the copy path. They differ when the same object is enrolled under a name that already exists. In that case both flags are false. Nothing is copied into the app for that name, but plain `record` callbacks still run.\n\n**Nesting**\n\nNested schematics are enrolled last (L349-377). That happens after the parent's deferred functions and CLI wiring. Each child is enrolled with `name_prefix` set to the parent's dotted name, so its keys become `parent.child`. The result is that:\n- A child's `program_*` handlers register on the app only during the parent's `enroll`.\n- Their effect on the response lifecycle depends on the order of enrollment. The order is parent first, then children.\n- A child enrolled through two parents fires its `note_once_only` closures only for the first one.\n\n**Response-lifecycle side**\n\nScoped hooks are keyed by dotted schematic name. After-hooks and teardown hooks run in reverse registration order, and before-hooks run forward (tests/test_elementary.py). App-wide handlers registered through `program_faulthandler` still go through `following_inquiry` (`test_fault_management_transforming`, L905-923). Because registration order decides ordering, conditional or nested enrollment can silently change which handler wins and how hooks are ordered.\n\n**What I didn't check**\n\nI did not read the code that resolves handlers at request time (`App` fault lookup) or how `SchematicSetupStatus` uses `first_registration` beyond `note_once_only`. That is where to look to confirm the exact precedence between the schematic-scoped handler and the app-wide one.",
+ "cost": 0.06305859999999999,
+ "turns": 5,
+ "duration_s": 19.0,
+ "tokens": {
+  "input": 35609,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 35609
+ },
+ "pack_tokens": 4627,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 14,
+  "reasoning": 10,
+  "total": 36
+ }
+}

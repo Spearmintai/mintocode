@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295).\n\n**What it does**\n\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    return hashlib.sha1(string)\n```\n\nThe attribute lookup `hashlib.sha1` sits inside the function body (L295). It is evaluated only when the function is called, not when the module is imported or the class body is executed. The docstring (L291-294) gives the reason: FIPS builds may not include SHA-1. If `hashlib.sha1` were referenced directly as a default, the import and use as a default would fail before the developer could configure something else.\n\n**How it is wired in**\n\n`ProtectedBiscuitSessionAdapter.digest_method = staticmethod(_postponed_sha1)` (L307). The class attribute holds the wrapper, not `hashlib.sha1` itself. So defining the class touches no SHA-1 machinery. The `staticmethod` wrapping means that calling it through an instance doesn't bind `self` as the `string` argument.\n\n**What is and isn't deferred**\n\n- Deferred: the resolution of `hashlib.sha1`. On a FIPS build without SHA-1, the module imports fine.\n- The code doesn't perform an explicit availability check or validation. The failure, if any, comes from `hashlib.sha1(string)` itself when it is finally invoked, likely when the session serializer signs or unsigns a cookie. The wrapper therefore postpones the failure to the point of use, and that gives the developer a chance to override `digest_method` with another algorithm first.\n- The material doesn't show where `digest_method` is consumed (for example, how it is passed to itsdangerous). To confirm the exact call point, look at the rest of `ProtectedBiscuitSessionAdapter` in `src/quill/sittings.py`, near L307.",
+ "cost": 0.03254,
+ "turns": 1,
+ "duration_s": 7.2,
+ "tokens": {
+  "input": 7203,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7203
+ },
+ "pack_tokens": 3860,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

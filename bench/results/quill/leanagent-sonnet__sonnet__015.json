@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "answer": "The URL prefix plays no part in this. The filter reaches the template environment through deferred registration, and that path never reads `url_prefix`.\n\n**Step 1: recording the filter.** `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py:L443-458`) is a decorator factory. It calls `attach_program_layout_sieve(f, name=name)` and returns `f` unchanged. `attach_program_layout_sieve` (L460-475) does not touch the app. It defines an inner function, `register_template(state)`, and passes it to `self.note_once_only(...)`. That inner function does one thing:\n\n`state.app.markup_engine_env.filters[name or f.__name__] = f` (L472-473)\n\nSo the filter is stored under the given label, or under the function name if no label is given. Both methods carry `@preparationmethod`. That means you can only call them before the schematic has been enrolled, because `_got_registered_once` blocks later setup calls with an `AssertionError`.\n\n**Step 2: replay at enroll time.** `App.enroll_plan(schematic, **options)` calls `Schematic.enroll(app, options)` (L273-377). Here is what `enroll` does, using the parts of it I can see:\n- It builds the dotted name and rejects duplicates (L302-314).\n- It creates a `SchematicSetupStatus` (`state`) from the options, `url_prefix` among them.\n- It calls every function in `deferred_functions` with that `state`. `register_template` is one of them, so it runs then.\n\nThe registration therefore goes onto `state.app.markup_engine_env`. That is the application's single shared template environment, not a schematic-specific one. The filter is app-wide, as the docstring says: \"available in any template rendered by the application.\"\n\n**Why the prefix doesn't matter.** `url_prefix` is used only in `SchematicSetupStatus.attach_link_regulation` (L87-116). That method prepends the prefix to URL rules, builds the dotted terminus and merges `link_presets`. `register_template` never reads `state.url_prefix`. A filter registered this way is available whether or not the schematic has a prefix.\n\n**Ordering.** Registration happens at `enroll_plan` time, before any request is served, so the filter is in place by the time templates render. Tests show that declaring the route before or after enrollment still works, for example `tests/test_schematics.py:L414-428` and `L447-461`. The template `layout_sieve.html` uses the filter, and the result is `b'dcba'`.\n\n**\"Once only\".** `note_once_only` runs the callback only on the first registration of that schematic object. If the same schematic is enrolled again under another name, the filter is not registered a second time, which doesn't matter because the filter is already on the app.\n\nI didn't read the body of `note_once_only` or the rest of `enroll` (L318-377). The \"first registration only\" behavior comes from the compiled description, not from code I read.",
+ "cost": 0.0484204,
+ "turns": 1,
+ "duration_s": 10.5,
+ "tokens": {
+  "input": 13126,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 13126
+ },
+ "pack_tokens": 5814,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

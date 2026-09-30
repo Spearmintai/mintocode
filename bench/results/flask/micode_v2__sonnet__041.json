@@ -1,0 +1,34 @@
+{
+ "answer": "The test class is `TestUrlFor`, defined at `tests/test_helpers.py:102`.\n\nIts methods cover the three things you asked about:\n\n- **Anchors:** `test_url_for_with_anchor` (line 103) checks that `flask.url_for(\"index\", _anchor=\"x y\")` returns `/#x%20y`.\n- **Schemes:**\n  - `test_url_for_with_scheme` (line 110) covers `_external=True` with `_scheme=\"https\"`.\n  - `test_url_for_with_scheme_not_external` (line 120) covers `_scheme` without `_external`, and the case where `_external=False` is passed explicitly with `_scheme`.\n  - `test_url_for_with_alternating_schemes` (line 131) covers switching between schemes.\n- **HTTP methods:** `test_url_with_method` (line 143) builds URLs for a `MethodView` route named `myview`. It checks `_method=\"GET\"` (with and without an `id`) and `_method=\"POST\"`. The expected results are `/myview/`, `/myview/42` and `/myview/create`.\n\nRelated tests in `tests/test_appctx.py`, such as `test_basic_url_generation`, cover `url_for` with `SERVER_NAME` and `PREFERRED_URL_SCHEME`. They don't test anchors, schemes passed as arguments, or methods.",
+ "cost": 0.0391894,
+ "turns": 2,
+ "duration_s": 5.159,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6619,
+  "cache_read": 32877,
+  "output": 613,
+  "total": 40113
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class Test.*|_anchor|_scheme|_method\", \"path\": \"/home/sq/micode-bench/repos/flask/tests/test_helpers.py\", \"output_mode\": \"content\", \"head_limit\": 4"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 41,
+ "question": "Where is the test class that validates URL generation with anchors, schemes, and HTTP methods defined?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 83
+ }
+}

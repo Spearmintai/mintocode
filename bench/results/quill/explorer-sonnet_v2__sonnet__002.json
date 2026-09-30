@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "Static asset serving is registered the same way for the app and for schematics. Both use one shared route pattern, the same view logic and the same cache-TTL lookup. I read the code but did not run any tests.\n\n**Shared base (`src/quill/sansio/skeleton.py`)**\n- `Armature` is the common base for both `App` and `Schematic`. It holds `fixed_dir` (L223-238), `owns_fixed_directory` (L241) and `fixed_address_route` (around L250).\n- The `fixed_dir` getter returns the absolute path `root_path/_static_folder`, or `None`.\n- The `fixed_dir` setter applies `os.fspath` and strips trailing slashes.\n- `owns_fixed_directory` is true only when `fixed_dir` is set.\n\n**App component (`src/quill/app.py`)**\n- In `Quill.__init__` (L262-279), if `owns_fixed_directory` is true, the app calls `attach_link_regulation(f\"{fixed_address_route}/<path:filename>\", terminus=\"static\", host=static_host, view_func=...)`.\n- The view function is a lambda that calls `dispatch_fixed_document` through a weakref, which avoids an app-to-view reference cycle (#3761).\n- The route is registered without checking that the directory exists, because it may be created while the server runs or, on Google App Engine, be stored elsewhere.\n- `Quill.dispatch_fixed_document` (L308-328) raises `RuntimeError(\"'fixed_dir' must be set to serve static_files.\")` if there is no fixed dir. Otherwise it computes `max_age = self.fetch_file_transfer_ttl(filename)` and calls `dispatch_from_folder(fixed_dir, filename, max_age=max_age)`.\n\n**Schematic component (`src/quill/schematics.py` and `src/quill/sansio/schematics.py`)**\n- `Schematic.enroll` (`sansio/schematics.py` L273-377) registers the static route at enrollment time. At L323-328 it does this when the schematic owns a fixed dir:\n  `state.attach_link_regulation(f\"{fixed_address_route}/<path:filename>\", view_func=self.dispatch_fixed_document, terminus=\"static\")`\n- The route is added through the `SchematicSetupStatus`, so it takes the schematic's name prefix and any options passed at registration.\n- The runtime `Schematic` (`schematics.py` L82-102) has its own copy of `dispatch_fixed_document` and `fetch_file_transfer_ttl`. Their docstrings say they duplicate the `Quill` versions.\n\n**Consistent caching**\n- Both classes define `fetch_file_transfer_ttl` (`app.py` L281-306, `schematics.py` L55-80) with identical logic. It reads `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`.\n- `None` means conditional requests. A `timedelta` becomes `int(total_seconds())`. Any other value is returned as is.\n- The comment at `app.py` L323-324 explains why the copies exist: the file-sending helper only knows to call this hook on the app, so each component computes `max_age` itself and passes it explicitly. Schematic static files therefore get the same cache policy as app static files.\n- Both are governed by the single app-level `SEND_FILE_MAX_AGE_DEFAULT` setting.\n\n**Tests**\n- I did not open any tests for static-file caching. `tests/test_trialing.py` has schematic tests, such as `test_schematic_having_subhost` (L117-138), but I did not check whether they cover static serving or cache behaviour.",
+ "cost": 0.0541716,
+ "turns": 5,
+ "duration_s": 15.0,
+ "tokens": {
+  "input": 26580,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 26580
+ },
+ "pack_tokens": 1712,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 74
+ }
+}

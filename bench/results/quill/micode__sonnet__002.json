@@ -1,0 +1,34 @@
+{
+ "answer": "**Architecture: the Schematic (blueprint) pattern, with the static route as a normal registered rule.**\n\n**1. Shared base: `Armature` in `src/quill/sansio/skeleton.py`.**\n- `Armature` (L52-698) is the common base of `App` and `Schematic`.\n- It holds the `fixed_dir` (static folder) setting and the `owns_fixed_directory` property (L241).\n- It declares the abstract `attach_link_regulation` (L367), which is the route-registration contract.\n- Each concrete class implements the contract itself, so static serving needs no special-case machinery.\n\n**2. Two parallel registration paths.**\n- **Application.**\n  - `Quill.__init__` (`src/quill/app.py` L226-279) checks `owns_fixed_directory`.\n  - It asserts that `static_host` and `host_matching` agree.\n  - It then calls `self.attach_link_regulation(...)` for the static rule. That rule points at `dispatch_fixed_document` through a weakref lambda.\n  - `App.attach_link_regulation` in `src/quill/sansio/app.py` L604-661 adds the rule to the URL map.\n- **Schematic.**\n  - `Schematic` (`src/quill/sansio/schematics.py`) does not register directly. `Schematic.attach_link_regulation` (L412-441) records a deferred lambda.\n  - `enroll_plan` (L255-271) queues nested schematics.\n  - `App.enroll_plan` (`sansio/app.py` L569-595) calls `schematic.enroll(app, options)`.\n  - The enroll step builds a `SchematicSetupStatus` (L87-116), which applies `url_prefix` and `subdomain` and forwards to `app.attach_link_regulation`.\n  - Around L323 the enroll step checks `owns_fixed_directory` and registers the schematic's own static rule, `/static/<filename>` by default. It uses the `fixed_address_route` option.\n\n**3. Static view on both sides.**\n- `Quill.dispatch_fixed_document` (`app.py` L308-328) and `Schematic.dispatch_fixed_document` (`src/quill/schematics.py` L82-102) do the same job.\n- Each raises `RuntimeError(\"'fixed_dir' must be set to serve static_files.\")` if there is no static folder.\n- Each computes `max_age` and calls `dispatch_from_folder(fixed_dir, filename, max_age=max_age)`.\n\n**4. Consistent caching.**\n- **The rule.** `fetch_file_transfer_ttl` is implemented in both `Quill` (`app.py` L281-306) and `Schematic` (`schematics.py` L55-80). Each reads `current_app.config['SEND_FILE_MAX_AGE_DEFAULT']`. `None` stays `None`, a `timedelta` becomes `int(total_seconds())`, and anything else is returned as is.\n- **Why it is duplicated.** `helpers.py` L389 and L498 make `dispatch_document` call `current_app.fetch_file_transfer_ttl`, and it only knows about the app. The comment at `schematics.py` L97 and `app.py` L323 says so. So each `dispatch_fixed_document` computes `max_age` itself and passes it explicitly to `dispatch_from_folder`. Both paths then apply the same config-driven `max_age`.\n- **Caveat.** Both TTL methods read `current_app.config`, not `self.config`. They therefore need an application context.\n\n**5. Related pieces.**\n- `launch_asset` is also implemented separately on `Quill` (`app.py` L330-361) and on `Schematic` (`schematics.py` L104-128). It only opens read-only modes `r`, `rt` and `rb`.\n- A schematic's static folder is unreachable without a `url_prefix`, because the app's `/static` rule takes precedence (`docs/schematics.rst` L212-217).",
+ "cost": 0.0739858,
+ "turns": 2,
+ "duration_s": 11.815,
+ "tokens": {
+  "input": 4,
+  "cache_write": 13021,
+  "cache_read": 33119,
+  "output": 1527,
+  "total": 47671
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"fetch_file_transfer_ttl|attach_link_regulation|def enroll_plan|def _enroll|owns_fixed_directory\", \"path\": \"/home/sq/micode-bench/repos/quill/src/qu"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 16,
+  "total": 78
+ }
+}

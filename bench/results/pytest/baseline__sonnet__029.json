@@ -1,0 +1,36 @@
+{
+ "answer": "The premise is partly wrong. `Visitor.__init__` does not repeatedly instantiate `FNMatcher`. It creates at most two per `Visitor`, and each is created once.\n\n**Where `FNMatcher` is created** (`src/_pytest/_py/path.py`)\n- `Visitor.__init__` (line 138) runs `FNMatcher(fil)` when `fil` is a string (line 141). It runs `FNMatcher(rec)` when `rec` is a string (line 143). That is at most two objects for the whole traversal.\n- `Visitor.gen()` (line 153) recurses into subdirectories but reuses `self.fil` and `self.rec`. It never constructs a new `Visitor` or `FNMatcher`.\n- `LocalPath.visit()` builds one `Visitor` per call. I did not read it, but the grep shows no other `FNMatcher` construction near it.\n- `LocalPath.listdir()` (line 816) and `LocalPath.fnmatch()` (line 429) also create `FNMatcher`s. `listdir` creates one per call, and `fnmatch` creates one per invocation.\n\n**Memory cost.** `FNMatcher` (line 173) has one attribute, `self.pattern`. Each instance is a small object holding one string reference, so the total is negligible however large the tree is. Memory does not scale with the number of directories.\n\n**Where the traversal cost actually comes from.**\n- **Per-call work in `FNMatcher.__call__` (lines 177\u2013196).** Nothing is cached between calls. For every path tested, it:\n  - runs `pattern.find(path.sep)` up to twice;\n  - on Windows, may rewrite the pattern with `replace`;\n  - calls `str(path)` and `os.path.isabs(pattern)` for patterns containing a separator;\n  - builds a new `\"*\" + sep + pattern` string for relative patterns that contain a separator;\n  - calls `fnmatch.fnmatch`, which normalises case and then goes through the stdlib's regex cache.\n- **Calls per directory in `Visitor.gen`.** `rec` is called once per subdirectory entry (line 160), and `fil` once per entry (line 166). The total is therefore proportional to the number of filesystem entries. `p.check(dir=1)` at line 160 also adds a `stat` call per entry.\n- **Other costs in `gen`.** It builds full `listdir()` lists of `LocalPath` objects, sorts them when `sort` is set, and uses `yield from` recursion, so each yielded item passes through one generator frame per level of depth.\n\n**Conclusion.** A large tree with complex patterns is slow because `FNMatcher.__call__` repeats string handling for every entry. Creating the matcher objects is not the cause. The pattern-preparation work could be hoisted into `__init__`, or compiled once with `fnmatch.translate` and `re.compile`.\n\nIf you have a different `Visitor` in mind, `src/_pytest/pathlib.py:420` has a separate `FNMatcher` port for `PurePath`. It is not used by `Visitor`.",
+ "cost": 0.0477348,
+ "turns": 4,
+ "duration_s": 11.583,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5995,
+  "cache_read": 48714,
+  "output": 1400,
+  "total": 56115
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"FNMatcher|class Visitor\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/_py/path.py\", \"offset\": 135, \"limit\": 70}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/_py/path.py\", \"offset\": 805, \"limit\": 25}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 29,
+ "question": "Why does the repeated instantiation of FNMatcher objects in the Visitor.__init__ method impact memory consumption and traversal performance when processing large directory trees with complex filtering patterns?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 76
+ }
+}

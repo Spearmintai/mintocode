@@ -1,0 +1,31 @@
+{
+ "answer": "The test that fits your description is `test_subdomain()` in `tests/test_testing.py` (lines 302\u2013318). Each step in it depends on the one before. I read only the test code. I didn't open Flask's source, so the description of what each call does internally comes from general knowledge of Flask and Werkzeug.\n\n1. **Configuration.** `flask.Flask(__name__, subdomain_matching=True)` turns on subdomain matching. Then `app.config[\"SERVER_NAME\"] = \"example.com\"` sets the base domain that subdomains are resolved against. Without both of these, `subdomain=\"<company_id>\"` could not match anything. `client = app.test_client()` is created next.\n\n2. **Route registration.** `@app.route(\"/\", subdomain=\"<company_id>\")` registers the `view(company_id)` function. Registering it adds a URL rule to the app's Werkzeug `url_map`. The rule's subdomain is the dynamic part `<company_id>`, and its endpoint is `\"view\"`. This step needs the config from step 1, because the subdomain is matched relative to `SERVER_NAME`.\n\n3. **Request context creation.** `with app.test_request_context():` builds a fake request environment from the config. The context binds the URL adapter, which is built from `SERVER_NAME`, and it sees the rule registered in step 2. Inside it, `flask.url_for(\"view\", company_id=\"xxx\")` builds the full URL, which is `http://xxx.example.com/`. The context is only there to make `url_for` work, and its result, `url`, is used in step 4.\n\n4. **Request and assertions.** `with client: response = client.get(url)` sends a request to that generated URL. Werkzeug matches the host `xxx.example.com` against the rule and passes `company_id=\"xxx\"` to `view`. The test then asserts `response.status_code == 200` and `response.data == b\"xxx\"`.\n\nPut together, the chain is: config (`subdomain_matching` and `SERVER_NAME`), then the route with a `subdomain`, then `test_request_context` and `url_for`, then `client.get(url)`, then the assertions.\n\nSeveral other tests cover subdomains but don't follow this whole chain:\n- `test_nosubdomain` (`tests/test_testing.py:321`) is the same test without a subdomain.\n- `test_blueprint_with_subdomain` (`tests/test_testing.py:117`) registers the subdomain through a blueprint.\n- `test_subdomain_matching` (`tests/test_basic.py:1774`) uses the same setup but passes the host directly to `client.get`, without a request context.",
+ "cost": 0.0398362,
+ "turns": 3,
+ "duration_s": 12.45,
+ "tokens": {
+  "input": 6,
+  "cache_write": 4284,
+  "cache_read": 55841,
+  "output": 1152,
+  "total": 61283
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 4,
+ "question": "What is the dependency chain in the test function that verifies subdomain routing through configuration, route registration, and request context creation?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 9,
+  "completeness": 7,
+  "relevance": 10,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 55
+ }
+}

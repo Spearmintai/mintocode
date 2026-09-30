@@ -1,0 +1,34 @@
+{
+ "answer": "`TagBytes` (`src/flask/json/tag.py:159-170`) is a `JSONTag` subclass. It keeps bytes reversible through three pieces that work together.\n\n**1. Type check.** `check()` returns `isinstance(value, bytes)`. Only real `bytes` objects get this tag, so nothing else is routed through base64.\n\n**2. Lossless encode and decode.**\n- `to_json()` returns `b64encode(value).decode(\"ascii\")`. Base64 turns arbitrary binary into pure ASCII, which is always valid JSON string content. The `.decode(\"ascii\")` is needed because `b64encode` returns bytes and JSON needs `str`.\n- `to_python()` returns `b64decode(value)`. It reverses the encoding exactly, so `b64decode(b64encode(x)) == x` for any bytes.\n\n**3. A marker key that identifies the type.** `key = \" b\"` (a leading space plus `b`).\n- `JSONTag.tag()` wraps the encoded value as `{\" b\": \"<base64>\"}`. The serialized JSON therefore records that this value was bytes, and it can't be mistaken for an ordinary string.\n- The leading space makes a collision with a normal user dict key unlikely. If a user dict does contain such a key, `TagDict` (earlier in `TaggedJSONSerializer.order`) escapes it by nesting it under its own key.\n\n**How the serializer uses it** (`TaggedJSONSerializer` in the same file, roughly L219-327):\n- **Dumping.** `tag()` walks `self.order` and applies the first tag whose `check` matches. For bytes that is `TagBytes`.\n- **Loading.** `loads()` runs `flask.json.loads`, then `_untag_scan`. That scan untags bottom-up and converts only single-key dicts whose key is registered in `self.tags`. A `{\" b\": ...}` dict therefore goes back through `TagBytes.to_python`, restoring the original bytes.\n\nThis is how the session cookie (`src/flask/sessions.py`) stores bytes values and gets identical bytes back.\n\nI answered this from the compiled context and the `TagBytes` source I read. I did not re-read the `TaggedJSONSerializer` and `TagDict` code myself.",
+ "cost": 0.0418558,
+ "turns": 2,
+ "duration_s": 7.751,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6553,
+  "cache_read": 32929,
+  "output": 905,
+  "total": 40391
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class TagBytes\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/json/tag.py\", \"output_mode\": \"content\", \"-A\": 16}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 16,
+ "question": "How does the tagged JSON serializer class that handles bytes maintain data consistency and reversibility when encoding binary data through base64?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

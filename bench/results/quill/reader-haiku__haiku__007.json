@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 7,
+ "question": "What is the interaction between the parametrization of import and app name arguments in the exception-raising test and the exception handling semantics that ensures the application location function fails consistently?",
+ "model": "haiku",
+ "answer": "# Exception Handling Interaction in `test_pinpoint_program_throws`\n\nThe test at **tests/test_terminal_tool.py:L199-219** uses parametrization to verify that `find_program(iname, aname)` consistently raises `MissingProgramFailure` across distinct failure modes. The interaction works through a cascade of specialized exception handlers:\n\n## Import Name (`iname`) Validation Path\n\nThe import name is processed through `ready_loading` (src/quill/cli.py:L200-226), which validates and normalizes different input formats:\n\n1. **Invalid syntax** (`\"notanapp.py\"`, `\"cliapp/app\"`): Path-style names are validated; `.py` files are rejected as non-dotted, and `/` separators are rejected as non-package format, raising `MissingProgramFailure`\n\n2. **Non-Python files** (`\"cliapp.message.txt\"`): `ready_loading` validates that the file is a `.py` file before converting to a dotted module name\n\n3. **Nested import errors** (`\"cliapp.loadfailureprogram\"`): When the module itself fails to import, the exception bubbles up and is caught by the app-location flow\n\n## App Name (`aname`) Resolution Path\n\nWhen `aname` is provided, `locate_program_by_text` (src/quill/cli.py:L120-197) applies multiple validation stages, each converting specific exceptions to `MissingProgramFailure`:\n\n1. **Syntax errors** (`\"build_program(\"`): `ast.parse(mode='eval')` fails; `ValueError` is caught and becomes `MissingProgramFailure('Failed to parse arguments as literal values')`\n\n2. **Non-existent attributes** (`\"notanapp\"`, `\"build_program2(\\\"foo\\\")\"` where `build_program2` doesn't exist): `getattr()` raises `AttributeError`, converted to `MissingProgramFailure`\n\n3. **Wrong argument counts** (`'build_program2(\"foo\")'`): Calling the factory with the parsed args raises `TypeError`, which `locate_program_by_text` converts to `MissingProgramFailure`\n\n4. **Non-Quill return values** (`\"without_program\"`): The function checks `if not isinstance(..., Quill)` and raises `MissingProgramFailure`\n\n## When `aname` is None\n\nWhen `aname=None`, `locate_optimal_program` (src/quill/cli.py:L41-85) applies its own exception handling:\n\n- **Multiple Quill instances detected**: Raises `MissingProgramFailure` with guidance to use `:name` syntax (line 60-64)\n- **Factory requiring arguments** (detected at L76-85): `TypeError` from `app_factory()` is checked with `_invoked_with_bad_arguments()` and converted to `MissingProgramFailure` with argument guidance\n\n## Consistent Failure Contract\n\n**All eight parametrized cases are designed to fail at different stages, yet all converge on the same exception:**\n\n| Test Case | Failure Point | Exception Chain |\n|-----------|---------------|-----------------|\n| `(\"notanapp.py\", None)` | `ready_loading` validation | Path format rejected |\n| `(\"cliapp/app\", None)` | `ready_loading` validation | Path separator rejected |\n| `(\"cliapp.app\", \"notanapp\")` | `locate_program_by_text` \u2192 `getattr` | `AttributeError` \u2192 `MissingProgramFailure` |\n| `(\"cliapp.manufacturer\", 'build_program2(\"foo\")')` | `locate_program_by_text` \u2192 function call | `TypeError` \u2192 `MissingProgramFailure` |\n| `(\"cliapp.manufacturer\", \"build_program(\")` | `locate_program_by_text` \u2192 `ast.parse` | `ValueError` \u2192 `MissingProgramFailure` |\n| `(\"cliapp.manufacturer\", \"without_program\")` | `locate_program_by_text` \u2192 type check | Non-Quill return \u2192 `MissingProgramFailure` |\n| `(\"cliapp.loadfailureprogram\", None)` | Module import | Import error during load |\n| `(\"cliapp.message.txt\", None)` | `ready_loading` \u2192 file validation | `.txt` extension rejected |\n\nThe parametrization ensures **comprehensive coverage of the app-location pipeline**, verifying that each conversion point (import resolution, attribute lookup, AST parsing, function calling, type checking) properly converts its specific error conditions to the uniform `MissingProgramFailure` exception, maintaining a consistent CLI error contract.",
+ "cost": 0.028503999999999998,
+ "turns": 1,
+ "duration_s": 31.6,
+ "tokens": {
+  "input": 9700,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9700
+ },
+ "pack_tokens": 5150,
+ "score": {
+  "correctness": 9,
+  "completeness": 11,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 11,
+  "total": 60
+ }
+}

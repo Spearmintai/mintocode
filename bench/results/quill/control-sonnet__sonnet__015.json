@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "answer": "Filters registered through the schematic's app-level filter method are put off until the schematic is enrolled on an app. Then they are written straight into the app's template environment. The URL prefix never enters into it.\n\n**1. Registration is deferred.** `attach_program_layout_sieve` is in `src/quill/sansio/schematics.py`, lines 460\u2013475. The decorator form, `program_layout_sieve` (lines 443\u2013458), calls it. It doesn't touch any app, because the schematic may not have one yet. It defines an inner closure, `register_template(state)`, which runs:\n\n`state.app.markup_engine_env.filters[name or f.__name__] = f`\n\nIt then passes that closure to `note_once_only`.\n\n**2. The closure is queued.**\n- `note_once_only` (lines 232\u2013244) wraps the closure so it only runs when `state.first_registration` is true.\n- It then calls `record` (lines 223\u2013230), which appends the wrapper to `self.deferred_functions`.\n- `record` and `note_once_only` are marked `@preparationmethod`. That decorator raises the `AssertionError` at lines 215\u2013221 if you call them after the schematic has been registered once.\n\n**3. Enrollment replays the queue.** `enroll(app, options)` is at lines 273\u2013377.\n- It builds a `SchematicSetupStatus` with `build_registration_state(app, options, first_bp_registration)` (line 321).\n- `first_bp_registration` is true only if this schematic object isn't already in `app.schematics`.\n- At lines 334\u2013335 it runs `for deferred in self.deferred_functions: deferred(state)`.\n- The filter closure therefore receives `state.app`, the real app. It writes the filter into `app.markup_engine_env.filters`, the app-wide environment.\n\n**4. The URL prefix doesn't affect filters.**\n- The prefix is held on the state (`SchematicSetupStatus.url_prefix`, around lines 72\u201377). It is only used when adding routes, in `attach_link_regulation` (lines 98\u2013102).\n- The filter closure writes to the app's environment and doesn't use the state's prefix or subdomain. So mounting with `url_prefix` (or a subdomain) doesn't change where the filter goes.\n- Nested schematics are handled at lines 349\u2013377. The parent's prefix is joined onto the child's `url_prefix`, and each child then runs its own `enroll`. A filter recorded on a nested schematic is registered the same way.\n\n**5. Once only.** If the same schematic is registered again, for example under a different name or prefix, `first_registration` is false. The wrapper skips the closure, so the filter isn't re-added.\n\nI didn't look at the tests.",
+ "cost": 0.0424516,
+ "turns": 6,
+ "duration_s": 17.6,
+ "tokens": {
+  "input": 21876,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 21876
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

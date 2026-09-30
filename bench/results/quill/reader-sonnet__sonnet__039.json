@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "answer": "The decision is split across two places: rule registration decides whether a rule gets OPTIONS, and request dispatch acts on that decision.\n\n## 1. Registration: `App.attach_link_regulation` (src/quill/sansio/app.py:L604-661)\n\nThe compiled summary describes the flow. I don't have the raw source lines for this span, so the exact line numbers of each branch aren't confirmed. The config key `PROVIDE_AUTOMATIC_OPTIONS` is referenced at L641.\n\n1. **Method resolution.** `methods` comes from the `methods` option, then `view_func.methods`, then `(\"GET\",)`. A `str` raises `TypeError`. Each method is uppercased into a set, and `view_func.required_methods` is unioned in.\n2. **Automatic-options flag.** It is resolved in this order:\n   - If the `provide_automatic_options` argument or the `view_func.provide_automatic_options` attribute is set (not None), that value is used.\n   - If both are `None`, the config decides. If `\"OPTIONS\"` is not in `methods` and `config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy, OPTIONS is added to the required methods and the flag becomes True.\n   - Otherwise the flag is False.\n3. HEAD is not added here. werkzeug's `Rule` adds HEAD when GET is present.\n\nThe resulting flag is stored on the rule as `rule.provide_automatic_options`.\n\nViews can supply the attribute in two ways:\n- `Page.provide_automatic_options` in src/quill/views.py:L56 defaults to `None`, so the config decides. `to_page` copies it onto the view function (L129-134).\n- A plain function can set `view.provide_automatic_options` directly.\n\nDefaults live in `Quill.default_config` (src/quill/app.py:L178-210), where `PROVIDE_AUTOMATIC_OPTIONS` defaults to True.\n\n## 2. Dispatch: `Quill.route_inquiry` (src/quill/app.py:L879-902)\n\n1. If `req.routing_exception is not None` (L890), it calls `throw_dispatch_fault(req)` (L891). That function (L478-504) re-raises the routing exception. The only exception is in debug mode, where a `RequestRedirect` with a code other than 307/308 on a method outside GET/HEAD/OPTIONS raises `FormPayloadPathForwarding`. OPTIONS therefore never takes the debug-replacement path.\n2. Otherwise the rule is `req.url_rule`. The check at L895-898 is `getattr(rule, \"provide_automatic_options\", False) and req.method == \"OPTIONS\"`. If it is true, the method returns `self.build_fallback_options_reply()` (L899).\n3. If it is false, the view runs at L902: `self.view_functions[rule.terminus](**view_args)`, called through `guarantee_blocking`. A user-defined OPTIONS view is reached here.\n\n## 3. Behavior confirmed by tests\n\n- `test_supply_implicit_choices_property` (tests/test_elementary.py:L70-89):\n  - `provide_automatic_options = False` on a GET-only view makes OPTIONS return 405.\n  - `True` with `methods=[\"OPTIONS\"]` gives `allow == [\"OPTIONS\"]`.\n- `test_supply_implicit_choices_keyword` (L92-126): passing `provide_automatic_options=False` to `attach_link_regulation` gives no automatic OPTIONS, and `allow` lists lack OPTIONS.\n- `test_link_charting` (L157-190): lowercase `methods=['options']` must not add automatic OPTIONS (Issue 1288). This works because methods are uppercased before the `\"OPTIONS\" in methods` check.\n- Global config: setting `PROVIDE_AUTOMATIC_OPTIONS = False` disables the automatic flag, and the per-route attribute overrides it (docs/config.rst:L391-395, docs/api.rst:L649-690).\n\n## Not settled by the material\n\nI don't have the raw source of `attach_link_regulation` or `build_fallback_options_reply`. I can't quote the exact branch lines within L604-661. The summary says the fallback reply is an empty `response_class()` with `allow` set from `request_ctx.url_adapter.allowed_methods()`, with references at L953-964. Read those spans directly if you need line-level detail.",
+ "cost": 0.05165,
+ "turns": 1,
+ "duration_s": 12.2,
+ "tokens": {
+  "input": 10677,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10677
+ },
+ "pack_tokens": 5312,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 13,
+  "clarity": 14,
+  "reasoning": 15,
+  "total": 74
+ }
+}

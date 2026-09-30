@@ -1,0 +1,35 @@
+{
+ "answer": "`TestReport.from_item_and_call` is in `src/_pytest/reports.py:334`. It takes an `Item` and a `CallInfo` and builds a `TestReport`. An if/elif chain on `call.excinfo` picks `outcome` and `longrepr`.\n\n**Setup**\n- It reads `when = call.when` and asserts it isn't `\"collect\"`, since that value is only for collection reports.\n- It also reads `duration`, `start` and `stop` from the call. It builds `keywords` from `item.keywords` and takes `excinfo = call.excinfo`.\n\n**Branches, in order**\n1. **No exception** (`not call.excinfo`): `outcome = \"passed\"` and `longrepr = None`.\n2. **`excinfo` is not an `ExceptionInfo`**: `outcome = \"failed\"` and `longrepr = excinfo` as-is. This is the case where the call already carries a pre-made representation instead of an `ExceptionInfo`.\n3. **`excinfo.value` is a `skip.Exception`** (from `_pytest.outcomes`): `outcome = \"skipped\"`.\n   - It gets the crash location from `excinfo._getreprcrash()` and asserts it isn't `None`.\n   - If `excinfo.value._use_item_location` is set, `longrepr` is `(os.fspath(path), line + 1, r.message)`. The path and line come from `item.reportinfo()[:2]`, so the skip points at the test definition.\n   - Otherwise `longrepr` is `(str(r.path), r.lineno, r.message)`, the location where the skip was raised.\n   - In both cases `longrepr` is a `(path, lineno, message)` tuple, not a traceback.\n4. **Any other exception**: `outcome = \"failed\"`. The phase decides how `longrepr` is built:\n   - When `call.when == \"call\"`, it uses `item.repr_failure(excinfo)`. This is the overridable hook, so subclasses such as `Function` or doctest items can customise the failure display.\n   - When the phase is `\"setup\"` or `\"teardown\"`, it uses `item._repr_failure_py(excinfo, style=item.config.getoption(\"tbstyle\", \"auto\"))`. This skips `repr_failure`'s customisation and uses the generic traceback rendering, with the style taken from `--tb`.\n\n**Final step**\n- It appends `(\"Captured {key} {rwhen}\", content)` for each entry in `item._report_sections`.\n- It then returns `cls(item.nodeid, item.location, keywords, outcome, longrepr, when, sections, duration, start, stop, user_properties=item.user_properties)`.\n\nThe type annotation on `longrepr` covers `None`, `ExceptionInfo`, the tuple, `str` and `TerminalRepr`. Those are the shapes the branches above can produce.",
+ "cost": 0.0431792,
+ "turns": 3,
+ "duration_s": 10.024,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5399,
+  "cache_read": 48506,
+  "output": 1187,
+  "total": 55098
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def from_item_and_call\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/reports.py\", \"offset\": 325, \"limit\": 75}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 3,
+ "question": "How does the `from_item_and_call` classmethod implement conditional logic to determine the appropriate outcome and longrepr representation based on exception type and execution phase?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 83
+ }
+}

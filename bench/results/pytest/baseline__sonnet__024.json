@@ -1,0 +1,39 @@
+{
+ "answer": "The tests use subprocesses because they check the state of the import machinery at start-up. An in-process run can't reproduce that state, since the outer pytest has already changed it. I read the tests and `pytester.py` and did not run anything, so the reasons below come from reading the code.\n\n**Where the tests are**\n\nThe class is `TestImportHookInstallation` in `testing/test_assertion.py:79`. These methods call `pytester.runpytest_subprocess()`:\n- `test_conftest_assertion_rewrite` (issue #1619)\n- `test_rewrite_assertions_pytester_plugin` (issue #1920)\n- `test_pytest_plugins_rewrite`\n- `test_pytest_plugins_rewrite_module_names`\n- `test_pytest_plugins_rewrite_module_names_correctly`\n- `test_rewrite_ast`\n\n`test_installed_plugin_rewrite` goes further and uses `pytester.run(sys.executable, \"mainwrapper.py\", ...)`, which is also a fresh interpreter.\n\n**Why not inline**\n\n1. **The hook is global process state.** `install_importhook()` in `src/_pytest/assertion/__init__.py:116-126` does `sys.meta_path.insert(0, hook)` and removes the hook again on unconfigure.\n   - The outer pytest running the test suite has already installed its own `AssertionRewritingHook` and has its own `sys.modules`.\n   - `inline_run` (`src/_pytest/pytester.py:1075`) calls `pytest.main()` inside that same process. Only `sys.modules` and `sys.path` are snapshotted and restored (lines 1111-1112), not `sys.meta_path`.\n\n2. **Import timing is what's under test.** The tests check that `conftest.py`, `pytest_plugins` modules and entry-point plugins are marked for rewriting before they are first imported. `AssertionRewritingHook.mark_rewrite` (`src/_pytest/assertion/rewrite.py:261-284`) warns \"Module already imported so cannot be rewritten\". `_early_rewrite_bailout` (`rewrite.py:188`) also decides early whether a module is a candidate. In-process, modules such as `ham`, `pkg` or `spamplugin` could already be cached in `sys.modules`, or the outer hook could handle them, which would give false passes or failures.\n\n3. **The `--assert=plain|rewrite` modes must be independent.** The tests assert `E       AssertionError` for plain mode and `*assert 10 == 30*` for rewrite mode. A subprocess starts with no hook and installs one only for the requested mode.\n\n4. **The `pytester` plugin's own rewriting (#1920) needs a real start-up.** `test_rewrite_assertions_pytester_plugin` needs a fresh process to show that the `pytester` plugin is rewritten. It nests `inline_run` inside the subprocess and expects the inner failing assertion to show a rewritten diff.\n\n5. **`test_installed_plugin_rewrite` fakes the plugin distribution.** `mainwrapper.py` monkeypatches `importlib.metadata.distributions` with a `DummyDistInfo` and then calls `pytest.main()`. That patch can't be applied to the live test process without leaking. The test also uses `monkeypatch.setenv` and `delenv` for `PYTEST_DISABLE_PLUGIN_AUTOLOAD` and `PYTEST_PLUGINS`, and these only take effect if the child process inherits them.\n\n**Constraints this puts on the verification**\n\n- **Output only.** Outcomes can only be checked through the child's `RunResult`: `result.stdout.fnmatch_lines([...])`, `result.ret`, and `assert_outcomes`. There is no `HookRecorder` or object access.\n- **Only visible effects can be asserted.** The tests infer that the hook was installed and applied from the rewritten assertion message. They do not inspect `sys.meta_path` directly.\n- **One exception looks inside the child.** `test_pytest_plugins_rewrite_module_names` puts `assert 'ham' in pytestconfig.pluginmanager.rewrite_hook._must_rewrite` inside a generated test file. The result is reported only through the exit code (`result.ret == 0`).\n- **Patterns must be tolerant.** Output is matched with `fnmatch` globs such as `*assert 10 == 30*`. The pytester test also uses `fnmatch_lines_random`, with an \"XXX: unstable output\" comment.\n- **Environment must be set up explicitly.** Anything the child needs has to be passed through the environment or command line. That includes env vars, `-p`, `--disable-plugin-autoload`, and the `mainwrapper.py` entry-point shim.\n- **Cost.** Each case spawns a fresh interpreter, and the `mode` and `initial_conftest` parametrizations multiply that cost.",
+ "cost": 0.0993056,
+ "turns": 7,
+ "duration_s": 21.465,
+ "tokens": {
+  "input": 10,
+  "cache_write": 13063,
+  "cache_read": 99818,
+  "output": 2707,
+  "total": 115598
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class TestImportHookInstallation\", \"path\": \"/home/sq/micode-bench/base/pytest/testing\", \"output_mode\": \"content\", \"-A\": 130}",
+  "Grep {\"pattern\": \"def test_installed_plugin_rewrite|def test_rewrite_ast|def test_register_assert_rewrite_checks_types|def test_rewrite_assertions_pytester|runpytest",
+  "Grep {\"pattern\": \"def runpytest_subprocess|def runpytest_inprocess|def inline_run|def _ensure_basetemp|def _makeconftest|class SysModulesSnapshot|class SysPathsSnaps",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/test_assertion.py\", \"offset\": 222, \"limit\": 150}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 1075, \"limit\": 80}",
+  "Grep {\"pattern\": \"def install_importhook|def pytest_load_initial_conftests|sys.meta_path|def _early_rewrite_bailout|def mark_rewrite|already imported\", \"path\": \"/hom"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 24,
+ "question": "Why does the TestImportHookInstallation class employ subprocess-based testing through pytester.runpytest_subprocess() rather than inline test execution, and what design constraints does this impose on the assertion rewrite hook installation verification?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

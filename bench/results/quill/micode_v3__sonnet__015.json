@@ -1,0 +1,36 @@
+{
+ "answer": "The filter goes into the app's Jinja environment through a callback that is recorded when you declare it and run when the schematic is enrolled. The URL prefix doesn't affect this path at all.\n\n**1. Declaring the filter (`src/quill/sansio/schematics.py`)**\n- `Schematic.program_layout_sieve(name=None)` (L443-458) is the decorator form of the app-level filter method. It is the counterpart of Flask's `app_template_filter`, and its docstring says it is \"available in any template rendered by the application\". It calls `attach_program_layout_sieve(f, name=name)` and returns `f`.\n- `Schematic.attach_program_layout_sieve(f, name=None)` (L460-475) defines an inner closure, `register_template(state)`. That closure runs `state.app.markup_engine_env.filters[name or f.__name__] = f`. Nothing is written to the environment at this point. The closure is passed to `self.note_once_only(...)`.\n\n**2. Deferring it**\n- `Schematic.note_once_only` (L232-244) wraps the closure in a `wrapper(state)`. The wrapper calls the closure only if `state.first_registration` is true. It then hands the wrapper to `Schematic.record` (L223-230), which appends it to `self.deferred_functions`.\n- Both methods are `@preparationmethod`, so they raise `AssertionError` if the schematic has already been registered (L215-221).\n\n**3. Running it at registration**\n- `App.enroll_plan(schematic, **options)` (`src/quill/sansio/app.py` L569-595) calls `schematic.enroll(self, options)`.\n- `Schematic.enroll` (`schematics.py` L273-377) builds a `SchematicSetupStatus` through `build_registration_state`. It then calls every function in `deferred_functions` with that state. The filter closure is one of them.\n- `state.app` is the real application, so the filter lands in the application's shared `markup_engine_env` (the Jinja environment). This means every template the app renders can use it, not only the schematic's own templates.\n\n**4. Why the URL prefix doesn't matter**\n- The prefix is resolved in `SchematicSetupStatus` from the `url_prefix` option, falling back to the schematic's own attribute. It is applied only by `SchematicSetupStatus.attach_link_regulation`, which prefixes route rules and terminus names before calling `app.attach_link_regulation`.\n- The filter closure never goes through that method. It writes straight to `state.app.markup_engine_env.filters`, so the mount path and subdomain have no effect on it.\n- `first_registration` means the filter is installed once per schematic object, even if that schematic is enrolled several times under different prefixes or names.\n- Nested schematics are enrolled recursively with combined prefixes, and their filters go into the same environment.\n\n**Tests**\n- `tests/test_schematics.py` L414-495 covers this. It declares the filter before or after the route, uses the attach form, and uses a custom label. Each case renders `layout_sieve.html` and gets `b'dcba'`.\n- `tests/test_layouting.py` L163-173 covers the same case.\n- I didn't find a test in the files I looked at that combines the filter with a `url_prefix`.",
+ "cost": 0.0704814,
+ "turns": 4,
+ "duration_s": 14.951,
+ "tokens": {
+  "input": 6,
+  "cache_write": 10853,
+  "cache_read": 56837,
+  "output": 1569,
+  "total": 69265
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def (program_layout_sieve|attach_program_layout_sieve|note_once_only|enroll|_combine_schematic_functions)|markup_engine_env\", \"path\": \"/home/sq/mic",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 215, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 443, \"limit\": 33}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

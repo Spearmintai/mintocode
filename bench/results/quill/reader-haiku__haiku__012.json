@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "haiku",
+ "answer": "# Deferred Hash Algorithm Resolution in `_postponed_sha1`\n\nThe wrapper function delays cryptographic availability validation through **runtime function invocation** rather than module-import-time access. Here's how it works:\n\n## The Mechanism\n\n**File: `src/quill/sittings.py:L290-295`**\n\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)\n```\n\n**Stored as: `src/quill/sittings.py:L307-307`**\n\n```python\ndigest_method = staticmethod(_postponed_sha1)\n```\n\n## Why This Prevents Import-Time Failures\n\n1. **At module load time**: Only the function definition is parsed; the function body (`return hashlib.sha1(string)`) is **not executed**. No attempt is made to resolve `hashlib.sha1`.\n\n2. **At runtime (when used)**: When `digest_method` is actually invoked\u2014i.e., when a session adapter needs to compute a digest\u2014the function body runs and `hashlib.sha1(string)` is resolved and called at that moment.\n\n3. **FIPS-restricted environments**: On FIPS builds without SHA-1 support:\n   - Module imports **succeed** (the problematic `hashlib.sha1` access never happens at import time)\n   - If the digest method is actually *used*, the RuntimeError occurs then\u2014giving developers a chance to configure an alternative digest method before that point\n\nThis is a standard Python pattern for handling conditionally-available dependencies: **defer name resolution inside function bodies until the function is actually called**, not when the module loads.",
+ "cost": 0.016051,
+ "turns": 1,
+ "duration_s": 14.0,
+ "tokens": {
+  "input": 6208,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6208
+ },
+ "pack_tokens": 3860,
+ "score": {
+  "correctness": 16,
+  "completeness": 12,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 78
+ }
+}

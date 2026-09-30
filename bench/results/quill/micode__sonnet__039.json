@@ -1,0 +1,36 @@
+{
+ "answer": "Whether a routing rule receives OPTIONS is decided in two places. One is at registration time and the other is at dispatch time.\n\n## Registration: `App.attach_link_regulation`\nThis is in `src/quill/sansio/app.py:605-654`. It is the Flask `add_url_rule` equivalent, and the flag is resolved in this order:\n\n1. **Explicit argument (L635).** The `provide_automatic_options` parameter is `bool | None`. Schematics pass it through from `src/quill/sansio/schematics.py:418` and `:438`. The decorator API declares it at `src/quill/sansio/skeleton.py:373`, and its docs are at `:428`.\n2. **View attribute (L635-638).** If the argument is `None`, the code reads `getattr(view_func, \"provide_automatic_options\", None)`. Class-based pages define this as a ClassVar at `src/quill/views.py:56`. `as_page` copies it onto the generated view function at `src/quill/views.py:134`.\n3. **Config setting (L640-645).** If the value is still `None`, the code checks two conditions.\n   - If `\"OPTIONS\" not in methods` and `self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy (L641), it sets the flag to `True` (L642) and adds `\"OPTIONS\"` to `required_methods` (L643).\n   - Otherwise it sets the flag to `False` (L645). That happens when the config is off, or when the view already lists OPTIONS in its methods and handles it itself.\n4. **Merge and store (L648-651).** The code merges `required_methods` into `methods` (`methods |= required_methods`), builds the rule with `self.url_rule_class(...)`, and stores the result on `rule_obj.provide_automatic_options`.\n\nThe `PROVIDE_AUTOMATIC_OPTIONS` default of `True` is set in the config defaults at `src/quill/app.py:208`.\n\nAn explicit `True` or `False` skips the config branch entirely. An explicit `True` does not add OPTIONS to the methods. Only the config branch does that, through `required_methods`. A view can also add OPTIONS itself through its own `required_methods` attribute (L631).\n\n## Dispatch: `Quill.route_inquiry`\nThis is in `src/quill/app.py:889-902`, and `complete_route_inquiry` calls it. It runs these steps:\n\n- If `req.routing_exception` is set, it calls `throw_dispatch_fault` (L890-891).\n- It then evaluates `getattr(rule, \"provide_automatic_options\", False) and req.method == \"OPTIONS\"` (L895-898). If true, it returns `self.build_fallback_options_reply()` (L899), and the view is never called.\n- Otherwise it calls `self.view_functions[rule.terminus](**view_args)` through `guarantee_blocking` (L901-902).",
+ "cost": 0.0645152,
+ "turns": 4,
+ "duration_s": 13.011,
+ "tokens": {
+  "input": 6,
+  "cache_write": 10103,
+  "cache_read": 53106,
+  "output": 1347,
+  "total": 64562
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"provide_automatic_options|PROVIDE_AUTOMATIC_OPTIONS\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/app.py\", \"offset\": 605, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 885, \"limit\": 20}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 18,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 85
+ }
+}

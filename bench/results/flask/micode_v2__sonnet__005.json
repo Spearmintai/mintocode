@@ -1,0 +1,34 @@
+{
+ "answer": "Template filters, tests and globals registered on a blueprint reach the shared `app.jinja_env` through deferred registration. I read the grep hits and the injected compiled context, not every surrounding span, so the line numbers below come from those results.\n\n**1. Blueprints defer the registration and run it against the app.**\n- In `src/flask/sansio/blueprints.py`, `Blueprint.add_app_template_filter` is the method behind the `app_template_filter` decorator. It defines an inner `register_template(state)` function that does `state.app.jinja_env.filters[name or f.__name__] = f` (L473). It then calls `self.record_once(register_template)` (L475).\n- `add_app_template_test` (L511\u2013513) and `add_app_template_global` (L549\u2013551) follow the same pattern. They write to `jinja_env.tests` and `jinja_env.globals`.\n- The `app_template_filter`, `app_template_test` and `app_template_global` decorators call these `add_*` methods.\n- `record_once` (L233) wraps the function so it runs only on the blueprint's first registration. It checks `_got_registered_once` (L172, L214). The flag is set in `Blueprint.register` (L320). This keeps a blueprint registered several times, for example under different prefixes, from re-adding the callable.\n- When `Blueprint.register` runs, it calls each recorded function with a `BlueprintSetupState`. That state holds `state.app`, so the callables are written into that app's Jinja environment.\n\n**2. The environment is one shared object per app.**\n- `App.jinja_env` in `src/flask/sansio/app.py` (L469\u2013477) is a `cached_property`. It calls `create_jinja_environment()` once, and every later access returns the same object.\n- `Flask.create_jinja_environment` in `src/flask/app.py` (L385\u2013410) builds it with `self.jinja_environment(self, **options)`.\n- App-level registration uses the same object. `App.add_template_filter`, `add_template_test` and `add_template_global` (L695, L738, L776) write into `self.jinja_env.filters`, `.tests` and `.globals`.\n\n**3. Rendering reads the same environment.**\n- `render_template` and `render_template_string` in `src/flask/templating.py` (L149, L161, and the streaming variants at L203 and L218) use `current_app.jinja_env`. Filters, tests and globals added during registration are therefore visible to every template.\n- `DispatchingJinjaLoader` (`templating.py`) only resolves template names, searching the app first and then blueprints. The filters and globals come from the shared environment itself.\n\n**Ordering.** Registering a blueprint on an app triggers `jinja_env` creation if it hasn't happened yet. Because the environment is cached, options changed in `jinja_options` after that point have no effect.\n\n**Contrast with context processors.** Per-request template variables are separate from this mechanism. `Flask.update_template_context` applies them, including blueprint-scoped context processors, at render time.",
+ "cost": 0.052743,
+ "turns": 2,
+ "duration_s": 10.203,
+ "tokens": {
+  "input": 4,
+  "cache_write": 8379,
+  "cache_read": 32795,
+  "output": 1266,
+  "total": 42444
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"jinja_env|template_filter|_got_registered_once|record_once|add_template|def create_jinja_environment|def _register_template\", \"path\": \"/home/sq/mic"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

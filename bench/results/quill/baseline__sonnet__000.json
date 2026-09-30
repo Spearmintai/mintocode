@@ -1,0 +1,36 @@
+{
+ "answer": "`ensure_ascii` is a class attribute on `StandardJSONSupplier`. It decides whether non-ASCII characters in serialized JSON come out as `\\uXXXX` escapes or as literal Unicode characters. I didn't run the tests. I only read the code and the tests.\n\n**Where it lives**\n- It is defined at `src/quill/json/supplier.py:144` as `ensure_ascii = True`, on `StandardJSONSupplier`, which subclasses `JSONSupplier`.\n- Its docstring says it replaces non-ASCII characters with escape sequences. That can be more compatible with some clients. Turning it off gives better performance and smaller output.\n\n**How it takes effect**\n- `StandardJSONSupplier.dumps()` (`supplier.py:166-179`) passes the attribute to Python's `json.dumps` as the `ensure_ascii` argument. It does this with `kwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)`, so the attribute is only a default. If a caller passes `ensure_ascii=...` directly, that value wins.\n- `response()` (`supplier.py:189-215`) builds its output by calling `self.dumps(obj, **dump_args)`. So `response()` follows the same setting.\n- `assumefallback` is not a standard `dict` method. I didn't look at where it is defined, so I'm assuming it works like `setdefault`.\n\n**Effect on output**\n- With `True` (the default), any non-ASCII character is written as an escape. `\"\u2603\"` becomes the six ASCII characters `\"\\u2603\"`. The output is pure ASCII.\n- With `False`, the character is written as itself, `\"\u2603\"`. Output is shorter, but it must be encoded as UTF-8 when it is sent or stored.\n- Both forms decode to the same value, so the setting changes only the text, not the data.\n\n**Tests that confirm this**\n- `tests/test_objtext.py:50-54` (`test_objtext_as_universal_text`) sets `app.json.ensure_ascii` to `True` or `False`. It then checks that `app.json.dumps(\"\\N{SNOWMAN}\")` returns `'\"\\\\u2603\"'` or `'\"\\u2603\"'`.\n- `tests/test_trialing.py:110-114` sets `app.json.ensure_ascii = False`. It checks that `SurroundingsConstructor(app, json=\"\\u20ac\")` produces an input stream that decodes as UTF-8 to `'\"\u20ac\"'`. So the test-environment builder also takes its setting from the app's supplier.",
+ "cost": 0.059694199999999996,
+ "turns": 4,
+ "duration_s": 11.413,
+ "tokens": {
+  "input": 6,
+  "cache_write": 9522,
+  "cache_read": 46171,
+  "output": 1236,
+  "total": 56935
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"(?i)ensure_?ascii|ascii_only|asciionly|escapeNonAscii\", \"path\": \"/home/sq/micode-bench/base/quill\", \"output_mode\": \"content\", \"head_limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/json/supplier.py\", \"offset\": 100, \"limit\": 130}",
+  "Bash {\"command\": \"cd /home/sq/micode-bench/base/quill; sed -n 40,75p tests/test_objtext.py; sed -n 105,125p tests/test_trialing.py\"}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 18,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

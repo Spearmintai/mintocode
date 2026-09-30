@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "Filters and context processors registered on a schematic reach the shared template environment through a chain of mechanisms. The excerpts don't show the last link for filters, so that part is inferred.\n\n**1. Guarded registration**\n- `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py:L443-458`) is the filter decorator. It delegates to `self.attach_program_layout_sieve(f, name=name)` and returns `f`.\n- It is wrapped by `@preparationmethod` (`sansio/skeleton.py:L42-49`), which calls `self._verify_configuration_completed(f_name)` before every call. Registration is therefore only allowed during setup, before the app has started handling requests. The check's body (`Armature._verify_configuration_completed`, L220-221) isn't shown.\n\n**2. Deferred replay at enrollment**\n- `App.enroll_plan` (`sansio/app.py:L569-595`) calls `schematic.enroll(self, options)`.\n- `Schematic.enroll` (`schematics.py:L273-377`) creates a `SchematicSetupStatus` and calls each recorded callback with it (docstring, L273-277).\n- `SchematicSetupStatus` (L34-116) carries `app`, `schematic`, `options`, and so on. This is how a schematic-level registration gets applied to the application. `attach_program_layout_sieve` presumably records such a callback that registers the filter app-wide, matching the `program_layout_sieve` docstring \"Equivalent to :meth:`.Quill.layout_sieve`\". Its body isn't in the excerpts.\n\n**3. Merging context processors**\n- `Schematic._combine_schematic_functions` (`schematics.py:L379-410`) extends `app.template_context_processors` with the schematic's `template_context_processors` (L410).\n- It uses the key `name` for `None`, or `name.key` otherwise (L385). Schematic-scoped processors are thus stored on the app under dotted names.\n- The same method merges the other per-scope registries: request hooks, URL defaults and preprocessors.\n\n**4. One shared environment**\n- `Quill.build_layout_ecosystem` (`src/quill/app.py:L385-423`) builds a single Jinja environment from `jinja_options` and the app's methods. It adds the globals `build_link_to`, `obtain_briefly_shown_notes`, `config`, `request`, `session` and `g` (L411-421).\n- `draw_layout` (`layouting.py:L138-150`) always renders through `current_app.markup_engine_env`, so every template, whether rendered from an app route or a schematic route, uses that one environment.\n\n**Evidence**\n`tests/test_schematics.py:L447-461` shows the whole path. It calls `bp.attach_program_layout_sieve(super_reverse)` and then `app.enroll_plan(bp, url_prefix=\"/py\")`. An app-level route then renders `draw_layout(\"layout_sieve.html\", value=\"abcd\")` and gets `b\"dcba\"`, so the schematic's filter is available in the app's shared environment.\n\n**Not settled by the material**\n- The body of `attach_program_layout_sieve`.\n- Where filters are actually put into the environment, and when `markup_engine_env` is created (`Armature.markup_engine_reader` L271-282 is a candidate). Look at `Schematic.attach_program_layout_sieve` and `Quill.layout_sieve`.\n- `Schematic.enroll` L313-377, which isn't shown.",
+ "cost": 0.042426,
+ "turns": 1,
+ "duration_s": 15.0,
+ "tokens": {
+  "input": 7987,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7987
+ },
+ "pack_tokens": 3814,
+ "score": {
+  "correctness": 13,
+  "completeness": 11,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 14,
+  "total": 66
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "answer": "The pattern is a three-tier fallback. Each tier catches failures from the tier below it, so a broken `__repr__` can't cascade into the error report. All of it is in `src/_pytest/_io/saferepr.py`.\n\n**Tier 1: callers catch the original failure.**\n- `SafeRepr.repr` and `SafeRepr.repr_instance` wrap `ascii(x)`, `super().repr(x)` or `repr(x)` in `try/except BaseException as exc`.\n- `safeformat` and `saferepr_unlimited` do the same, but with `except Exception`.\n- When the object's repr fails, each handler calls `_format_repr_exception(exc, obj)` instead of letting the error propagate.\n- `saferepr()` is a thin wrapper over `SafeRepr(...).repr`. Its docstring says it \"generally takes care to never raise exceptions itself.\"\n\n**Tier 2: `_format_repr_exception(exc, obj)` guards the repr of the exception.**\n- The exception raised by the user's `__repr__` may itself have a broken `__repr__` or `__str__`.\n- So the function calls `_try_repr_or_str(exc)` inside its own `try/except BaseException as inner_exc`.\n- If that fails, it falls back to `f\"unpresentable exception ({_try_repr_or_str(inner_exc)})\"`.\n- It then builds a message that avoids calling `repr` on `obj`. The message is `<[{exc_info} raised in repr()] {type(obj).__name__} object at 0x{id(obj):x}>`. It uses only the type name and `id()`, which are safe.\n\n**Tier 3: `_try_repr_or_str(obj)` is the innermost fallback.**\n- It tries `repr(obj)`. On failure, it falls back to `f'{type(obj).__name__}(\"{obj}\")'`, which uses `str()` through the f-string.\n- That last fallback is not guarded, so a failing `__str__` would still raise. `_format_repr_exception` guards against this only one level up. Its `except` handler calls `_try_repr_or_str(inner_exc)` and cannot catch an error from its own handler.\n\n**Common rule at every level.** Each handler re-raises `KeyboardInterrupt` and `SystemExit` before catching `BaseException`. Only ordinary failures are swallowed. User interrupts and exits still propagate. The exceptions are `safeformat` and `saferepr_unlimited`, which catch only `Exception`.\n\n**Size safety.** After a fallback message is produced, `SafeRepr.repr` and `repr_instance` pass it through `_ellipsize` when `maxsize` is set. The fallback text is therefore bounded like normal output.",
+ "cost": 0.047622399999999995,
+ "turns": 3,
+ "duration_s": 12.56,
+ "tokens": {
+  "input": 6,
+  "cache_write": 6551,
+  "cache_read": 48882,
+  "output": 1163,
+  "total": 56602
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_format_repr_exception|def _try_repr_or_str|def saferepr|class SafeRepr|def _ellipsize\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_m",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/_io/saferepr.py\", \"limit\": 135}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 5,
+ "question": "What is the defensive layering pattern established by the exception handling architecture in _format_repr_exception to prevent cascading failures when repr() operations fail during error reporting?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

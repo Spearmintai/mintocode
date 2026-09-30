@@ -1,0 +1,34 @@
+{
+ "answer": "`RoutineDetails` in `src/quill/cli.py` (the `read_program` method, L333-372) loads the app on first use and caches it in `self._loaded_app`. `__init__` only sets `_loaded_app = None` (L331). The file doesn't state a reason, so the reasons below are what its structure implies.\n\n1. **The object is built before the app can be loaded.** `RoutineDetails` is the click context object (`pass_script_info = click.make_pass_decorator(RoutineDetails, ensure=True)`). `QuillCollection` creates it, or click creates it through `ensure=True`. At that point `-A/--app`, `-e/--env-file` and the `.flaskenv`/`.env` values may not have been processed, so `app_import_path` may not be set yet. The `--app` and `--env-file` options are eager options that run after the object exists. Importing the app in `__init__` would use incomplete configuration.\n\n2. **Many commands never need the app.** `quill --help`, `--version`, and a `quill --app` that only shows help don't load it. Some paths tolerate a missing app. Loading in `__init__` would import user code, and could raise `MissingProgramFailure`, on every invocation. This includes plugin directives and cases where the app isn't required.\n\n3. **Import errors are handled in one place.** The lookup can fail in several ways:\n   - `find_program` can raise on a bad import.\n   - `read_program` raises `MissingProgramFailure` (\"Could not locate a Quill application\u2026\") when nothing is found.\n   - Loading is deferred to `read_program`, so callers such as `QuillCollection`'s directive resolution and `using_application_scope` decide when to handle these failures.\n\n4. **The cache keeps one app per invocation.** The lookup is expensive and has side effects. It goes through the `build_program` callback, `ready_loading` (which adjusts `sys.path`), `find_program` and the module import. It also sets `app.debug = obtain_diagnostic_switch()` when `set_debug_flag` is true. `read_program` returns early if `_loaded_app is not None`, so this runs once. Every caller (directive lookup, `using_application_scope`, the `run` and `shell` directives) then gets the same instance, and the app isn't imported or built twice.\n\nI read only `read_program` and the constructor directly. The description of `QuillCollection` and the eager options comes from the compiled file summary, not from reading those lines.",
+ "cost": 0.049388600000000005,
+ "turns": 2,
+ "duration_s": 9.556,
+ "tokens": {
+  "input": 4,
+  "cache_write": 8404,
+  "cache_read": 32773,
+  "output": 921,
+  "total": 42102
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/cli.py\", \"offset\": 295, \"limit\": 100}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 28,
+ "question": "Why does the CLI helper class that manages Quill application discovery implement lazy loading through a cached instance attribute rather than during initialization?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 77
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "answer": "The hook is `MethodView.__init_subclass__` in `src/flask/views.py` (line 165). It doesn't pick one parent's `methods` over another's. It merges them as a union.\n\n1. It calls `super().__init_subclass__(**kwargs)` first.\n2. It checks `\"methods\" not in cls.__dict__`. If the subclass sets `methods` explicitly in its own class body, the hook does nothing and that value wins. Only an inherited `methods` triggers the merge.\n3. Otherwise it starts with an empty `set()` and loops over `cls.__bases__`, the direct parents only. For each base where `getattr(base, \"methods\", None)` is truthy, it calls `methods.update(base.methods)`. With multiple parents, the result is the union of all their `methods` sets. Nothing is overridden, and the order of the bases doesn't matter.\n4. It then loops over `http_method_funcs` (`get`, `post`, `head`, `options`, `delete`, `put`, `trace`, `patch`). If `hasattr(cls, key)`, it adds `key.upper()`. `hasattr` also sees handlers inherited from any parent, so those methods are included.\n5. If the resulting set is non-empty, it assigns `cls.methods = methods`. That is a new set on the subclass. If the set is empty, `methods` isn't set and the class keeps whatever it would normally inherit through Python's MRO.\n\nBecause the hook assigns a concrete set on each subclass, Python's normal MRO resolution of `methods` is never used for these classes. The base `View` class defines `methods: t.ClassVar[t.Collection[str] | None] = None`, so that is the fallback.",
+ "cost": 0.01608,
+ "turns": 2,
+ "duration_s": 7.42,
+ "tokens": {
+  "input": 4,
+  "cache_write": 523,
+  "cache_read": 34700,
+  "output": 704,
+  "total": 35931
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 23,
+ "question": "How does the subclass initialization hook in the HTTP method-dispatching view class resolve conflicting methods attributes when inheriting from multiple parent classes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 78
+ }
+}

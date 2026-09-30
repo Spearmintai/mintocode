@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py:L155-193`. The material only shows its own code and the summaries of the methods it calls, so some details below are inferred from those summaries.\n\n**What happens at decoration time (L179-187)**\n- It reads `_cv_request.get(None)`. If no request scope is active, it raises `RuntimeError(\"'duplicate_active_inquiry_scope' can only be used when a request context is active, such as in a view function.\")` (L181-185).\n- Otherwise it calls `ctx.copy()` right away, so the copy is taken when the function is decorated, not when it is later called.\n- `InquiryScope.copy` (`ctx.py:L337-355`) returns a new scope that shares the app, the environ, the same request object and the current session.\n\n**What happens at call time (L189-193)**\n- The `wrapper` does `with ctx:` on the copied scope and then returns `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- `update_wrapper(wrapper, f)` preserves the name and metadata of `f`.\n- The docstring's example spawns the decorated function with `gevent.spawn`. Inside it, `quill.request` and `quill.session` work as they do in the view function.\n\n**How isolation works**\n- `request`, `session` and `request_ctx` are `LocalProxy` objects over the `_cv_request` ContextVar (`src/quill/globals.py:L17-51`).\n- `with ctx:` calls `InquiryScope.push` (`ctx.py:L367-394`), which sets `_cv_request` inside the greenlet's own context. Its `pop` (`L396-431`) resets the var afterwards.\n- The greenlet therefore sees its own copied scope, and the original request scope is not touched. `test_microthread_scope_duplicating` (`tests/test_callscope.py:L150-177`) asserts that there is no scope outside the copy and a full scope inside it.\n- `push` also ensures a matching `ProgramScope` exists, pushing a new one if it is missing or belongs to a different app. That is how `current_app` and `g` become available inside the greenlet.\n- `guarantee_blocking(f)` is a call on the app. The material does not show its implementation, so I can't say precisely what it does. Look at `Quill.guarantee_blocking` in `src/quill/app.py`.\n\n**How session data crosses the boundary**\n- The copy carries the current session object, so the greenlet sees whatever the view had set before decoration. In the test, the view sets `session['fizz']='buzz'` before copying.\n- `InquiryScope.push` opens a session only if it is `None` (`launch_sitting`). Copies reuse the existing session rather than reloading it, as noted in the gotchas for `ctx.py`.\n- Because the session object is shared rather than deep-copied, I'd expect mutations in the greenlet to be visible to the original. The material doesn't confirm this. Whether such changes get saved depends on the original request's normal session save, which is not shown here.\n\n**Caveats**\n- Anything that should be seen inside the greenlet has to be set on the session before the function is decorated. The session is captured at that point, and `InquiryScope.copy` does not reload it.\n- `test_microthread_scope_duplicating_interface` (`tests/test_callscope.py:L179-202`) covers the decorator form and expects the result 42.",
+ "cost": 0.04308,
+ "turns": 1,
+ "duration_s": 12.0,
+ "tokens": {
+  "input": 9064,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9064
+ },
+ "pack_tokens": 4701,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 78
+ }
+}

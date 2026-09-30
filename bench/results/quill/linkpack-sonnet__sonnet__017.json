@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or transform them into HTTP 500 responses based on configuration state?",
+ "model": "sonnet",
+ "answer": "The method is `Quill.manage_failure` in `src/quill/app.py:L811-862`.\n\n## Decision logic\n\n1. **Capture and signal (L839-840).** It reads `sys.exc_info()` and always sends `got_request_exception`, whatever the config says.\n\n2. **Resolve the propagate flag (L841-844).**\n   - `propagate = self.config[\"PROPAGATE_EXCEPTIONS\"]`.\n   - If it is `None` (unset), it falls back to `self.testing or self.debug`.\n   - `testing` is bound to config key `TESTING` (`sansio/app.py:L208`).\n   - `debug` reads `config[\"DEBUG\"]` (`sansio/app.py:L549-560`).\n   - An explicit `True` or `False` for `PROPAGATE_EXCEPTIONS` overrides testing/debug.\n\n3. **If propagating (L846-852), it re-raises.**\n   - If `exc_info[1] is e`, meaning it is called inside an active `except` for that same exception, it does a bare `raise`. This preserves the original traceback.\n   - Otherwise it does `raise e`.\n   - Nothing below this point runs. There is no logging, no handler lookup and no 500 response.\n\n4. **If not propagating (L854-862), it builds a 500.**\n   - `record_failure(exc_info)` logs `Exception on {request.path} [{request.method}]` at error level with the traceback (`app.py:L864-877`).\n   - It creates `InternalServerError(original_exception=e)`.\n   - It looks up a handler with `_locate_fault_processor(server_error, request.schematics)`. The lookup order is schematic code, app code, schematic exception class, app exception class (`sansio/app.py:L823-846`).\n   - If a handler is found, it is called through `guarantee_blocking` with the `InternalServerError`. The original exception is available as `e.original_exception`. The handler's return value replaces `server_error`.\n   - It returns `conclude_inquiry(server_error, from_error_handler=True)`.\n\n## Finalization\n\n`conclude_inquiry` (`app.py:L922-951`) builds the response and runs `treat_reply`, then sends `request_finished`. It runs even when no 500 handler exists, so `following_inquiry` hooks still apply. `test_fault_management_transforming` (`tests/test_elementary.py:L905-923`) shows this: the mimetype is changed by a hook. With `from_error_handler=True`, a failure during finalization is logged (`\"Request finalizing failed with an error while handling an error\"`) rather than raised.\n\n## Practical effect\n\n- Debug or testing on, with `PROPAGATE_EXCEPTIONS` unset: the exception is re-raised, so the debugger or test client sees it.\n- Both off, or `PROPAGATE_EXCEPTIONS=False`: the exception is logged and turned into a 500. The tests set `app.testing = False` to exercise this path (e.g. `test_fault_management`, L867-902).\n\n## Not covered by the material\n\n- `TRAP_HTTP_EXCEPTIONS` and `TRAP_BAD_REQUEST_ERRORS` are separate. They are handled earlier in `catch_web_error` and `manage_client_failure`, not in `manage_failure`.\n- The material only summarizes `complete_route_inquiry` (`app.py:L904-920`) and `gateway_application` (`app.py:L1479-1527`). Read those to see exactly how exceptions reach `manage_failure`.",
+ "cost": 0.045578,
+ "turns": 1,
+ "duration_s": 10.0,
+ "tokens": {
+  "input": 9627,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9627
+ },
+ "pack_tokens": 5150,
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 81
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 18,
+ "question": "How does the method that registers URL rules on schematic objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "sonnet",
+ "answer": "**Mechanism: `Schematic.attach_link_regulation` (src/quill/sansio/schematics.py:L412-441)**\n\n1. **Validation happens immediately.** Before anything is deferred, the method checks two things:\n   - `terminus` must not contain a `.` (L427-428).\n   - `view_func.__name__` must not contain a `.` (L430-431).\n   \n   Both raise `ValueError`. So bad input fails when the decorator or call runs, not later at app registration.\n\n2. **The registration call is wrapped in a lambda and recorded (L433-441).** The method does not call the setup state's `attach_link_regulation`. It calls `self.record(lambda s: s.attach_link_regulation(rule, terminus, view_func, provide_automatic_options=provide_automatic_options, **options))`. The lambda takes one parameter, `s`, which is the setup state. It closes over `rule`, `terminus`, `view_func`, `provide_automatic_options` and `options` from the enclosing call. Those values are captured at definition time and used when the lambda finally runs.\n\n3. **`record` only stores it.** `Schematic.record` (L223-230) does `self.deferred_functions.append(func)`. Nothing is executed. The list is typed `list[DeferredSetupFunction]` (L204), and `DeferredSetupFunction` is `Callable[[SchematicSetupStatus], None]` (L17). That matches the lambda's shape: it takes a setup state and returns nothing useful.\n\n4. **The lambda runs later, during `Schematic.enroll`.** The registration flow is `App.enroll_plan` \u2192 `Schematic.enroll` (L273-377). That flow builds the state through `build_registration_state`, which returns `SchematicSetupStatus(self, app, options, first_registration)` (L246-253). It then calls each function in `deferred_functions` with that state. At that point the lambda invokes `SchematicSetupStatus.attach_link_regulation` (L87-116). That method does the real work:\n   - It prefixes the rule with `url_prefix` (L98-102).\n   - It defaults the subdomain (L103).\n   - It derives the terminus from the view function if none was given (L104-105).\n   - It merges `link_presets` into `defaults` (L106-108).\n   - It calls `self.app.attach_link_regulation` with the terminus prefixed as `name_prefix.name.terminus` (L110-116).\n\n**Why defer:** A schematic has no app when its routes are declared. The final URL prefix, subdomain, name prefix and target app are only known at enrollment, via the state object. Recording a closure lets the schematic capture the route arguments now and apply them once the state exists. It also lets the same schematic be enrolled several times with different options.\n\n**Caveats from the material:**\n- `@preparationmethod` decorates both `attach_link_regulation` and `record`. The excerpts don't show what it does, and it is probably a guard against changes after registration. Check its definition to confirm.\n- L103 reads `options.assumefallback(\"subdomain\", ...)`. On a plain `dict` this would fail, so that line appears to depend on a custom mapping type, or on a rename of `setdefault`. The material doesn't settle which.",
+ "cost": 0.027682,
+ "turns": 1,
+ "duration_s": 10.3,
+ "tokens": {
+  "input": 5315,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5315
+ },
+ "pack_tokens": 2464,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

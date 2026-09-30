@@ -1,0 +1,31 @@
+{
+ "answer": "The fallback chain is in `CertParamType.convert` in `src/flask/cli.py` (line 780 onward). `CertParamType` is a `click.ParamType` subclass, and it is the type behind the `--cert` option of `flask run`.\n\n**Setup**\n- `__init__` builds `self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)`. This is the first-choice validator: an existing file, not a directory, resolved to an absolute path.\n\n**Steps in `convert(value, param, ctx)`**\n1. **SSL check.** It runs `import ssl`. If that fails, it raises `click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`. No fallback is tried in that case.\n2. **File path (first attempt).** It runs `return self.path_type(value, param, ctx)` inside a `try`. If the value is an existing file, the resolved path is returned and the chain stops.\n3. **Fallback.** If `click.Path` raises `click.BadParameter`, the `except` block runs. It first normalises the value with `click.STRING(value, param, ctx).lower()`. Then it tries two more options:\n   - **Adhoc string.** If the value equals `\"adhoc\"`, it checks that `cryptography` can be imported. If it can't, it raises `BadParameter(\"Using ad-hoc certificates requires the cryptography library.\")`. Otherwise it returns the string `\"adhoc\"`.\n   - **SSLContext import.** Otherwise it calls `import_string(value, silent=True)`. With `silent=True`, a failed import returns `None` instead of raising. If the result is an `ssl.SSLContext` instance, it returns that object.\n4. **Final failure.** If none of these match, a bare `raise` re-raises the original `click.BadParameter` from the file-path check. The user therefore sees the standard \"file does not exist\" style error, not a message about adhoc or imports.\n\n**Downstream**\n- `_validate_key`, at line 828, is the callback for the related `--key` option. It reads `ctx.params[\"cert\"]` and checks `cert == \"adhoc\"`. When `--cert` is a file, it requires `--key` and turns `cert` into a `(cert, key)` tuple. It rejects `--key` when the cert is adhoc or an SSLContext.\n\nOne detail follows from step 3: the value is lowercased before the `import_string` attempt. A dotted import path with uppercase characters, such as `mymod.MyContext`, would therefore be looked up in lowercase.",
+ "cost": 0.0227224,
+ "turns": 2,
+ "duration_s": 9.131,
+ "tokens": {
+  "input": 4,
+  "cache_write": 1478,
+  "cache_read": 34712,
+  "output": 986,
+  "total": 37180
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 79
+ }
+}

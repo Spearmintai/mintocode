@@ -1,0 +1,37 @@
+{
+ "answer": "`_got_registered_once` is a guard that freezes a schematic's configuration once it has been registered on an application. It stops setup calls that would only apply to some registrations and not others.\n\n**Where it lives**\n- The flag is the class attribute `_got_registered_once = False` on `Schematic` in `src/quill/sansio/schematics.py:172`.\n- `Schematic.enroll()` sets it to `True` on the instance (line 320). That happens right after `app.schematics[name] = self` and before the registration state is built and the deferred functions run.\n\n**How the guard works**\n- `Schematic._verify_configuration_completed(f_name)` (lines 213\u2013221) checks the flag. If it is set, it raises an `AssertionError`.\n- The message says the setup method `'<f_name>'` can no longer be called on the schematic `'<name>'`. It says the schematic has already been registered at least once, so changes \"will not be applied consistently\". It tells the user to do all imports, decorators and functions before registering.\n- The `@preparationmethod` decorator in `src/quill/sansio/skeleton.py:42` calls `self._verify_configuration_completed(f_name)` before running the wrapped method. The base `Scaffold` version (skeleton.py:220) is overridden here.\n- Schematic methods marked `@preparationmethod` therefore all hit the check. They include `record`, `note_once_only`, `enroll_plan`, and the other decorated setup methods in that file (lines 412\u2013624). Those cover things like routes, before/after request hooks and error handlers.\n- `Quill` in `src/quill/sansio/app.py:413` has its own override of `_verify_configuration_completed`. The app-level check is separate.\n\n**Why it exists**\n- `Schematic.enroll()` replays the schematic's recorded `deferred_functions` onto the app at registration time. `enroll_plan` records nested schematics in `_blueprints` for the same replay.\n- A schematic can be registered on several apps, or on one app under different names.\n- If setup were allowed after the first registration, the earlier registrations would already have consumed the old list. Later registrations would get the extra routes or hooks and earlier ones would not.\n- Failing loudly avoids that inconsistency. The docs in `docs/schematics.rst` (around line 44) also say you can't unregister a schematic.\n\n**Related, but different**\n- `first_registration` is computed per app in `enroll()` (line 316). It is passed into `SchematicSetupStatus`, and `note_once_only` uses it to run a function only on the first registration.\n- `_got_registered_once` is a separate flag. It blocks setup calls and does not control what runs during registration.",
+ "cost": 0.0736248,
+ "turns": 5,
+ "duration_s": 15.526,
+ "tokens": {
+  "input": 8,
+  "cache_write": 11349,
+  "cache_read": 68114,
+  "output": 1459,
+  "total": 80930
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"registered|_registered|isRegistered\", \"-i\": true, \"output_mode\": \"content\", \"glob\": \"*schematic*\", \"head_limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 165, \"limit\": 160}",
+  "Grep {\"pattern\": \"_check_setup_finished|setupmethod\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill\", \"output_mode\": \"content\", \"head_limit\": 30}",
+  "Grep {\"pattern\": \"preparationmethod|_verify_configuration_completed\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill\", \"output_mode\": \"content\", \"head_limit\": 4"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 81
+ }
+}

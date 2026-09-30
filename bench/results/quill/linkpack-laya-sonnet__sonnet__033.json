@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "answer": "The pass-through dictionary class is `ForwardMapping` (`src/quill/json/tag.py:L119-130`), and its `into_json` (L125-128) is:\n\n```python\nreturn {k: self.serializer.tag(v) for k, v in value.items()}\n```\n\n**Why keys are left alone**\n\nThe in-code comment at L126-127 gives the reason: \"JSON objects may only have string keys, so don't bother tagging the key here.\" Keys in a JSON object are always strings, and a tag wrapper would turn a key into a dict, which JSON can't use as a key. So tagging a key has no valid representation. Keys are copied through unchanged.\n\n**Why values are tagged recursively**\n\nValues can be any type: nested dicts, lists, bytes, timestamps, UUIDs, and so on. Calling `self.serializer.tag(v)` sends each value back through `LabeledJSONEncoder.tag` (L289-295). That method walks `order` and applies the first label whose `check` matches, or returns the value unchanged if none do. This is how a `bytes` or datetime nested inside an ordinary dict still gets its `' b'` or `' d'` label.\n\n**How this fits the rest of the design**\n\n- `ForwardMapping` is \"keyless\": it defines no tag key and sets `tag = into_json` (L130). It adds no wrapper and only forwards the recursion into the values. `ForwardSequence` does the same for lists (L153-156).\n- On the way back, `_unlabel_sweep` (L309-319) rebuilds dicts by processing values recursively and then calls `untag` on the dict itself. Because keys were never modified, they need no reverse conversion.\n- A dict that would be ambiguous, meaning one with a single key that is in `serializer.tags`, is handled earlier in the order by `LabelMapping` (L103-112). That label renames the key to `f\"{key}__\"` and tags the value. Its `check` matches only such 1-key dicts (L103-108), and `ForwardMapping` handles all other dicts. So the only key modification in this scheme is that escaping, and it exists to avoid collisions with tag names, not to tag keys as values.\n\nThe material doesn't show the exact `order` position of `ForwardMapping` beyond the default order listed in the compiled answer (`LabelMapping`, then `ForwardMapping`).",
+ "cost": 0.020402,
+ "turns": 1,
+ "duration_s": 17.2,
+ "tokens": {
+  "input": 3948,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 3948
+ },
+ "pack_tokens": 1616,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

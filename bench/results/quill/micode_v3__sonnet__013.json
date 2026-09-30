@@ -1,0 +1,35 @@
+{
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py:155-193`. It is Quill's rename of Flask's `copy_current_request_context`. It is meant for greenlets, and its docstring uses `gevent.spawn` as the example.\n\n**At decoration time**\n- It reads the active request scope with `_cv_request.get(None)`. If there isn't one, it raises `RuntimeError(\"'duplicate_active_inquiry_scope' can only be used when a request context is active\u2026\")`. This means it has to be applied inside a view or similar, not at import time.\n- It snapshots the scope with `ctx.copy()`, which is `InquiryScope.copy` (`ctx.py:337-355`). The copy shares the app, the environ, the same request object and the current session object. The session is therefore carried over into the copy instead of being reloaded.\n\n**At call time**\n- `wrapper(*args, **kwargs)` runs `with ctx:` on the copied scope, then calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- `guarantee_blocking` is Quill's rename of Flask's `ensure_sync`. It adapts `f` if it is an async function.\n- `update_wrapper(wrapper, f)` keeps the original function's name and docstring.\n\n**How isolation works**\n- The context variables `_cv_request` and `_cv_app` are per-execution-context. Because they are contextvars, a new greenlet does not see the parent's request or app scope. `test_microthread_scope_duplicating` in `tests/test_callscope.py:150-177` asserts that `quill.request` and `quill.current_app` are falsy inside the greenlet before the scope is entered.\n- `with ctx:` calls `InquiryScope.push` (`ctx.py:367-394`). This does the following:\n  - It sets `_cv_request` for the greenlet only.\n  - It pushes a matching `ProgramScope` if there isn't one for the app.\n  - It does not reopen the session, because `session` is already set on the copy.\n  - It re-matches the URL through `pair_query`, so the request path and args are available.\n- On exit, `InquiryScope.pop` (`ctx.py:396-431`) runs the teardown (`perform_dismantle_inquiry`), resets the contextvar and pops the implicit program scope. The greenlet's scope is then gone again, and the same test asserts `quill.request` is falsy after the `with` block.\n\nThe scope is copied when the decorator is applied, so the greenlet keeps working with the view's request and session even if it runs after the response has been returned. The test runs the greenlet after the request finishes and it still sees `session[\"fizz\"] == \"buzz\"`. The copy shares the same session object, so changes made in the greenlet are made on the object the view holds.\n\n`test_microthread_scope_duplicating_interface` (`tests/test_callscope.py:179-202`) covers the decorator form directly. The other test copies `request_ctx` by hand.",
+ "cost": 0.0723172,
+ "turns": 3,
+ "duration_s": 10.562,
+ "tokens": {
+  "input": 4,
+  "cache_write": 13280,
+  "cache_read": 34396,
+  "output": 1231,
+  "total": 48911
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 150, \"limit\": 46}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_callscope.py\", \"offset\": 148, \"limit\": 32}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 82
+ }
+}

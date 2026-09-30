@@ -1,0 +1,44 @@
+{
+ "answer": "The marker travels from the autouse fixture through a `SubRequest` to a node's `keywords`. Every test under that node then reads it back by walking the parent chain. It works because the fixture is class-scoped and marks a node that sits above the test functions, not because of any dedicated synchronisation.\n\n## The test\n\n`testing/python/fixtures.py:1193`, `test_accessmarker_dynamic`, writes a conftest and a test module.\n\n- **`keywords(request)`** is an ordinary function-scoped fixture. It returns `request.keywords`.\n- **`marking(request)`** is `scope=\"class\"` and `autouse=True`. It calls `request.applymarker(pytest.mark.XYZ(\"hello\"))`.\n- **`test_fun1` and `test_fun2`** are module-level functions. Each asserts `keywords[\"XYZ\"] is not None` and `\"abc\" not in keywords`.\n\n## Data flow\n\n1. **Autouse injection.** Fixture setup adds `marking` to every test's fixture closure. Each test's `TopRequest` (`src/_pytest/fixtures.py:~700`) calls `_fillfixtures()` (`:716`). That calls `getfixturevalue`, which reaches `_get_active_fixturedef` (`:566`) and then `FixtureDef.execute`.\n2. **The `request` object.** `execute` builds a `SubRequest` (`:727`) for `marking`. Its `_scope_field` is `Scope.Class`. It shares `_pyfuncitem` and `_fixture_defs` with the parent request.\n3. **Node resolution.** `SubRequest.node` (`:763`) picks the node from the fixture's scope. For class scope it calls `get_scope_node(self._pyfuncitem, Scope.Class)` (`:135`), which is `node.getparent(_pytest.python.Class)`.\n4. **Fallback to the item.** In this test the functions are not in a class, so `getparent` returns `None`. `SubRequest.node` then hits the fallback at `:772-774` (\"Fallback to function item itself\") and returns the `Function` item.\n5. **Applying the marker.** `FixtureRequest.applymarker` (`:508`) calls `self.node.add_marker(marker)`.\n6. **Storing it.** `Node.add_marker` (`src/_pytest/nodes.py:316`) does two things:\n   - `self.keywords[marker_.name] = marker_`, which goes through `NodeKeywords.__setitem__` (`src/_pytest/mark/structures.py:626`) into `_markers`.\n   - `self.own_markers.append(marker_.mark)`, which is what `iter_markers` reads.\n7. **Reading it back.** The `keywords` fixture returns `request.keywords` (`:491`), which is `self.node.keywords`. That is a `NodeKeywords` (`structures.py:610`) whose `__getitem__` and `__contains__` fall back to `self.parent.keywords` when a key is missing locally. That is how `keywords[\"XYZ\"]` resolves, and why `\"abc\" not in keywords` holds.\n\n## What makes it visible to both tests\n\nThere are two mechanisms, and they are not the same thing.\n\n- **Fixture caching.** `FixtureDef.execute` (`:1074`) checks `self.cached_result` and compares `cache_key(request)` (`:1136`, which is the request's `param` or `None`). On a hit it returns the cached value without running the body. For class scope, `marking` runs once and later tests in the same scope get the cached result. Its finalizer is registered on the scope node (`request.node.addfinalizer`, `:1132`). `SetupState` tears the fixture down when that node finishes, which is what ends the scope.\n- **Node-level storage.** `add_marker` mutates the node object, and `NodeKeywords` lookup falls through to parents.\n  - When the test is inside a class, the marker lands on the `Class` node. Every method's `NodeKeywords` finds it through the parent chain. That is the case where \"visible to all tests in scope\" is really true.\n  - In this test there is no enclosing class, so the marker lands on the `Function` item for the first test only.\n\nI did not run the test. From reading the code, the second test's `keywords[\"XYZ\"]` would only resolve if `marking` ran again for `test_fun2`, or if the class-scope node were something shared. With the fallback at `:772-774`, `cached_result` would likely still be reused across the two functions. That suggests the assertion may be passing for a reason other than the marker being shared, and running the test to confirm would settle it.",
+ "cost": 0.11091920000000001,
+ "turns": 12,
+ "duration_s": 25.381,
+ "tokens": {
+  "input": 14,
+  "cache_write": 13195,
+  "cache_read": 135806,
+  "output": 3095,
+  "total": 152110
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"test_accessmarker_dynamic\", \"output_mode\": \"content\", \"path\": \"/home/sq/micode-bench/base/pytest\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/python/fixtures.py\", \"offset\": 1190, \"limit\": 40}",
+  "Grep {\"pattern\": \"def applymarker|def node\\\\b|def _getnextfixturedef|def _get_active_fixturedef|def _schedule_finalizers\", \"output_mode\": \"content\", \"path\": \"/home/s",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 425, \"limit\": 100}",
+  "Grep {\"pattern\": \"def add_marker|def keywords|self\\\\.keywords =|NodeKeywords|def iter_markers|def own_markers|own_markers\", \"output_mode\": \"content\", \"path\": \"/home/",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 700, \"limit\": 90}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/nodes.py\", \"offset\": 314, \"limit\": 25}",
+  "Grep {\"pattern\": \"class NodeKeywords\", \"output_mode\": \"content\", \"-A\": 50, \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/mark/structures.py\"}",
+  "Grep {\"pattern\": \"def execute|cached_result|def get_scope_node|def cache_key|def finish\", \"output_mode\": \"content\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_p",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 135, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 1074, \"limit\": 65}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 37,
+ "question": "Where does the data flow of marker information propagate from the autouse fixture in test_accessmarker_dynamic through the request object to multiple test functions, and what control flow mechanism ensures that dynamically applied markers via applymarker are visible to all dependent tests in the same scope?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 16,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 14,
+  "total": 73
+ }
+}

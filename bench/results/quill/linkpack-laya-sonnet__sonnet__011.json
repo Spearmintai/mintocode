@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The material doesn't show one explicit \"decorator state vs. response lifecycle\" bug, so what follows is the coupling it does support, plus the parts I can't confirm.\n\n## What the code shows\n\n**1. Decorators only record; the effect happens later, at enrollment.**\n`Schematic.program_faulthandler` (`src/quill/sansio/schematics.py:L595-610`) does nothing to the app when you decorate. It defines a closure `from_blueprint(state)` and passes it to `self.note_once_only(...)`. The closure calls `state.app.faulthandler(code)(f)` only when `Schematic.enroll` (L273-377) later runs the deferred functions with a `SchematicSetupStatus`. The handler therefore exists only if the schematic actually gets enrolled, and only in the order enrollment happens.\n\n**2. \"Once only\" depends on `first_registration`.**\nThe `enroll` card says `first_bp_registration` is true when this schematic object is not yet among the values of `app.schematics`. That value is passed to `build_registration_state` and stored as `state.first_registration` (L34-62, L246-253). `note_once_only` presumably uses it to skip repeat registrations. That is the hidden coupling. An app-wide handler is installed only on the first enrollment of that schematic object. If the same schematic is enrolled again under a different `name=` (which `enroll` explicitly allows), or reached through another nested parent, the second enrollment's decorator effects are skipped. Whether a handler exists at all then depends on registration history, not on the decorator call.\n\n**3. Scope differs by decorator, but the mechanism is the same.**\n- `program_faulthandler` is app-wide (\"for every request, not only those handled by the schematic\"). A nested or conditionally enrolled schematic therefore changes global error handling.\n- Schematic-scoped hooks (`preceding_inquiry`, `following_inquiry`, `dismantle_query`, tested in `tests/test_schematics.py:L696-724`) are tied to the schematic's dotted registered name. `Request.schematics` (`envelope_types.py:L180-195`) returns that name and its parents. The name comes from `name_prefix` and the `name` option in `enroll` (L302-304). `_combine_schematic_functions(app, name)` runs in `enroll` before the deferred functions.\n- The same test shows the lifecycle contract: the hooks run in the order `['before','after','teardown']`, and `following_inquiry` must mutate and return the response (`response.data += b\"|after\"`).\n\n**4. Nesting adds ordering and naming dependence.**\n- `enroll_plan` (L255-271) only queues `(schematic, options)` in `_blueprints`.\n- Children are enrolled last in `enroll`, after the parent's own deferred functions have run. So parent-level app-wide registrations, such as `program_faulthandler`, take effect before any child's.\n- The child's subdomain and url_prefix are merged from the parent state, and `name_prefix` is set to the parent's dotted name. A child's hook scope and link names therefore change with where it is nested.\n- `test_embedding_link_stems` (L922-950) shows that registration-time options override init-time ones.\n\n## What the material doesn't settle\n- The body of `note_once_only`, and how exactly it uses `first_registration`.\n- The body of `_combine_schematic_functions`, and how it maps hooks to dotted names.\n- What `preparationmethod` enforces about decorating or calling `enroll_plan` after the schematic has already been enrolled.\n\nTo confirm the coupling, read `note_once_only`, `preparationmethod` and `_combine_schematic_functions` in `src/quill/sansio/schematics.py`. Also look at how `Quill` in `src/quill/app.py` dispatches the after-request and teardown lists by `request.schematics`.",
+ "cost": 0.046366000000000004,
+ "turns": 1,
+ "duration_s": 26.2,
+ "tokens": {
+  "input": 8759,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8759
+ },
+ "pack_tokens": 4191,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 13,
+  "reasoning": 9,
+  "total": 34
+ }
+}

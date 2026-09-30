@@ -1,0 +1,31 @@
+{
+ "answer": "`PassDict.to_json` in `src/flask/json/tag.py` (lines 119-130) tags only the values because JSON object keys can only be strings, and strings never need tagging. The code comment says so: \"JSON objects may only have string keys, so don't bother tagging the key here.\"\n\nThe method is `{k: self.serializer.tag(v) for k, v in value.items()}`. `PassDict` is the pass-through tag: it has no `key` of its own, and its `check` accepts any `dict`. It doesn't wrap the dict in a tagged form like `{\" t\": ...}`. It only recurses into the dict so that values needing tags (tuples, bytes, datetimes, UUIDs, Markup) are tagged by `TaggedJSONSerializer.tag`.\n\nValues can be any type, so each one goes back through `self.serializer.tag(v)`. Keys are already strings, or are converted to strings when the JSON is dumped. Tagging them would be pointless. It could also break the round trip, because the untagging step in `TaggedJSONSerializer.loads` only treats a dict as tagged when it has a single key that is a registered tag key.\n\nThe line `tag = to_json` makes the `tag()` method do the same thing, since there is no wrapper key to add.\n\nDicts that could be mistaken for a tag (a single key matching a tag key) are handled earlier in `TagDict`. It comes before `PassDict` in `TaggedJSONSerializer.order` and escapes those dicts by wrapping them as `{\" di\": ...}`.",
+ "cost": 0.039214200000000005,
+ "turns": 2,
+ "duration_s": 8.419,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6522,
+  "cache_read": 32941,
+  "output": 653,
+  "total": 40120
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

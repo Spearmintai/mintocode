@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "`duplicate_active_inquiry_scope` (`src/quill/ctx.py:L155-193`) copies the request context once, when the function is decorated. It pushes that copy every time the decorated function is called.\n\n**At decoration time (L179-187)**\n- It reads `_cv_request.get(None)`. If no request context is active, it raises `RuntimeError` (\"can only be used when a request context is active\u2026\").\n- Otherwise it calls `ctx.copy()`.\n\n**What `InquiryScope.copy` does (L337-355)**\n- It builds a new `InquiryScope` with the same `app`, the same `environ`, the same `request` object, and `session=self.session`.\n- Passing the live session object means the copy shares the current session instead of reloading it from the cookie. The docstring says this was added in 1.1 so that `session` doesn't point at an out-of-date object.\n- Because the request object is shared, the docstring says the copy is safe for greenlets. It is not safe for real threads unless access to the request is locked.\n\n**At call time (L189-193)**\n- `wrapper` runs `with ctx:`, which calls `InquiryScope.push` (L367-394).\n- `push` makes sure an app context for this app exists, pushing a new one if none exists or it belongs to a different app.\n- It then sets `_cv_request` to the copy.\n- It only opens a session if `self.session is None`. The copy already has one, so the session is kept. The comment at L382-383 says re-opening on later pushes would make `flow_with_environment` lose the session.\n- Inside the `with` block it calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- `update_wrapper` copies the original function's metadata onto `wrapper`.\n\n**Isolation**\n- `_cv_request` is a `ContextVar`, so the push only affects the greenlet or task that runs the wrapper. Outside that `with` block, `request` and `current_app` are unbound.\n- On exit, `pop` (L396-431) restores the previous var value from the saved token.\n- It also pops any app context that `push` created.\n- The teardown steps (dismantle functions, `request.close()`) run only when `len(self._cv_tokens) == 1`, meaning the outermost pop of that copy.\n\n**Test coverage**\n`tests/test_callscope.py::TestMicrothreadScopeDuplication.test_microthread_scope_duplicating` (L150-177) uses `request_ctx.copy()` directly. It checks that no request or app is visible outside the `with` block. Inside it, `request.path`, `request.args` and `session[\"fizz\"] == \"buzz\"` are all available.",
+ "cost": 0.0438678,
+ "turns": 5,
+ "duration_s": 12.6,
+ "tokens": {
+  "input": 25687,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 25687
+ },
+ "pack_tokens": 1866,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 84
+ }
+}

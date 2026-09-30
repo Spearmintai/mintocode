@@ -1,0 +1,32 @@
+{
+ "answer": "Mechanism, in `src/flask/sansio/blueprints.py` (approx. L443-551):\n\n1. **Deferral.** `Blueprint.add_app_template_filter(f, name=None)` (and the decorator `app_template_filter`) doesn't touch the app when called. It defines an inner closure `register_template(state: BlueprintSetupState)` and hands it to `self.record_once(register_template)`. `record_once` wraps it so it's appended to `self.deferred_functions`, and the wrapper only runs if `state.first_registration` is true.\n\n2. **Execution at mount time.** When you call `app.register_blueprint(bp, url_prefix=\"/x\")`, `App.register_blueprint` (`sansio/app.py`) calls `Blueprint.register(app, options)`. That builds a `BlueprintSetupState` (`sansio/blueprints.py`) and then calls every function in `deferred_functions` with it. `register_template` then does `state.app.jinja_env.filters[name or f.__name__] = f`.\n\n3. **Why the prefix doesn't matter.** The filter is written directly to the application's shared Jinja environment (`state.app.jinja_env`), not to anything scoped to the blueprint. `url_prefix` lives only in `BlueprintSetupState` (`state.url_prefix`) and is used by `add_url_rule` to build routes. `register_template` never reads it. The filter is therefore global to the app, and templates rendered by `flask.templating.render_template` through `current_app.jinja_env` see it. This holds for any template, including ones that belong to other blueprints or to the app itself.\n\n4. **`record_once`.** If the same blueprint is registered several times, for example under different prefixes or names, the filter is installed only on the first registration. It is app-wide, so repeating it would add nothing.\n\nThe `app_template_test` and `app_template_global` variants work the same way. They write to `jinja_env.tests` and `jinja_env.globals`. The app-level counterparts are `App.add_template_filter` and related methods (`sansio/app.py` ~L663-776).\n\nI answered from the precompiled index context and didn't re-open the source. The line numbers are approximate.",
+ "cost": 0.0340034,
+ "turns": 1,
+ "duration_s": 6.414,
+ "tokens": {
+  "input": 2,
+  "cache_write": 6015,
+  "cache_read": 13447,
+  "output": 725,
+  "total": 20189
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the blueprint's application-level filter registration method are accessible in the template rendering environment when the blueprint is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

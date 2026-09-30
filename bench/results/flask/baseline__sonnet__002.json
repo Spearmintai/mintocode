@@ -1,0 +1,31 @@
+{
+ "answer": "Flask splits this into a framework-agnostic (\"sansio\") layer that holds static-folder configuration and registration, and a concrete layer that does the file serving. The cache-age logic is deliberately duplicated in the app and blueprint classes so both behave the same.\n\n**1. Shared base: `Scaffold` (`src/flask/sansio/scaffold.py`)**\n- Both `App` and `Blueprint` inherit from it.\n- It stores `static_folder` and `static_url_path`. The `static_folder` property and setter are at about lines 224\u2013238. `has_static_folder` is at about line 241.\n- It contains no I/O and no `send_file` call, so configuration is kept apart from serving.\n\n**2. Sans-IO registration**\n- `sansio/app.py` defines `App(Scaffold)`. It forwards `static_folder` to the base class and provides `register_blueprint`, which calls `blueprint.register(self, options)`.\n- `sansio/blueprints.py` defines `Blueprint(Scaffold)` and `BlueprintSetupState`. `Blueprint.register(app, options)` (line 273) registers the blueprint's static route at about line 323:\n  ```python\n  if self.has_static_folder:\n      state.add_url_rule(f\"{self.static_url_path}/<path:filename>\",\n                         view_func=self.send_static_file, endpoint=\"static\")\n  ```\n- The sans-IO blueprint only refers to `self.send_static_file`, and the `type: ignore[attr-defined]` comment there shows the method is not defined at that layer.\n\n**3. Concrete serving layer (the actual framework)**\n- `flask/app.py`, class `Flask(App)`:\n  - `__init__` (about lines 262\u2013275) registers its own `static` route with `add_url_rule`. It uses a `weakref` to `self` to avoid a reference cycle, and checks `static_host` against `host_matching`.\n  - `send_static_file` (line 308) calls `send_from_directory(self.static_folder, filename, max_age=...)`.\n- `flask/blueprints.py`, class `Blueprint(SansioBlueprint)` supplies the matching `send_static_file` (line 82). It raises `RuntimeError` if there is no static folder.\n\n**4. Consistent caching**\n- `Flask.get_send_file_max_age` (`app.py:281`) and `Blueprint.get_send_file_max_age` (`blueprints.py:55`) both read `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`. The default is `None` (`app.py:201`). Otherwise the value is returned as an int, with a timedelta converted to seconds.\n- Both `send_static_file` methods call `self.get_send_file_max_age(filename)` and pass the result as `max_age` to `send_from_directory`. This means a blueprint's static files use the app-wide config value unless the blueprint overrides the method.\n- `helpers.send_file` (`helpers.py:389`) sets `max_age = current_app.get_send_file_max_age` by default.\n\nA blueprint's static files therefore go through the same `max_age` lookup as the app's own, and either side can override `get_send_file_max_age`.",
+ "cost": 0.0426404,
+ "turns": 5,
+ "duration_s": 13.17,
+ "tokens": {
+  "input": 6,
+  "cache_write": 3870,
+  "cache_read": 55042,
+  "output": 1614,
+  "total": 60532
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 74
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "answer": "**Short version:** `StandardJSONSupplier.ensure_ascii` is a class attribute that supplies the default value of `json.dumps`'s `ensure_ascii` argument. It decides whether non-ASCII characters are written as `\\uXXXX` escapes or as literal characters.\n\n**Where it is defined**\n- `src/quill/json/supplier.py:L144`: `ensure_ascii = True`. The default is therefore escaped, ASCII-only output.\n\n**How it reaches the output**\n- `StandardJSONSupplier.dumps` (`supplier.py:L166-179`) fills in `default`, `ensure_ascii` and `sort_keys` from the instance or class attributes. It does this with `kwargs.assumefallback(...)`, so a value the caller passes explicitly is not overridden. It then returns `json.dumps(obj, **kwargs)`.\n- Because the value is read from `self.ensure_ascii` at call time, setting `app.json.ensure_ascii = False` on an app's supplier instance changes later calls.\n- `StandardJSONSupplier.response` (`L189-215`) builds its body through `self.dumps(obj, **dump_args)`. `dump_args` only adds `indent` or `separators`, so `ensure_ascii` applies to JSON responses too.\n- The abstract `JSONSupplier.dumps` (`L41-47`) only raises `NotImplementedError`. `JSONSupplier.dump` (`L49-57`) writes `self.dumps(...)` to a file, so it inherits the same behavior.\n- The module-level `quill.json.dumps` (`src/quill/json/__init__.py:L13-44`) delegates to `current_app.json.dumps` when an app is available, so it follows the app's `ensure_ascii`. Without an app, it sets only `default=_fallback` and calls `json.dumps`. In that case the stdlib default for `ensure_ascii` (True) applies, not the supplier attribute. That default comes from the standard library, which is not in the provided material.\n\n**What the tests show**\n- `tests/test_objtext.py:L48-54` (`test_objtext_as_universal_text`) is parametrized over both values. It sets `app.json.ensure_ascii` and dumps `\"\\N{SNOWMAN}\"`:\n  - `True` gives `'\"\\\\u2603\"'`, the escaped form.\n  - `False` gives `'\"\u2603\"'`, the literal character.\n- `tests/test_trialing.py:L110-114` shows that the test client builder `SurroundingsConstructor` (with `json=\"\u20ac\"`) also takes its settings from the app. With `ensure_ascii = False`, the request body decodes as `'\"\u20ac\"'`. This goes through `SurroundingsConstructor.notation_serialize`, which calls `self.app.json.dumps(obj, **kwargs)`.\n\n**Summary:** `True` (the default) escapes every non-ASCII character, giving pure-ASCII JSON. `False` emits the characters as they are, so the text must be encoded as UTF-8 when written out. The setting can be overridden per instance, or per call by passing `ensure_ascii=` to `dumps`.",
+ "cost": 0.031882,
+ "turns": 1,
+ "duration_s": 10.1,
+ "tokens": {
+  "input": 6392,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6392
+ },
+ "pack_tokens": 2737,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

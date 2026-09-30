@@ -1,0 +1,37 @@
+{
+ "answer": "The class is `TestFlowing` in `tests/test_aids.py` (L236-307). I identified it from the test names and structure without running it, and I did not check other test files for a closer match.\n\n**Pattern:** it is a plain pytest test class. It has no base class, no `setUp` or `tearDown`, and no shared state. It groups the black-box behaviour tests for one helper, `quill.flow_with_environment`, which is the renamed Flask `stream_with_context` (`src/quill/helpers.py:L62-136`).\n\nThe class keeps the two concerns apart in three ways:\n\n- **Fixtures own the lifecycle.** The `app` and `client` fixtures create the app and drive the request. Every test takes `(self, app, client)` and issues `client.get(...)`, so the tests never push or pop the request context themselves. The framework's per-request context handling runs inside the client call.\n- **Each test defines the streaming logic locally.** Inside a view registered with `@app.route(\"/\")`, the test defines a small `generate()` generator and wraps it with `quill.flow_with_environment`. The generator reads `quill.request.args[\"name\"]` or `quill.session[\"test\"]`, which only works if the request context is still active while the response streams. The test then checks the result only through the response body (`rv.data`). Dependence on the context therefore shows up only as whether the streamed output is correct.\n- **Each method checks one aspect of the helper:**\n  - `test_flowing_with_scope` wraps a generator object directly, and `request.args` stays readable while streaming.\n  - `test_flowing_with_scope_as_wrapper` uses the helper as a decorator on a generator function that takes arguments.\n  - `test_flowing_with_scope_and_bespoke_shutdown` passes a custom `Wrapper` iterator with its own `close()`. It asserts that `close()` is called, so `called == [42]`.\n  - `test_flow_retains_visit` sets a session value in the view and reads it inside the generator.\n\n`tests/test_trialing.py:385-393` also uses `flow_with_environment`, to check that the context it pushes is kept by the response and released when the response is closed. `tests/test_callscope.py` (for example `TestMicrothreadScopeDuplication`) covers context copying, not streaming.",
+ "cost": 0.0743334,
+ "turns": 5,
+ "duration_s": 14.118,
+ "tokens": {
+  "input": 8,
+  "cache_write": 11098,
+  "cache_read": 77277,
+  "output": 1447,
+  "total": 89830
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"flow_with_environment\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"head_limit\": 30}",
+  "Grep {\"pattern\": \"^class .*Test|^class Test\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_aids.py\", \"offset\": 232, \"limit\": 80}",
+  "Grep {\"pattern\": \"^class |^def test|^    def test\", \"path\": \"/home/sq/micode-bench/repos/quill/tests/test_callscope.py\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 11,
+  "completeness": 9,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 63
+ }
+}

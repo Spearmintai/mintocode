@@ -1,0 +1,36 @@
+{
+ "answer": "The control flow has two stages. The first is at registration time, where the flag and the config setting decide whether a rule is marked to answer OPTIONS. The second is at request time, where that mark is checked.\n\n## 1. Registration: `App.add_url_rule` in `src/flask/sansio/app.py` (L605-653)\n\nThe branches at L635-645 run in this order:\n\n1. **Explicit argument.** If `provide_automatic_options` is not `None` (passed as an argument to `add_url_rule`), it is used as-is. Nothing further is evaluated.\n2. **View function attribute.** Otherwise, at L635-638 the value is read from `getattr(view_func, \"provide_automatic_options\", None)`.\n   - Class-based views set this attribute in `View.as_view` (`src/flask/views.py:134`), copying it from the class attribute `View.provide_automatic_options` (`views.py:56`, default `None`).\n3. **Config fallback.** If the value is still `None`, L640-645 apply the config check:\n   - If `\"OPTIONS\" not in methods` **and** `self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy, then `provide_automatic_options = True` and `\"OPTIONS\"` is added to `required_methods`.\n   - Otherwise `provide_automatic_options = False`. This covers both an explicit OPTIONS handler in `methods` and the config being off.\n4. **Merge.** `methods |= required_methods` at L648 adds OPTIONS to the rule's methods. The rule is then created via `self.url_rule_class(rule, methods=methods, **options)`, and the flag is stored on it as `rule_obj.provide_automatic_options` at L651.\n\nThe parameter is threaded through the other entry points as follows:\n\n- `Scaffold.route` and `Scaffold.add_url_rule` in `src/flask/sansio/scaffold.py` (L373, doc at L428) pass it along.\n- `BlueprintSetupState.add_url_rule` in `src/flask/sansio/blueprints.py` (L418-438) forwards it.\n\n## 2. Request time: `Flask.dispatch_request` in `src/flask/app.py` (L879-902)\n\nAt L895-899, if `getattr(rule, \"provide_automatic_options\", False)` is true **and** `req.method == \"OPTIONS\"`, it returns `self.make_default_options_response()`. Otherwise it calls the view function for `rule.endpoint`.\n\nThe config value `PROVIDE_AUTOMATIC_OPTIONS` is only consulted at registration, in `add_url_rule`. `dispatch_request` looks only at the per-rule flag.",
+ "cost": 0.06430140000000001,
+ "turns": 4,
+ "duration_s": 9.229,
+ "tokens": {
+  "input": 6,
+  "cache_write": 10312,
+  "cache_read": 53007,
+  "output": 1244,
+  "total": 64569
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"provide_automatic_options\", \"path\": \"/home/sq/micode-bench/repos/flask/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sansio/app.py\", \"offset\": 605, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/app.py\", \"offset\": 870, \"limit\": 40}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 86
+ }
+}

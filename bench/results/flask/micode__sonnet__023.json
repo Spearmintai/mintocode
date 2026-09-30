@@ -1,0 +1,31 @@
+{
+ "answer": "`MethodView.__init_subclass__` (`src/flask/views.py:165-180`) doesn't pick between conflicting `methods` attributes. It merges them into a set union.\n\n1. It first calls `super().__init_subclass__(**kwargs)`.\n2. It then checks `\"methods\" not in cls.__dict__`. If the subclass sets `methods` in its own body, the hook does nothing and that explicit value wins. Only the class's own `__dict__` is checked, so an inherited `methods` doesn't count.\n3. Otherwise it starts with an empty `set()` and loops over `cls.__bases__`, the direct parents only. For each base where `getattr(base, \"methods\", None)` is truthy, it calls `methods.update(base.methods)`. With multiple parents, their `methods` are unioned. A parent whose `methods` is `None` or empty, such as the `View` default `None`, adds nothing.\n4. It then loops over `http_method_funcs`, the frozenset defined at L11-13 (`get`, `post`, `head`, `options`, `delete`, `put`, `trace`, `patch`). For each name where `hasattr(cls, key)` is true, it adds `key.upper()`. Because `hasattr` sees inherited attributes, handlers defined on any parent are included.\n5. If the resulting set is non-empty, it assigns it to `cls.methods`. If it is empty, `cls.methods` is left alone and stays at whatever it inherits, which is `None` from `View`.\n\nBecause everything is unioned, a subclass of several parents ends up allowing every method any parent allows, plus every handler it can see. Nothing is removed. To narrow the set, a subclass has to declare `methods` explicitly.\n\n`View.as_view` later copies `cls.methods` onto the generated view function, and `add_url_rule` reads it from there. `MethodView.dispatch_request` (L182-191) then does the per-request dispatch.",
+ "cost": 0.0469696,
+ "turns": 2,
+ "duration_s": 6.868,
+ "tokens": {
+  "input": 4,
+  "cache_write": 8205,
+  "cache_read": 32858,
+  "output": 757,
+  "total": 41824
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 23,
+ "question": "How does the subclass initialization hook in the HTTP method-dispatching view class resolve conflicting methods attributes when inheriting from multiple parent classes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 86
+ }
+}

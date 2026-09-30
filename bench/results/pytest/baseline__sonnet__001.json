@@ -1,0 +1,34 @@
+{
+ "answer": "`FixtureFunctionMarker.__call__` is in `src/_pytest/fixtures.py` (line 1224). It runs three checks in order, and only the second one guards against double decoration.\n\n**The double-decoration check**\n```python\nif isinstance(function, FixtureFunctionDefinition):\n    raise ValueError(\n        f\"@pytest.fixture is being applied more than once to the same function {function.__name__!r}\"\n    )\n```\n- `@pytest.fixture` returns a `FixtureFunctionDefinition` (line 1252). This wrapper holds the original function and the marker (`fixture_function_marker`).\n- If the object passed to `__call__` is already one of these wrappers, `@pytest.fixture` has already been applied to it. The check hard-fails with a `ValueError`.\n- The check before it, `inspect.isclass(function)`, rejects classes with \"class fixtures not supported\". It is unrelated to double decoration.\n\n**The `pytestmark` check**\n```python\nif hasattr(function, \"pytestmark\"):\n    warnings.warn(MARKED_FIXTURE, stacklevel=2)\n```\nThis is a separate check and is not about double decoration. Marks such as `@pytest.mark.skip` or `@pytest.mark.usefixtures` store themselves on the function's `pytestmark` attribute. If the function has that attribute, the marks were applied before `@pytest.fixture` (the mark is the inner decorator). It only emits the `MARKED_FIXTURE` deprecation warning, and decoration continues. Marks have no effect on fixtures, so pytest warns rather than silently ignoring them.\n\n**Semantic difference**\n- **`isinstance(function, FixtureFunctionDefinition)`** is a type-based, identity-level check. It asks whether this object is already a fixture, that is, whether `@pytest.fixture` has already run on it. Wrapping a fixture in a second fixture would be ambiguous and wrong, so this is an error. Only real fixture wrappers match, so mark-only functions never trigger it.\n- **`hasattr(function, \"pytestmark\")`** is an attribute-based check. It asks whether the function carries marks. This says nothing about being a fixture. Any ordinary marked function or test has the attribute. The consequence is that the misuse is deprecated and warned about, not forbidden.\n\nBecause `@pytest.fixture` returns a `FixtureFunctionDefinition` rather than the plain function, marks applied after it (outside) land on the wrapper and are not seen by this check. The `pytestmark` check therefore only catches the mark-then-fixture order.\n\n**Ordering note**\nThe `\"request\"` reserved-name check comes after `FixtureFunctionDefinition` is constructed. It computes `name = self.name or function.__name__` and calls `fail(...)` if the name is `\"request\"`.",
+ "cost": 0.045315999999999995,
+ "turns": 2,
+ "duration_s": 9.12,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7114,
+  "cache_read": 28660,
+  "output": 1112,
+  "total": 36890
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def __call__\\\\(self, function: FixtureFunction\\\\)\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"output_mode\": \"content\", "
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 1,
+ "question": "What is the validation logic in the FixtureFunctionMarker.__call__ method that prevents double-decoration of fixture functions, and what is the semantic difference between detecting a FixtureFunctionDefinition instance versus checking for pytestmark attributes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

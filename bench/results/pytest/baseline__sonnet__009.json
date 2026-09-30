@@ -1,0 +1,36 @@
+{
+ "answer": "**The pattern:** `NotSetType` is a single-member enum used as a typed singleton sentinel. It follows the PEP 484 \"singleton types in unions\" recipe. It gives pytest a \"no value was provided\" marker that is separate from `None`, and type checkers can still narrow on it.\n\n**Definition** (`src/_pytest/compat.py:41-45`):\n```python\nclass NotSetType(enum.Enum):\n    token = 0\nNOTSET: Final = NotSetType.token\n```\n- The enum has exactly one member, `token`. `NOTSET` is that member, marked `Final`.\n- Because the type has one member, `x is NOTSET` narrows a `T | NotSetType` union for mypy. A plain `object()` sentinel can't do that.\n- `None` stays free to be a real value. For example, `nodeid: str | NotSetType | None = NOTSET` in `fixtures.py:1790` can tell \"no nodeid given\" from \"nodeid is `None`\".\n- Comparison is always by identity (`is` / `is not`).\n\n**How it separates internal state from the public API:** the sentinel stays in internal signatures and data structures. Users never see it, or it is translated into a normal behaviour first.\n\n- `src/_pytest/fixtures.py`\n  - Line 625 sets `param = NOTSET` when a request has no parameter. Line 751 checks `param is not NOTSET`.\n  - `FixtureManager.getfixturedefs`-style lookups (around line 1790/1806) use `nodeid: str | NotSetType | None = NOTSET`.\n- `src/_pytest/python.py`\n  - Line 1576 uses `callobj=NOTSET` in the `Function` constructor, and line 1584 checks `callobj is not NOTSET`. That way `None` could still be a real callable argument.\n  - Line 998 is in `IdMaker._idval_from_value`. It treats `NOTSET` as \"fall through to the default id\". The comment there says \"Note that NOTSET is an enum.Enum\", so the check has to come before the `isinstance(val, enum.Enum)` branch, which would otherwise call `str()` on it.\n- `src/_pytest/mark/structures.py`\n  - Line 108 types `ParameterSet.values` as `Sequence[object | NotSetType]`.\n  - Lines 223-227 build an \"empty parameter set\" as `(NOTSET,) * len(argnames)` with `id=\"NOTSET\"`. The skip/xfail mark is applied to it, so the placeholder never reaches user code.\n- `src/_pytest/pytester.py`\n  - Line 660 sets `CLOSE_STDIN: Final = NOTSET`.\n  - Lines 1340 and 1377 use `stdin: NotSetType | bytes | IO[Any] | int = CLOSE_STDIN` in `run` and `popen`.\n  - The public parameter is a named constant, `Pytester.CLOSE_STDIN`. Its internal representation is the sentinel, so callers can pass `None`, bytes or a file object without ambiguity. The docstring at line 1405 even documents the type as `_pytest.compat.NotSetType`.\n\n`src/_pytest/config/__init__.py:896` returns the string `\"<NOTSET>\"`. That is a separate, unrelated placeholder, not this enum. `logging.NOTSET` in `logging.py` is the stdlib log level and is also unrelated.",
+ "cost": 0.048557,
+ "turns": 4,
+ "duration_s": 13.544,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5909,
+  "cache_read": 49445,
+  "output": 1502,
+  "total": 56862
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"NOTSET|NotSetType\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/compat.py\", \"offset\": 36, \"limit\": 14}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/python.py\", \"offset\": 992, \"limit\": 12}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 9,
+ "question": "What is the sentinel value abstraction pattern that NotSetType implements within the pytest compatibility layer to decouple internal state representation from external API contracts?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 82
+ }
+}

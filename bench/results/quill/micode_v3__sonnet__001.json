@@ -1,0 +1,35 @@
+{
+ "answer": "`_got_registered_once` is a class-level flag on `Schematic` in `src/quill/sansio/schematics.py`. It stops anyone changing a schematic's setup after the schematic has been registered on an app.\n\n**How it works**\n- **Default value:** it is declared as `_got_registered_once = False` at line 172.\n- **Where it is set:** `Schematic.enroll` sets it to `True` at line 320. That is the core registration step that `App.enroll_plan` calls.\n- **The check:** `Schematic._verify_configuration_completed(f_name)` (lines 213-221) raises an `AssertionError` if the flag is `True`.\n- **Error message:** it says the setup method `'<f_name>'` can no longer be called on the schematic `'<name>'`. It adds that the schematic \"has already been registered at least once, any changes will not be applied consistently.\" It also tells you to finish all imports, decorators and functions before registering.\n- **What triggers the check:** the setup methods (`record`, `note_once_only`, `attach_link_regulation`, the `program_*` methods and so on) are decorated with `@preparationmethod`, which comes from the `Armature` base class. I did not open that decorator. The compiled repo notes say it is what invokes `_verify_configuration_completed`, so that link is unverified.\n\n**Why it exists**\n- **Deferred callbacks:** a schematic doesn't apply anything directly. It stores callbacks in `deferred_functions` through `record()`. `enroll` replays them onto the app, building a `SchematicSetupStatus` and calling each callback with it.\n- **Late additions are lost:** a callback added after registration would not run on apps that already enrolled the schematic. Those apps would be configured differently from apps that enrolled it later.\n- **Flag never resets:** the flag is only ever set, never cleared. It is true from the first enrollment on any app, and the one-way flip is what makes the check reliable.\n- **Errors, not warnings:** the changelog says this became a hard error in 2.3.0. In 2.2.0 it was only a warning.\n\nThe app has a matching guard. `App` refuses setup calls after its first request, and `test_absent_configuration_following_initial_call` in `tests/test_elementary.py` covers that.",
+ "cost": 0.0562232,
+ "turns": 3,
+ "duration_s": 9.604,
+ "tokens": {
+  "input": 4,
+  "cache_write": 9857,
+  "cache_read": 34686,
+  "output": 985,
+  "total": 45532
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 195, \"limit\": 50}",
+  "Grep {\"pattern\": \"_got_registered_once\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 75
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "answer": "`CertParamType.convert` in `src/flask/cli.py` (lines 791-825) handles the `--cert` option. The class is declared at lines 780-825. It tries three interpretations of the value in order, and it uses an exception handler to move from one to the next.\n\n**Setup**\n- `__init__` (L788-789) builds `self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)`.\n- `convert` first tries `import ssl` (L794-801). If that fails, it raises `click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`, and none of the fallbacks run.\n\n**Fallback chain**\n1. **File path (L803-804).** `self.path_type(value, param, ctx)` runs inside a `try`. If the value is an existing file, `convert` returns its resolved path.\n2. **`'adhoc'` string (L805-818).** If the path check raises `click.BadParameter`, the `except` block runs. It converts the value with `click.STRING(value, param, ctx).lower()`. If the result is `\"adhoc\"`, it does the following:\n   - It checks that `cryptography` can be imported. If not, it raises `BadParameter(\"Using ad-hoc certificates requires the cryptography library.\")`.\n   - Otherwise it returns the string `\"adhoc\"`.\n3. **`SSLContext` import (L820-823).** For any other value, it calls `import_string(value, silent=True)`. Because `silent=True`, a failed import returns `None` and doesn't raise. If the object is an `ssl.SSLContext` instance, `convert` returns it.\n4. **Failure (L825).** If none of the three matched, a bare `raise` re-raises the original `BadParameter` from the path check. The user sees the standard \"file does not exist\" error, not a message about `adhoc` or imports.\n\n**Follow-up in `_validate_key` (L828-864)**\n`_validate_key` is the callback on `--key`. It reads `ctx.params[\"cert\"]` and works out whether it is `\"adhoc\"` or an `SSLContext`.\n- If `--key` is given with an `adhoc` cert or an `SSLContext`, it raises `BadParameter`.\n- If `--key` is given with no cert, it raises `'\"--cert\" must also be specified.'`.\n- If `--key` is given with a file cert, it replaces the cert with the tuple `(cert, key)` (L858).\n- If `--key` is missing but the cert is a file, it raises `'Required when using \"--cert\".'` (L862).",
+ "cost": 0.0484582,
+ "turns": 2,
+ "duration_s": 9.177,
+ "tokens": {
+  "input": 4,
+  "cache_write": 8059,
+  "cache_read": 32821,
+  "output": 965,
+  "total": 41849
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"offset\": 778, \"limit\": 88}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 14,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 76
+ }
+}

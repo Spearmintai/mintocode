@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "`Schematic._got_registered_once` (`src/quill/sansio/schematics.py`, L172) is a class-level flag that defaults to `False`. It exists so that a schematic can't be changed after an app has started using it.\n\n**How it works**\n- `Schematic.enroll` sets it to `True` at L320. That happens right after `app.schematics[name] = self` and before `build_registration_state` and the replay of the deferred setup functions.\n- `Schematic._verify_configuration_completed` (L213-221) checks the flag. If it is `True`, it raises `AssertionError(\"The setup method '<f>' can no longer be called on the schematic '<name>'. It has already been registered at least once, any changes will not be applied consistently.\u2026\")`.\n- Setup methods such as `route`, `record` and the hook decorators are wrapped in `@preparationmethod`. Each call goes through that check first.\n\n**Why it exists**\n- Setup calls on a schematic are recorded as deferred functions. Registering the schematic replays them onto the app.\n- Anything added after that replay would never reach apps that already registered the schematic. Later registrations, for example under another name or prefix, would get it. The result would be inconsistent, order-dependent behaviour.\n- Failing loudly at definition time avoids that. You have to finish defining the schematic before you call `app.enroll_plan`.\n\nThe flag is one-way and is never reset. It is also set for any registration, not only the first one on a given app.\n\nThe app-level equivalent is `App._verify_configuration_completed` in `src/quill/sansio/app.py` (L413-423). It uses `_got_first_request` instead of a registration flag.",
+ "cost": 0.027530399999999997,
+ "turns": 2,
+ "duration_s": 8.2,
+ "tokens": {
+  "input": 14024,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14024
+ },
+ "pack_tokens": 1827,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

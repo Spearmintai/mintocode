@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py` (L155-193). It is Quill's version of Flask's `copy_current_request_context`. I read only this function and the greenlet test, not `InquiryScope.copy` itself. The session behaviour below comes from the docstring and the test.\n\n**At decoration time (L179-187)**\n- It reads the active request scope with `_cv_request.get(None)`.\n- If there is none, it raises `RuntimeError`. The message says it can only be used while a request context is active, such as in a view function.\n- Otherwise it calls `ctx.copy()` immediately, in the calling thread or greenlet. This gives the concurrent task its own snapshot of the request scope.\n- The snapshot is taken at decoration time, not call time. That means it is captured while the original request is still alive.\n\n**At call time (L189-191)**\n- `wrapper` runs `with ctx:`, which calls `InquiryScope.push` on the copy.\n- Pushing sets `_cv_request` for the greenlet's own context. `_cv_request` is a `ContextVar`, so a greenlet or thread only sees the scope while it is inside the `with` block.\n- Inside the block, the wrapper calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`. This is the app's hook for making sure the function `f` is callable synchronously. Its body is not among the spans I read.\n- When the block exits, `pop` tears the copy down. Outside the block, `request` and `current_app` are unavailable again.\n- `update_wrapper(wrapper, f)` keeps the original function's name and docstring.\n\n**Session preservation**\n- The docstring says the current session is included in the copied request context.\n- `InquiryScope.push` (L367-394) only opens a session if `session is None`. A copy that carries the session therefore keeps the data.\n- `tests/test_callscope.py` L150-177 (`test_microthread_scope_duplicating`) checks this:\n  - The view sets `session[\"fizz\"] = \"buzz\"` and then calls `request_ctx.copy()`.\n  - A greenlet function asserts that `request` and `current_app` are falsy outside the `with reqctx:` block.\n  - Inside the block, it asserts the request path is `/`, `args[\"foo\"]` is `\"bar\"`, and `session.get(\"fizz\") == \"buzz\"`.\n  - After the block, it asserts `request` is falsy again.\n  - The greenlet runs after the response has already been returned, so the copy outlives the original request.",
+ "cost": 0.0328286,
+ "turns": 3,
+ "duration_s": 11.8,
+ "tokens": {
+  "input": 14941,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14941
+ },
+ "pack_tokens": 1866,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 77
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "The repository has no dedicated `TypedDict` class. The \"type-safe dictionary\" is the `t.Mapping[str, t.Any]` member of `ResponseValue` in `src/quill/typing.py` (L12-23). The status code is kept out of that type and put in the `ResponseReturnValue` tuple forms in the same file.\n\n**Body type: `ResponseValue` (`src/quill/typing.py:12-23`)**\n- It is a union of `Response`, `str`, `bytes`, `list[Any]`, `Mapping[str, Any]`, iterators, and async iterables.\n- The comment at L17 says: \"Only dict is actually accepted, but Mapping allows for TypedDict.\"\n- `Mapping[str, Any]` is used instead of `dict` so that a user-defined `TypedDict` passes type checking. A `TypedDict` is compatible with `Mapping[str, object]` but not with `dict`.\n- A view can therefore be annotated `-> MyPayload`, where `MyPayload` is a `TypedDict`. It gets per-key type checking of the JSON body, and the framework's return type accepts it.\n- At runtime, `build_reply` (`src/quill/app.py:1218-1255`) handles `dict` and `list` by calling `self.json.response(rv)`. That is the JSON serialization step.\n\n**Status and headers: `ResponseReturnValue` (`src/quill/typing.py:36-42`)**\n- The full return type is the union of `ResponseValue` and these tuple forms:\n  - `tuple[ResponseValue, HeadersValue]`\n  - `tuple[ResponseValue, int]`\n  - `tuple[ResponseValue, int, HeadersValue]`\n  - `WSGIApplication`\n- The status (`int`) and headers (`HeadersValue`, defined at L29-33) are separate tuple positions. They are not keys or fields in the body dict.\n- A view can return `(payload, 404)` or `(payload, 201, {\"X-Foo\": \"bar\"})`. The body's `TypedDict` describes only the JSON content, and the status is typed independently as `int`.\n\n**How the two parts are handled**\n- The body goes through `build_reply`'s dict-to-JSON branch. `self.json.response` builds the response.\n- The status and headers from the tuple are applied when the response object is built. I did not read that unpacking code, only the `build_reply` summary.\n- Keeping the status out of the payload type means the `TypedDict` stays a pure data schema. It doesn't need status or header fields, and the type checker still accepts any `(body, status, headers)` combination.\n\n**Examples in the repo**\n- `docs/patterns/celery.rst:181` and `:204` annotate views as `-> dict[str, object]`.\n- `docs/errorhandling.rst:491` returns `notationize(e.to_dict()), e.status_code`, which is the body-plus-status tuple pattern.\n\nI didn't open the tuple-unpacking code, so I can't confirm its exact location or behavior.",
+ "cost": 0.057665400000000006,
+ "turns": 4,
+ "duration_s": 13.871,
+ "tokens": {
+  "input": 6,
+  "cache_write": 8276,
+  "cache_read": 52397,
+  "output": 1407,
+  "total": 62086
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"TypedDict|ResponseValue\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/typing.py\", \"limit\": 50}",
+  "Grep {\"pattern\": \"TypedDict|-> *dict\\\\[|status_code\", \"path\": \"/home/sq/micode-bench/repos/quill\", \"glob\": \"*.{rst,py,md}\", \"output_mode\": \"content\", \"head_limit\": 3"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 22,
+ "question": "How does the type-safe dictionary structure used as a view function return type annotation decouple JSON response serialization from HTTP status representation to maintain type safety?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 13,
+  "completeness": 12,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 71
+ }
+}

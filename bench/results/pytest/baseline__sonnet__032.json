@@ -1,0 +1,36 @@
+{
+ "answer": "**Short answer:** each `getitem()` call rebuilds a full pytest session, so it costs far more than the `evaluate_xfail_marks()` call after it. This checkout has no cache for string-condition compilation.\n\n## Why repeated `getitem()` then `evaluate_xfail_marks()` is slow\n\n**`Pytester.getitem` \u2192 `getitems` \u2192 `getmodulecol`** (`src/_pytest/pytester.py:1254`, `1276`, `1285`) does the following on every call:\n- `getitem()` calls `getitems()`, which calls `getmodulecol()`, and that writes the source to a new file with `makepyfile`.\n- `getmodulecol()` then calls `parseconfigure(*configargs)`, which builds a new `Config` and plugin manager, and a new `Session`.\n- The plugin manager loads and registers the builtin plugins and any setuptools entry points.\n- The module is then collected, so Python imports and executes it. Assertion rewriting parses the source to an AST, rewrites it and compiles it.\n- Finally `self.genitems([modcol])` walks the collection tree. `getitem()` throws away every item except the one named `funcname`.\n\nNothing is shared between calls, because each call gets a new file and a new config. The AST and compile work in assertion rewriting and the module import therefore happens again every time.\n\n**`evaluate_xfail_marks`** (`src/_pytest/skipping.py:213`) is much cheaper, but it is also uncached:\n- It iterates `item.iter_markers(name=\"xfail\")`, which walks the node chain.\n- It reads `mark.kwargs` and `item.config.getini(\"xfail_strict\")`.\n- For each condition it calls `evaluate_condition()` (`skipping.py:88`).\n\nFor a string condition, `evaluate_condition()` does the following on every call:\n- It builds a fresh `globals_` dict.\n- It calls `item.ihook.pytest_markeval_namespace(...)` and merges every returned dict.\n- It merges in `item.obj.__globals__`.\n- It runs `compile(condition, \"<xfail condition>\", \"eval\")`, which parses to an AST and compiles, and then `eval`s the result.\n\nThe `compile` of an identical string is repeated for every item and every evaluation. Boolean conditions skip all of that and only call `bool()`.\n\n## Existing caching and what could mitigate the cost\n\n- **Item stash, not a compile cache.** `pytest_runtest_setup` and `pytest_runtest_call` in `skipping.py` (around lines 248\u2013268) store the result in `item.stash[xfailed_key]`. The result is computed once per item per run and reused across the setup, call and report phases. `Item.stash` is a `Stash` object from `_pytest/stash.py`. This does not help across `getitem()` calls, because each call creates new items. A test that calls `evaluate_xfail_marks(item)` directly bypasses the stash.\n- **No `cached_eval` any more.** Older pytest versions had `cached_eval` and an `evalcache_key` stored on the config to memoize string-condition evaluation. A grep of `src/` finds neither, so the current code recompiles every time.\n- **Mitigations you could add:**\n  - Memoize `compile(condition, filename, \"eval\")` with `functools.lru_cache`, keyed on `(condition, filename)`. Only the code object is cached. The `eval` still runs against the fresh namespace, so results that depend on `config` or module globals stay correct.\n  - In tests, call `getmodulecol()` or `getitems()` once with several test functions in one source string. Then run `evaluate_xfail_marks()` on each returned item. This pays the config, session, import and AST cost once.\n  - Use a module- or class-scoped fixture to hold the collected items.\n  - Make the test parametrized-friendly, or write the condition as a boolean, so there is no string to compile.\n  - Use `pytester.runpytest_inprocess` on one file when you only need pass/fail outcomes.\n\nI read `pytester.py`, `skipping.py` and the `grep` results. I did not read the rest of `getmodulecol()`, the `Stash` class or the assertion-rewriting hook, so the description of those parts comes from general knowledge of pytest.",
+ "cost": 0.060889200000000004,
+ "turns": 4,
+ "duration_s": 16.521,
+ "tokens": {
+  "input": 6,
+  "cache_write": 7952,
+  "cache_read": 49046,
+  "output": 1926,
+  "total": 58930
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"evaluate_xfail_marks|evalcache_key|_cached_eval|def cached_eval|def evaluate_condition|def getitem|def getitems|def getmodulecol\", \"path\": \"/home/s",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/skipping.py\", \"limit\": 150, \"offset\": 85}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 1250, \"limit\": 60}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 32,
+ "question": "Why would repeated invocations of pytester.getitem() followed by evaluate_xfail_marks() impact test suite performance, and what internal caching mechanisms could mitigate redundant AST parsing and mark evaluation across multiple test evaluations?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 75
+ }
+}

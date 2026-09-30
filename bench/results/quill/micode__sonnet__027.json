@@ -1,0 +1,34 @@
+{
+ "answer": "`Quill.launch_asset` in `src/quill/app.py:330-361` only opens files for reading. The code doesn't state a reason beyond the docstring's \"Only reading is supported\", so the explanation below is my inference from the design.\n\n**What the method does**\n- `launch_asset(resource, mode=\"rb\", encoding=None)` opens `os.path.join(self.root_path, resource)`.\n- The check at line 353 is `if mode not in {\"r\", \"rt\", \"rb\"}: raise ValueError(\"Resources can only be opened for reading.\")`.\n- The docstring says the same: \"Only reading is supported, valid values are \"r\" (or \"rt\") and \"rb\".\"\n- `Schematic.launch_asset` in `src/quill/schematics.py:104-128` has the same restriction.\n\n**Why it is read-only**\n- **Package files are code and data, not storage.** `root_path` is the directory of the module or package that defines the app. The docstring's example is a `schema.sql` file sitting next to `app.py`. These files are part of what you deploy, so the framework treats them as immutable.\n- **Writing there is unsafe.** The install location may be read-only, for example a zip, egg or system site-packages. Writes would also change the source tree or be lost on redeploy. Blocking write modes rules this out.\n- **Writable files have a separate method.** `launch_deployment_asset` (`app.py:363-383`) opens files relative to `instance_path`, the per-deployment folder meant for runtime data and config. It accepts any mode. Its docstring says: \"Unlike `launch_asset`, files in the instance folder can be opened for writing.\"\n\n**Related details**\n- The allowlist also excludes modes like `\"r+\"`, `\"a\"`, `\"w\"` and `\"x\"`.\n- `\"rb\"` calls `open(path, mode)` with no encoding. Text mode passes `encoding`, which is `None` by default.\n- `launch_deployment_asset` defaults `encoding` to `\"utf-8\"` and skips it when `\"b\"` is in the mode.",
+ "cost": 0.045605599999999996,
+ "turns": 2,
+ "duration_s": 8.66,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7798,
+  "cache_read": 32728,
+  "output": 786,
+  "total": 41316
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 328, \"limit\": 56}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 81
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "answer": "`pytester.runpytest_subprocess()` returns a `RunResult`, and its `.ret` attribute holds the exit status of the pytest child process. That status is normally a member of `pytest.ExitCode`.\n\n**How the value is produced**\n- `Pytester.runpytest_subprocess` (`src/_pytest/pytester.py:1476`) builds the command line. It creates a numbered `--basetemp` directory prefixed `runpytest-`. It adds each plugin in `self.plugins` with `-p`, and only string plugin names are allowed. It then prepends `_getpytestargs()`, which is the interpreter plus `-mpytest`.\n- It then calls `Pytester.run(...)` (line 1373). That method runs the subprocess and gets `ret = popen.wait()` (lines 1440 and 1443, the second with a timeout).\n- `run` converts `ret` to `ExitCode(ret)` at line 1455 and returns `RunResult(ret, out, err, duration)` at line 1456.\n- If the timeout expires, `Pytester.TimeoutExpired` is raised instead of a `RunResult`.\n\n**What `RunResult.ret` means** (`RunResult.__init__`, lines 521\u2013532)\n- It is the process exit code, the same value `pytest.main()` returns. The docstring just says \"The return value.\"\n- The constructor tries `ExitCode(ret)`. If the value isn't a member of the enum, for example a code set by a plugin or a signal-derived status, it falls back to the raw `int`. So the type is `int | ExitCode`.\n- Because `ExitCode` is an `enum.IntEnum`, `result.ret == 0` and `result.ret == ExitCode.OK` are both valid comparisons.\n\n**The `ExitCode` values** (`src/_pytest/config/__init__.py:92`)\n\n| Value | Name | Meaning |\n|---|---|---|\n| 0 | `OK` | Tests passed. |\n| 1 | `TESTS_FAILED` | Tests were collected and run, and some failed. |\n| 2 | `INTERRUPTED` | The run was interrupted, for example by Ctrl-C or `-x`/`maxfail` stopping it early. |\n| 3 | `INTERNAL_ERROR` | An internal error got in the way. |\n| 4 | `USAGE_ERROR` | pytest was misused, for example bad command-line arguments. |\n| 5 | `NO_TESTS_COLLECTED` | pytest couldn't find any tests. |\n\nThe `ExitCode` docstring notes that users and plugins may supply other exit codes as well.\n\n**What `.ret` does not tell you**\n- `.ret` is a coarse summary of the whole session. It doesn't give per-test outcomes or counts.\n- Those come from `RunResult.parseoutcomes()` and `assert_outcomes()`, which parse the terminal summary line from stdout.\n- Because the run is out-of-process, there is no `reprec` object as there is with in-process runs. `HookRecorder.ret` (line 265) is only set for those in-process runs (line 1140).\n- `runpytest_inprocess` (line 1153) also returns a `RunResult`, and it maps a `SystemExit` or an internal failure to the same codes. For an internal failure it sets `ExitCode(3)` (line 1182).",
+ "cost": 0.06484780000000001,
+ "turns": 6,
+ "duration_s": 16.455,
+ "tokens": {
+  "input": 6,
+  "cache_write": 9281,
+  "cache_read": 47009,
+  "output": 1831,
+  "total": 58127
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def runpytest_subprocess|def runpytest_inprocess|def runpytest\\\\(|class RunResult|self\\\\.ret\\\\b|def parseoutcomes|def assert_outcomes\", \"path\": \"/h",
+  "Grep {\"pattern\": \"class ExitCode\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/config/__init__.py\", \"output_mode\": \"content\", \"-A\": 22}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 518, \"limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 1476, \"limit\": 40}",
+  "Grep {\"pattern\": \"def run\\\\(|def _runpytest_method|ret = |RunResult\\\\(\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"output_mode\": \"content"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 0,
+ "question": "What is the execution semantics encoded by the return value from `pytester.runpytest_subprocess()`, and what specific exit code semantics does the `.ret` attribute represent in the context of pytest's test execution model?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 19,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

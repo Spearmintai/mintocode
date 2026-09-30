@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "answer": "The method is `App._locate_fault_processor` in `src/quill/sansio/app.py:L823-846`. Its nesting is not schematic \u2192 code \u2192 MRO. The HTTP status code loop is the outer loop and the schematic scope loop is inside it.\n\n| Lines | What happens |\n|---|---|\n| L831 | `exc_class, code = self._obtain_exception_type_and_status(type(e))` resolves the class and status code. That helper is in `skeleton.py:L656-698`. It returns `(cls, cls.code)` for `HTTPException` subclasses and `(cls, None)` otherwise. |\n| L832 | `names = (*schematics, None)` builds the scope list. Schematic names come first and `None` (the app) comes last. |\n| L834 | The outer loop is `for c in (code, None) if code is not None else (None,)`. It tries the status code first, then the `None` (class-only) bucket. Non-HTTP exceptions only get `(None,)`. |\n| L835-836 | The inner loop is `for name in names`. It fetches `self.error_handler_spec[name][c]`, which is a `{class: handler}` dict. |\n| L838-839 | An empty `handler_map` is skipped with `continue`. |\n| L841-845 | The innermost loop is `for cls in exc_class.__mro__`. It calls `handler_map.get(cls)` and returns the first non-`None` handler. Specific classes are therefore checked before their bases. |\n| L846 | `return None` if nothing matched. |\n\nBecause the code loop is outermost, the effective priority matches the docstring at L826-829 and `CHANGES.rst:L865-867`:\n\n1. schematic + code\n2. app + code\n3. schematic + class\n4. app + class\n\nA schematic class-only handler therefore loses to an app-level code handler.\n\nThe MRO walk only happens inside a single `(scope, code-or-None)` bucket. In `tests/test_elementary.py:L967-996`, a handler registered for `ForbiddenSubclass` is stored under code 403, since its `.code` is 403. It is found first by the MRO walk in the 403 bucket. A plain `Forbidden` skips it and gets the `403` handler.\n\nThe material does not say how `request.schematics` is ordered for nested schematics. `tests/test_schematics.py:L793-839` tests nested resolution, but the ordering itself is set wherever `request.schematics` is built, which is not shown here.",
+ "cost": 0.052188,
+ "turns": 1,
+ "duration_s": 10.8,
+ "tokens": {
+  "input": 11236,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 11236
+ },
+ "pack_tokens": 5939,
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 18,
+  "total": 86
+ }
+}

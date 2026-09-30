@@ -1,0 +1,31 @@
+{
+ "answer": "The test is `test_dotted_name_not_allowed` in `tests/test_blueprints.py:254`. It calls `flask.Blueprint(\"app.ui\", __name__)` inside `pytest.raises(ValueError)`. The \"modular route component\" in your question is the `Blueprint`.\n\n**Where the error comes from:** `Blueprint.__init__` in `src/flask/sansio/blueprints.py:198-199` contains this check:\n\n```python\nif \".\" in name:\n    raise ValueError(\"'name' may not contain a dot '.' character.\")\n```\n\n`flask.Blueprint` (in `src/flask/blueprints.py`) inherits from the sansio `Blueprint`, so the check runs when the constructor is called. A related check just above it at line 195 rejects an empty name. `test_empty_name_not_allowed` covers that one.\n\n**Why dots are forbidden:** Flask uses the dot as a namespace separator in endpoint names.\n- **Endpoint names:** `BlueprintSetupState.add_url_rule` (line 112) builds them as `f\"{self.name_prefix}.{self.name}.{endpoint}\"`. This is how `url_for(\"bp.view\")` works.\n- **Nested blueprints:** `Blueprint.register` (line 304) builds the dotted name as `f\"{name_prefix}.{self_name}\"`. A child blueprint's registered name is therefore `parent.child`.\n\nIf a blueprint could be named `app.ui`, it would be ambiguous with a blueprint `ui` nested inside a blueprint `app`. Endpoint lookups and `app.blueprints` keys could then collide or resolve to the wrong place. Rejecting dots in the constructor keeps the dot reserved for nesting.\n\nThe same rule applies to endpoint and view function names. `Blueprint.add_url_rule` (lines 427-431) raises `ValueError` for dotted `endpoint` or `view_func.__name__` values. `test_route_decorator_custom_endpoint_with_dots` tests that.",
+ "cost": 0.037199800000000005,
+ "turns": 5,
+ "duration_s": 11.542,
+ "tokens": {
+  "input": 8,
+  "cache_write": 2528,
+  "cache_read": 71559,
+  "output": 1276,
+  "total": 75371
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 31,
+ "question": "Why does the test that validates blueprint names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

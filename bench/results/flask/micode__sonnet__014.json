@@ -1,0 +1,31 @@
+{
+ "answer": "`CertParamType.convert` in `src/flask/cli.py:791-825` handles the `--cert` option. It tries three interpretations of the value in order and raises `BadParameter` if none fit. `CertParamType` is a `click.ParamType` with `name = \"path\"`, defined at L780-825. The `flask run` command uses it for `--cert`.\n\n**Setup.** `__init__` (L788-789) builds `self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)`. That accepts only an existing file, not a directory, and returns its resolved absolute path.\n\n**Fallback chain in `convert`:**\n\n0. **SSL support check (L794-801).** `convert` first does `import ssl`. If that fails, it raises `click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`. This check is a precondition, not one of the three fallbacks.\n\n1. **File path (L803-804).** `return self.path_type(value, param, ctx)`. If the value is an existing file, this returns the resolved path and nothing else runs. If the path is missing or is a directory, `click.Path` raises `click.BadParameter`, and the `except click.BadParameter:` clause at L805 catches it.\n\n2. **Adhoc string (L806-818).**\n   - The `except` block first normalises the value with `click.STRING(value, param, ctx).lower()`.\n   - If the value equals `\"adhoc\"`, it tries `import cryptography`. A missing package raises `BadParameter(\"Using ad-hoc certificates requires the cryptography library.\")`.\n   - Otherwise it returns the string `\"adhoc\"`. Werkzeug's `run_simple` later generates a self-signed certificate from that string.\n\n3. **`SSLContext` import string (L820-823).**\n   - `obj = import_string(value, silent=True)`. `silent=True` means a failed import returns `None` instead of raising.\n   - If `isinstance(obj, ssl.SSLContext)`, it returns the object.\n   - The value has already been lowercased at step 2, so the import string is lowercased too.\n\n4. **Final failure (L825).** A bare `raise` re-raises the original `BadParameter` from the path check. The user therefore sees click's normal \"file does not exist\" style error, not a message about SSL contexts.\n\n**Downstream.** The `_validate_key` callback on `--key` (L828-864) reads the converted value:\n- It rejects `--key` when the cert is `\"adhoc\"` or an `SSLContext`.\n- It requires `--key` when the cert is a file path, raising `'Required when using \"--cert\".'` otherwise.\n- When both are given, it sets `ctx.params[\"cert\"] = (cert, key)`.",
+ "cost": 0.0470676,
+ "turns": 2,
+ "duration_s": 10.486,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7561,
+  "cache_read": 32828,
+  "output": 1025,
+  "total": 41418
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 80
+ }
+}

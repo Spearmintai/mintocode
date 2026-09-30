@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "The excerpts show part of the mechanism, but the code that actually writes into the shared environment is not included.\n\n**What the material shows**\n\n1. **Registration is guarded and returns the function unchanged.** `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py:L443-458`) is decorated with `@preparationmethod` (`src/quill/sansio/skeleton.py:L42-49`). That wrapper calls `self._verify_configuration_completed(f.__name__)` before every call. The decorator then calls `self.attach_program_layout_sieve(f, name=name)` and returns `f`. The docstring says the filter is \"available in any template rendered by the application\" and is equivalent to `Quill.layout_sieve`. So the schematic-level filter is meant to end up in the application-wide environment, not a per-schematic one.\n\n2. **Deferred registration gets the app.** `SchematicSetupStatus` (`src/quill/sansio/schematics.py:L34-116`) is created per enrollment and \"passed to all enroll callback functions\". It exposes `app`, `schematic`, `options` and `first_registration`. Deferred callbacks therefore have the application object when the schematic is enrolled. They can register on the app's shared structures at that point, and `first_registration` lets them avoid duplicating one-time work.\n\n3. **App-wide scoping has a visible pattern.** `Schematic.preceding_program_inquiry` (`src/quill/sansio/schematics.py:L553-561`) appends its function to `app.before_request_funcs` under key `None`, the app-wide key. That is the same \"schematic registers app-wide\" idea, though it is for request hooks, not templates.\n\n4. **The shared environment is `app.markup_engine_env`.** `test_append_layout_universal` (`tests/test_layouting.py:L311-321`) shows that `@app.layout_universal()` puts `get_stuff` into `app.markup_engine_env.globals`. `draw_layout_text(\"{{ get_stuff() }}\")` then renders `\"42\"`. `test_layout_sieve_with_label_and_layout` (`tests/test_layouting.py:L190-200`) shows a filter registered under the name `super_reverse`, which the template uses.\n\n5. **`request` stays available during streamed rendering.** `flow_layout` and `flow_layout_text` wrap the generator with `flow_with_environment` when a request is active. Context that depends on the request therefore still works while the template streams.\n\n**What the material does not settle**\n\n- The body of `attach_program_layout_sieve`, and the equivalents for globals and context processors, are not shown. I can't confirm whether they write straight into `app.markup_engine_env.filters` or defer through an enroll callback such as a `note_once_only`-style hook.\n- How a template context processor (`TemplateContextProcessorCallable`, `src/quill/typing.py:L64-66`) is stored and applied at render time is not shown. That includes whether schematic processors are keyed by schematic name.\n- `SchematicSetupStatus.__init__` is only partly visible (it is cut off at L73), and `attach_link_regulation` (L87-116) is not shown.\n\nTo confirm the details, read `attach_program_layout_sieve` and the neighbouring `attach_*` methods in `src/quill/sansio/schematics.py`. Also read `Quill.build_layout_ecosystem` (`src/quill/app.py:L385-423`) and `Quill.refresh_layout_scope` (`src/quill/app.py:L506-532`), which likely build the environment and inject context.",
+ "cost": 0.042062,
+ "turns": 1,
+ "duration_s": 23.6,
+ "tokens": {
+  "input": 7974,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7974
+ },
+ "pack_tokens": 3690,
+ "score": {
+  "correctness": 11,
+  "completeness": 7,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 12,
+  "total": 58
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py` (L155-193). It isolates greenlets by copying the request scope when the function is decorated, and it carries the session across by handing the copy the same session object.\n\n**At decoration time (L179-187)**\n- It reads `_cv_request.get(None)`. If no request scope is active, it raises `RuntimeError(\"'duplicate_active_inquiry_scope' can only be used when a request context is active, such as in a view function.\")`.\n- Otherwise it calls `ctx.copy()` immediately. The copy is taken when the function is decorated, not when it is later called. This matters for greenlets, because the spawned greenlet starts with no context of its own.\n\n**What the copy contains (`InquiryScope.copy`, L337-355)**\n- The copy is a new scope object that shares the app, the environ, the same request object, and the current session.\n- Reusing the session is how session data crosses the boundary. `InquiryScope.push` (L367-394) only opens a session if the scope's session is `None`. The copy already holds one, so pushing it does not reload or reopen the session.\n- The docstring says the same thing: \"The current session is also included in the copied request context.\"\n\n**At call time (L189-193)**\n- `wrapper` runs `with ctx:`, which pushes the copied scope. That sets `_cv_request` inside the greenlet's own context. It also ensures a program scope for the app, so `g` and `current_app` work.\n- It then calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- On exit, `InquiryScope.pop` (L396-431) resets the context var for the greenlet.\n- `update_wrapper(wrapper, f)` keeps the original function's metadata.\n\n**Test coverage**\n- `tests/test_callscope.py:L150-177` checks the manual version. The view sets `session['fizz']='buzz'` and copies `request_ctx`. A greenlet then asserts there is no scope outside the copied context and a full scope inside it.\n- `tests/test_callscope.py:L179-202` checks the decorator form, which gives the same result.\n\n**Not settled by the material**\n- I haven't read `guarantee_blocking`, so I can't say exactly how it adapts `f`. Look at `Quill.guarantee_blocking` in `src/quill/app.py`.\n- Because the session object is shared rather than deep-copied, changes made in the greenlet apply to the same session object. Whether they are saved depends on the main request's session-save step. That step is not in the material.",
+ "cost": 0.0410664,
+ "turns": 1,
+ "duration_s": 8.8,
+ "tokens": {
+  "input": 11367,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 11367
+ },
+ "pack_tokens": 4701,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

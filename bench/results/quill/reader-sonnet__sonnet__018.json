@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 18,
+ "question": "How does the method that registers URL rules on schematic objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "sonnet",
+ "answer": "The method is `Schematic.attach_link_regulation` (src/quill/sansio/schematics.py:L412-441). It defers registration in two steps: it validates its arguments, then it hands a lambda to `self.record(...)` instead of calling anything on a setup state.\n\n**1. Validation runs immediately (L427-431).**\n- A `terminus` containing `.` raises `ValueError(\"'terminus' may not contain a dot '.' character.\")`.\n- A `view_func` whose `__name__` contains `.` raises `ValueError(\"'view_func' name may not contain a dot '.' character.\")`.\n\nThese errors surface at decoration time, not at enrollment.\n\n**2. The lambda is recorded, not run (L433-441).**\n```python\nself.record(\n    lambda s: s.attach_link_regulation(\n        rule, terminus, view_func,\n        provide_automatic_options=provide_automatic_options,\n        **options,\n    )\n)\n```\n- The lambda takes one parameter, `s`, the state object.\n- It closes over `rule`, `terminus`, `view_func`, `provide_automatic_options` and `options` from the enclosing call.\n- At decoration time no state exists yet, because a `SchematicSetupStatus` is only created during enrollment. So the method can't call a state's `attach_link_regulation` directly. It wraps that call in a callable that takes the state later.\n\n**3. `record` stores it.**\n`Schematic.record` (L223-230) appends the function to `deferred_functions`. Its type is `DeferredSetupFunction` (L17), a callable taking a `SchematicSetupStatus` and returning `None`.\n\n**4. Replay happens at enrollment.**\n- `App.enroll_plan` (src/quill/sansio/app.py:L569-595) calls `Schematic.enroll(app, options)` (schematics.py:L273-377).\n- `enroll` builds the state via `build_registration_state` (L246-253), which returns `SchematicSetupStatus(self, app, options, first_registration)`.\n- It then calls each function in `deferred_functions` with that state. The lambda's `s` is bound to this state, and `s.attach_link_regulation(...)` runs.\n- `SchematicSetupStatus.attach_link_regulation` (L87-116) applies the `url_prefix` to the rule, builds the dotted terminus `name_prefix.name.terminus`, merges `link_presets` and `defaults`, and delegates to `App.attach_link_regulation`. That call is what actually adds the rule to the app's `url_map` and `view_functions`.\n\n**Guard.** The method is decorated with `@preparationmethod` (L412). Per the flow notes, it raises `AssertionError` if called after `Schematic._got_registered_once` is set. So a rule can't be added after the schematic has been enrolled.\n\n**Why it is deferred.** A schematic has no `url_map` of its own, and its final URL prefix, subdomain and name depend on how and where it is enrolled, which can happen several times or nested. Recording a closure lets the same schematic be replayed with a different state each time.\n\nThe compiled material does not include the `record` body or the `enroll` replay loop verbatim, only their summaries. For those exact lines, read L223-230 and L318-377.",
+ "cost": 0.047868,
+ "turns": 1,
+ "duration_s": 10.0,
+ "tokens": {
+  "input": 10351,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10351
+ },
+ "pack_tokens": 5717,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "The overhead comes from how `_locate_fault_processor` (`src/quill/sansio/app.py:823-846`) is structured. It does a linear walk over the exception's MRO inside two nested loops. The handler registry is also not indexed for this kind of lookup, and the result is never cached.\n\n**How the lookup works**\n- `_obtain_exception_type_and_status(type(e))` splits the exception into a class and an optional HTTP status code.\n- It builds `names = (*schematics, None)`. These are the request's schematics (this codebase's name for Flask-style blueprints) plus the app-level scope.\n- The outer loop runs over `(code, None)` when a code exists, otherwise over `(None,)`.\n- The middle loop runs over `names`. For each pair it fetches `handler_map = self.error_handler_spec[name][c]`. `error_handler_spec` is declared in `skeleton.py:123` and populated at `skeleton.py:654` as `error_handler_spec[None][code][exc_class] = f`. Schematic registrations are merged in at `schematics.py:388-397`.\n- The inner loop is `for cls in exc_class.__mro__: handler_map.get(cls)`. It does one dict probe per ancestor class, from most derived to `object`, and returns the first hit.\n\n**Why this is costly with deep hierarchies and many handlers**\n1. **The inner loop is O(depth) and repeats for every scope.** An exception whose MRO has D classes needs up to D `dict.get` calls per non-empty `(code, name)` handler map. In the worst case, such as a fallback handler registered only on `Exception`, or no handler at all, every map is scanned to the end. The cost is roughly `(1 or 2 codes) \u00d7 (S schematics + 1) \u00d7 D` probes.\n2. **Each probe checks every ancestor.** The `handler_map` dict is keyed by exception class. The code does not intersect the map's keys with the MRO or precompute which registered classes are relevant. It tests all D ancestors, including ones that can never have a handler, such as `BaseException` and `object`.\n3. **Nothing is cached.** The result for a given `(type(e), schematics, code)` is recomputed on every error. Callers at `src/quill/app.py:774`, `804` and `857` (HTTP exception handling, user exception handling, and the 500 path) each run the whole search again.\n4. **Precedence forces the full scan.** The order is schematic-with-code, then app-with-code, then schematic-with-class, then app-with-class. Because of this, a miss at a more specific level cannot short-circuit anything. It only falls through to the next level's full MRO walk.\n\nThe only early exits are the `if not handler_map: continue` check, which skips empty maps, and returning on the first match. Neither helps when handlers are registered on broad base classes or when nothing matches.\n\nEach dict probe is cheap, so this is a modest per-error cost rather than a hot-path disaster. It grows multiplicatively with hierarchy depth, the number of nested schematics, and the code/no-code split.",
+ "cost": 0.04674880000000001,
+ "turns": 4,
+ "duration_s": 12.667,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5780,
+  "cache_read": 48334,
+  "output": 1395,
+  "total": 55515
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_locate_fault_processor\", \"output_mode\": \"content\", \"-n\": true}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/app.py\", \"offset\": 800, \"limit\": 70}",
+  "Grep {\"pattern\": \"error_handler_spec|_find_error_handler|def _get_exc_class_and_code\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill\", \"output_mode\": \"content\""
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _locate_fault_processor create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 81
+ }
+}

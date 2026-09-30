@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "The flag is `Schematic._got_registered_once`, in `src/quill/sansio/schematics.py`. It makes a schematic's configuration frozen once it has been enrolled on an app.\n\n**How it works**\n\n1. `Schematic.enroll` (L273-377) sets `self._got_registered_once = True` before it replays the deferred functions. The compiled answer states this ordering. The exact line is in the part of `enroll` past L312, which was not shown.\n2. Every setup method is decorated with `@preparationmethod` (`src/quill/sansio/skeleton.py` L42-49). The wrapper calls `self._verify_configuration_completed(f_name)` before running the real method. This covers `route`, the hook decorators, and `record` (L223-230, which is itself decorated).\n3. `Schematic._verify_configuration_completed` (L213-221) checks `if self._got_registered_once:`. If it is true, it raises `AssertionError(\"The setup method '<f_name>' can no longer be called on the schematic '<name>'. It has already been registered at least once, any changes will not be applied consistently. ...\")`.\n\n**Purpose**\n\n`enroll` copies or replays the schematic's state onto the app. That state includes the deferred functions collected by `record`, and per the compiled answer the routes and hooks registered through the setup methods. If you add a route or hook after enrollment, apps that already enrolled the schematic would not see it. Apps enrolling later would see it. The result would be inconsistent between apps, or between multiple registrations of the same schematic. The assertion turns that silent inconsistency into an immediate error.\n\nThe message tells you what to do: finish all imports, decorators and functions that set up the schematic before registering it (that is, before calling `app.enroll_plan`).\n\n**Related check**\n\n`App._verify_configuration_completed` follows the same pattern with `_got_first_request`. That flag is initialized in `App.__init__` and set in the concrete `src/quill/app.py` request handling, which was not shown, so I can't give the exact line where it is set.\n\n**Not settled by the material**\n\nThe exact line where `_got_registered_once` is initialized (presumably `Schematic.__init__`, with a default of `False`) and the exact line in `enroll` where it is set to `True` are both outside the excerpts. Look there, in the L313-377 remainder of `enroll` and in `__init__`, to confirm.",
+ "cost": 0.017315999999999998,
+ "turns": 1,
+ "duration_s": 11.1,
+ "tokens": {
+  "input": 3148,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 3148
+ },
+ "pack_tokens": 1258,
+ "score": {
+  "correctness": 14,
+  "completeness": 14,
+  "relevance": 14,
+  "clarity": 13,
+  "reasoning": 14,
+  "total": 69
+ }
+}

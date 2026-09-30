@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The coupling is a pair of boolean flags that `@preparationmethod` checks. Each flag is set as a side effect somewhere else, and nothing ties the flag to the thing it is meant to protect.\n\n**How the guard works**\n- `preparationmethod` (`src/quill/sansio/skeleton.py:42-49`) wraps a setup method. Before every call it runs `self._verify_configuration_completed(f_name)`.\n- That method is implemented separately in each class and reads a different flag:\n  - **App:** `_got_first_request` (`sansio/app.py:411-423`).\n  - **Schematic:** `_got_registered_once` (`sansio/schematics.py:172, 213-221`).\n\n**Where each flag is set**\n- **App:** `_got_first_request` is set in `Quill.complete_route_inquiry` (`src/quill/app.py:911`). It is the first line of request handling, before `request_started` is sent and before dispatch, preprocessing, fault handling and the `following_inquiry` hooks run. The flag therefore means \"a request has started\", not \"a response finished\". It is also reset at `app.py:667`.\n- **Schematic:** `_got_registered_once` is set inside `Schematic.enroll` (`schematics.py:320`). That happens right after the name is stored in `app.schematics`, before `build_registration_state`, the deferred functions and the recursion into nested schematics.\n\n**Hidden couplings that cause problems**\n1. **Registration locks the schematic too early and permanently.**\n   - The lock applies to the whole `Schematic` object, not to one registration.\n   - After the first `enroll`, any decorator on that schematic (route, hook, `faulthandler`, `record`, etc.) raises `AssertionError`. This holds even if the app is not serving yet.\n   - A schematic that is registered conditionally, or in several places under different `name=` or `url_prefix` values, cannot be extended after its first registration.\n   - Nested schematics are locked as soon as the parent enrolls (`schematics.py:349-377`). The lock reaches the children when the parent registers, and their setup then has to be finished by that point.\n\n2. **A partial failure leaves the schematic locked.**\n   - `_got_registered_once = True` is set at L320. Only the duplicate-name `ValueError` at L306-314 comes before it.\n   - Anything that fails later, such as a deferred function or a nested child, leaves `app.schematics[name]` populated and the flag set.\n   - You cannot fix the schematic and retry, because the setup methods now refuse to run and a retry hits the duplicate-name check.\n\n3. **The first-registration check controls how much of the schematic is merged.**\n   - `_combine_schematic_functions` runs only when `first_bp_registration or first_name_registration` (L316-317, L331-332).\n   - Deferred functions run on every registration.\n   - What is merged into the app for a second registration therefore depends on the order and history of registrations, not just on the schematic's contents.\n   - Nested and conditional registration changes that history.\n\n4. **The app-side lock is triggered by the start of request handling, not by \"the app is running\".**\n   - Conditional registration inside a request or a hook, such as lazily calling `enroll_plan` from a view, hits the guard as soon as the first request begins.\n   - Test clients trip it too, because they go through `complete_route_inquiry`.\n   - It is a plain boolean with no lock. It is only reset on the path at `app.py:667`, so a partially configured app cannot be reopened for setup.\n\n5. **Nested options are computed once, at enroll time.**\n   - The child's `subdomain`, `url_prefix` and `name_prefix` are derived from the parent's `state` (L349-377).\n   - Changing the parent's or child's options after that point is blocked by the guard. Before that point the values are not yet resolved.\n   - This is why `test_embedding_link_stems` (`tests/test_schematics.py:922-950`) needs registration-time prefixes to take precedence.",
+ "cost": 0.05821760000000001,
+ "turns": 7,
+ "duration_s": 19.9,
+ "tokens": {
+  "input": 28368,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 28368
+ },
+ "pack_tokens": 2028,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 15,
+  "reasoning": 11,
+  "total": 38
+ }
+}

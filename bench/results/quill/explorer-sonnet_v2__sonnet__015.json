@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "answer": "The URL prefix plays no part in how the filter gets registered. The filter is added to the app's shared template environment, and the prefix only affects routes.\n\n**Registration (`src/quill/sansio/schematics.py`)**\n- `program_layout_sieve(name=None)` (L443-458) is the decorator form. It calls `attach_program_layout_sieve(f, name=name)` and returns `f`.\n- `attach_program_layout_sieve` (L460-475) defines a closure, `register_template(state)`. The closure does `state.app.markup_engine_env.filters[name or f.__name__] = f`. It then passes the closure to `self.note_once_only(...)`.\n- Nothing is written to the app at decoration time, because the schematic has no app yet.\n- `note_once_only` (L232-244) wraps the closure so it only runs when `state.first_registration` is true. It then stores the wrapper with `record` (L224-230), which appends to `self.deferred_functions`.\n\n**Enrollment**\n- `Quill.enroll_plan` calls `Schematic.enroll(app, options)` (L273-377). Those options can include `url_prefix`.\n- `enroll` computes `first_bp_registration` (L316), which is true only if this schematic object isn't already in `app.schematics`. It then builds a `SchematicSetupStatus` via `build_registration_state(app, options, first_bp_registration)` (L246-253, L321).\n- `enroll` then runs `for deferred in self.deferred_functions: deferred(state)` (L334-335). That is the point where the filter lands in `app.markup_engine_env.filters`.\n\n**Why the prefix doesn't matter**\n- `url_prefix` and `subdomain` live in `state.url_prefix` and `state.subdomain`. They are used only when attaching routes, and by `enroll` when it merges prefixes for nested schematics (L349-377).\n- The filter callback never reads them. The environment belongs to the app, so the filter is visible to every template rendered by the app, including templates rendered from the prefixed schematic's views.\n- Because the filter is applied during enrollment, it is in place before any request is served. Registration order between routes and filters doesn't matter either.\n- The first-registration guard means that mounting the same schematic twice, for example under two different prefixes and names, registers the filter only once.\n- `@preparationmethod` on these methods blocks new registrations once the schematic has been registered (see the setup-guard convention in the core card).\n\n**Tests that pin this**\n- `tests/test_schematics.py::test_layout_sieve_with_layout` (L414-428) checks that a filter registered before the route renders `b'dcba'`.\n- `tests/test_schematics.py::test_layout_sieve_with_label` (L388-398) checks a custom label.\n- `tests/test_schematics.py::test_append_layout_sieve_with_layout` (L447-461) covers the attach form.\n- I did not read these tests, so I can't say whether any of them mounts the schematic with a `url_prefix`.",
+ "cost": 0.0470646,
+ "turns": 4,
+ "duration_s": 13.0,
+ "tokens": {
+  "input": 26453,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 26453
+ },
+ "pack_tokens": 1720,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 81
+ }
+}

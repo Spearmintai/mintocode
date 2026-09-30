@@ -1,0 +1,37 @@
+{
+ "answer": "The \"type-safe dictionary\" is a `typing.TypedDict`. Flask doesn't add any runtime class for it. It accepts a `TypedDict` return through a typing alias, and the status code is carried by a separate tuple element rather than by the dictionary.\n\n**The typing contract: `src/flask/typing.py`**\n- `ResponseValue` (L12-23) lists the body types a view may return. It includes `t.Mapping[str, t.Any]`, with the comment \"Only dict is actually accepted, but Mapping allows for TypedDict.\"\n- This is needed because a `TypedDict` type is not a subtype of `dict[str, Any]` for type checkers. It is compatible with `Mapping[str, Any]`. So a view annotated `-> StatusJSON` type-checks. This was added in the change recorded at `CHANGES.rst:338`.\n- `HeadersValue` (L29-33) covers headers.\n- `ResponseReturnValue` (L36-42) is the full return type of a route. It is a union of these forms:\n  - `ResponseValue`\n  - `tuple[ResponseValue, HeadersValue]`\n  - `tuple[ResponseValue, int]`\n  - `tuple[ResponseValue, int, HeadersValue]`\n  - `WSGIApplication`\n- The status is a separate `int` slot in the tuple, and headers are a separate `HeadersValue` slot. The body slot is `ResponseValue`, which is where the `TypedDict`/`Mapping` goes. The `TypedDict` therefore never has to hold a status field. It describes only the JSON payload, and `(payload, 201)` is still valid under the same annotation.\n- View-related signatures such as `dispatch_request` use this alias (`src/flask/views.py:78`, `src/flask/app.py:879`, `make_response` at `app.py:1129`).\n\n**Example: `tests/type_check/typing_route.py:41-47`**\n```python\nclass StatusJSON(t.TypedDict):\n    status: str\n\n@app.route(\"/typed-dict\")\ndef typed_dict() -> StatusJSON:\n    return {\"status\": \"ok\"}\n```\nHere `status` is an ordinary JSON field. It is unrelated to the HTTP status code.\n\n**Runtime separation: `Flask.make_response` (`src/flask/app.py:1129-1269`)**\n- It first unpacks the tuple into `(body, status, headers)`.\n- A `dict` or `list` body is serialized through `self.json.response(rv)`, which uses the `JSONProvider` in `src/flask/json/provider.py`. At runtime a `TypedDict` is a plain `dict`, so it takes this path.\n- The status is applied afterwards, as `.status` for a `str` or `.status_code` for an `int`. Headers are then merged with `rv.headers.update`.\n\nSo JSON serialization and HTTP status are decoupled in two places. In the types, the body, the `int` and the headers are separate members of `ResponseReturnValue`, and the `Mapping` in `ResponseValue` admits `TypedDict`. At runtime, `make_response` serializes the body and sets the status separately.",
+ "cost": 0.0653876,
+ "turns": 5,
+ "duration_s": 14.029,
+ "tokens": {
+  "input": 8,
+  "cache_write": 8670,
+  "cache_read": 75108,
+  "output": 1567,
+  "total": 85353
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"TypedDict|ResponseValue|ResponseReturnValue\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask\", \"output_mode\": \"content\", \"head_limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/typing.py\", \"limit\": 45}",
+  "Grep {\"pattern\": \"TypedDict\", \"path\": \"/home/sq/micode-bench/repos/flask\", \"glob\": \"*.{py,rst}\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/type_check/typing_route.py\", \"offset\": 35, \"limit\": 25}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 22,
+ "question": "How does the type-safe dictionary structure used as a view function return type annotation decouple JSON response serialization from HTTP status representation to maintain type safety?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

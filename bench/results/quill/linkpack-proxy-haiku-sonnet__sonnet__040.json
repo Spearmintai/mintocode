@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "answer": "The traversal is in `App._locate_fault_processor` in `src/quill/sansio/app.py`, lines 823-846. The nesting is code first, then scope, then MRO, and not the other way round from how the question phrases it.\n\n**Setup (L831-832)**\n- L831: `exc_class, code = self._obtain_exception_type_and_status(type(e))`. This is defined in `src/quill/sansio/skeleton.py:L656-698`. It returns `(cls, cls.code)` for `HTTPException` subclasses and `(cls, None)` otherwise.\n- L832: `names = (*schematics, None)`. The schematics come from `Request.schematics` (`src/quill/envelope_types.py:L180-195`), ordered from the current schematic up through its parents. `None` stands for the app-level scope and is always last.\n\n**The three levels of the traversal**\n1. **HTTP status code (outer loop, L834):** `for c in (code, None) if code is not None else (None,)`. The specific code is tried first, then `None`, which means a lookup by exception class. Non-HTTP exceptions only get `(None,)`.\n2. **Schematic scopes (middle loop, L835):** `for name in names`. Within each code, the innermost schematic is tried first, then its parents, then the app.\n   - L836: `handler_map = self.error_handler_spec[name][c]`\n   - L838-839: an empty map is skipped with `continue`.\n3. **Exception class MRO (inner loop, L841-845):** `for cls in exc_class.__mro__` calls `handler_map.get(cls)`. The first non-`None` handler is returned at L845, so a more specific class wins over its bases.\n\nIf nothing matches, the function returns `None` at L846.\n\n**Resulting priority:** schematic+code, then app+code, then schematic+class, then app+class. This is because the code loop is outermost and the scope loop is nested inside it.\n\n**Evidence from tests**\n- `tests/test_custom_fault_handler.py:L136-160`: the schematic 500 handler serves `/bp/error` and the app handler serves `/error`.\n- `tests/test_elementary.py:L967-996`: a handler registered for a `Forbidden` subclass is chosen for that subclass. `faulthandler(403)` handles `abort(403)` and plain `Forbidden`.\n\n**Caller:** `Quill.manage_web_failure` (`src/quill/app.py:L744-777`) calls this at L774 with `request.schematics`. It returns `e` unchanged if no handler is found. It also skips the lookup entirely for `e.code is None` (L765) and for `RoutingException` (L771).",
+ "cost": 0.024586000000000004,
+ "turns": 1,
+ "duration_s": 8.5,
+ "tokens": {
+  "input": 4826,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 4826
+ },
+ "pack_tokens": 2266,
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

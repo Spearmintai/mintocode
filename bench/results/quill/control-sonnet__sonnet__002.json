@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "Quill is a Flask-style codebase where \"schematics\" are blueprints. Static assets are served through a shared route-registration pattern, and both the app and schematics use the same caching logic. I read the code but did not look at the tests.\n\n**Layers**\n- `src/quill/sansio/skeleton.py` is the shared base class. It defines the `fixed_dir` and `fixed_address_route` settings. The `_static_folder` and `_static_url_path` fields are at lines 72\u201373. The properties around lines 225\u2013269 resolve them to an absolute folder and a URL prefix. `owns_fixed_directory` tells whether a static folder is configured.\n- `src/quill/sansio/app.py` and `src/quill/sansio/schematics.py` hold the I/O-free parts. The sansio schematic `register()` (around lines 300\u2013345) is where schematics are attached to an app.\n- `src/quill/app.py` and `src/quill/schematics.py` are the concrete classes. Each defines its own static-serving view, `dispatch_fixed_document`, and its own `fetch_file_transfer_ttl`.\n\n**Registration**\n- **App (`app.py`, lines 262\u2013279):** if `owns_fixed_directory` is true, the constructor calls `attach_link_regulation(f\"{fixed_address_route}/<path:filename>\", terminus=\"static\", host=static_host, view_func=lambda **kw: self_ref().dispatch_fixed_document(**kw))`.\n  - It holds the app through a `weakref`, which avoids a reference cycle between the app and the view function.\n  - It asserts that `bool(static_host) == host_matching`.\n  - It does not check that the folder exists, because the folder may be created while the server runs.\n- **Schematic (`sansio/schematics.py`, lines 323\u2013328):** in `register(app, options)`, if the schematic has a `fixed_dir`, it calls `state.attach_link_regulation(..., view_func=self.dispatch_fixed_document, terminus=\"static\")`. The route is added through the registration state, so it is prefixed and namespaced like any other schematic route.\n  - If the app and a schematic both have a static route under a `url_prefix`, the app's route takes precedence. This is noted in the `fixed_address_route` docstring, around line 146.\n\n**Consistent caching**\n- Both `Quill.dispatch_fixed_document` (`app.py:308\u2013328`) and the schematic's (`schematics.py:82\u2013102`) do the same thing:\n  1. Raise `RuntimeError` if no `fixed_dir` is set.\n  2. Compute `max_age = self.fetch_file_transfer_ttl(filename)`.\n  3. Call `dispatch_from_folder(self.fixed_dir, filename, max_age=max_age)`.\n- `fetch_file_transfer_ttl` is a duplicate of the same method in both classes. Both read `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`. `None` is returned as `None`, which means conditional requests rather than a timed cache. A `timedelta` becomes `int(total_seconds())`. Anything else is returned as is.\n- The reason for the duplication is in a code comment: `dispatch_document` only calls `fetch_file_transfer_ttl` on the app. So the schematic computes `max_age` itself and passes it explicitly.\n- Files sent outside the static route follow the same policy. `helpers.py` (around lines 388\u2013389) fills in `max_age` from `current_app.fetch_file_transfer_ttl` when it isn't given. `send_file` and `dispatch_from_folder` (around lines 408\u2013521) pass `max_age` through.",
+ "cost": 0.0505616,
+ "turns": 6,
+ "duration_s": 16.6,
+ "tokens": {
+  "input": 24488,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 24488
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

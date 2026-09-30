@@ -1,0 +1,31 @@
+{
+ "answer": "Blueprint-level filter registration is deferred through a recorded callback. The URL prefix plays no part in it. This comes from the precompiled index of the repo; I didn't re-open the source.\n\n**Registering the filter (`src/flask/sansio/blueprints.py`, around L443-551)**\n- `Blueprint.app_template_filter(name=None)` is a decorator. It calls `Blueprint.add_app_template_filter(f, name=None)`.\n- `add_app_template_filter` doesn't touch an application, because none exists yet. It defines a closure, `register_template(state: BlueprintSetupState)`.\n- That closure runs `state.app.jinja_env.filters[name or f.__name__] = f`.\n- The closure is queued with `self.record_once(register_template)`.\n- `record_once` wraps the callback so it runs only if `state.first_registration` is true. It then appends the wrapper to `Blueprint.deferred_functions`.\n- The `app_template_test` and `app_template_global` variants work the same way, writing to `jinja_env.tests` and `jinja_env.globals`.\n\n**Replaying the callbacks (`Blueprint.register`)**\n- `app.register_blueprint(bp, url_prefix=\"/x\")` calls `Blueprint.register(app, options)`.\n- `register` builds a `BlueprintSetupState(bp, app, options, first_registration)`. The state holds the `url_prefix` from the options or from the blueprint itself.\n- It then loops over `self.deferred_functions` and calls each one with the state.\n- The `record_once` wrapper runs `register_template(state)` on the first registration only. The filter lands in `app.jinja_env.filters` at that point.\n\n**Why the prefix doesn't matter**\n- `url_prefix` is only used by `BlueprintSetupState.add_url_rule`. That method joins the prefix onto rule paths and prefixes the endpoint names with the blueprint name.\n- The filter callback writes directly to `state.app.jinja_env`, which is the application's single Jinja environment. It ignores the prefix.\n- The \"app_\" methods are app-wide by design. The filter is visible to every template rendered through `src/flask/templating.py::render_template` and `render_template_string`, and to templates found through `DispatchingJinjaLoader`. This holds whether the request reaches a blueprint route under the prefix or any other route.\n- A blueprint's own filters (registered with `template_filter`) don't have this behavior, because they are not app-scoped.\n\n**Related details**\n- `jinja_env` is a `locked_cached_property` on the app, built lazily by `Flask.create_jinja_environment` in `src/flask/app.py`. Accessing it inside `register_template` forces creation of the environment at registration time.\n- The app-level counterparts are `App.add_template_filter`, `add_template_test` and `add_template_global` in `src/flask/sansio/app.py`, around L663-776. They write to the same `jinja_env` dictionaries. The blueprint version is the same operation, deferred until the blueprint is registered.\n- Because it uses `record_once`, registering the same blueprint several times, for example under different prefixes, installs the filter only once. Those registrations are permitted by the `name=` option.",
+ "cost": 0.038639400000000004,
+ "turns": 1,
+ "duration_s": 9.686,
+ "tokens": {
+  "input": 2,
+  "cache_write": 6014,
+  "cache_read": 13447,
+  "output": 1189,
+  "total": 20652
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the blueprint's application-level filter registration method are accessible in the template rendering environment when the blueprint is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

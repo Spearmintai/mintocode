@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "The flag is `Schematic._got_registered_once`, a class attribute defaulting to `False` (schematics.py L172). It stops a schematic from being changed after an app has already picked up its setup.\n\n**Why it exists**\n\nA `Schematic` doesn't apply setup calls directly. `route`, `record`, the hook decorators and the like are stored as deferred callables. When `App.enroll_plan` calls `Schematic.enroll`, those callables are replayed against the app. If you could add routes or hooks after that replay, the app that already enrolled the schematic would not see the changes. Other apps, or later enrollments under different names, would see them. The result would be inconsistent. The error text says this directly: \"any changes will not be applied consistently.\"\n\n**How it works**\n\n1. `Schematic.enroll` sets `self._got_registered_once = True` at L320. It does this right after `app.schematics[name] = self` (L319) and before the deferred functions are replayed.\n2. Every setup method is wrapped by `preparationmethod` (skeleton.py L42-49). The wrapper calls `self._verify_configuration_completed(f_name)` before running the method.\n3. `Schematic._verify_configuration_completed` (L213-221) checks the flag. If it is `True`, it raises an `AssertionError`:\n   > The setup method '<f>' can no longer be called on the schematic '<name>'. It has already been registered at least once, any changes will not be applied consistently. Make sure all imports, decorators, functions, etc. needed to set up the schematic are done before registering it.\n\nThe flag is one-way. It is never reset in the material shown, so once a schematic has been enrolled anywhere, it is locked.\n\n**Relation to the app-level guard**\n\n`App._verify_configuration_completed` (app.py L413-423) does the same job for the application, using `_got_first_request`. The base `Armature._verify_configuration_completed` (skeleton.py L220-221) raises `NotImplementedError`, so each subclass has to supply its own check.\n\n**Practical rule**\n\nFinish defining the schematic (routes, hooks, nested setup) before calling `app.enroll_plan`.",
+ "cost": 0.037986,
+ "turns": 1,
+ "duration_s": 7.7,
+ "tokens": {
+  "input": 8440,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8440
+ },
+ "pack_tokens": 4771,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

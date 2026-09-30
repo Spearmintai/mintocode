@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "haiku",
+ "answer": "# Modular Component Registration Architecture for Static Asset Serving\n\nThe Quill framework separates static asset serving from the main application using a **Schematic-based registration architecture** with consistent caching behavior. Here's how it works:\n\n## Core Components\n\n### 1. **Schematic Blueprint System** (`src/quill/sansio/schematics.py`)\n\nThe `Schematic` class (L18-128 in `src/quill/schematics.py`) is the primary modular component unit. It implements:\n\n- **Deferred Setup**: `Schematic.enroll()` (L273-377) performs core registration by building a dotted name, validating uniqueness via `app.schematics`, and computing `first_bp_registration` to track whether this is the schematic's first registration across the app.\n\n- **Setup State Management**: `SchematicSetupStatus` (L34-116) is a temporary holder created per enrollment that passes configuration through deferred callbacks, exposing: `app`, `schematic`, `options`, `first_registration`, `url_prefix`, `subdomain`, `name_prefix`.\n\n### 2. **Registration Pipeline** (`src/quill/sansio/app.py` L569-595)\n\n`App.enroll_plan()` is a `@preparationmethod` that:\n```python\nschematic.enroll(self, options)  # Delegates enrollment\n```\nThis ensures all setup (static routes, routes, handlers) occurs before the first request, maintaining consistency across WSGI workers (see docs/lifecycle.rst L36-61).\n\n### 3. **Unified Static File Dispatch**\n\nBoth the App and Schematic share the same static file serving abstraction:\n\n- **App-level**: `Quill.dispatch_fixed_document()` (src/quill/app.py L308-328) \u2014 raises `RuntimeError \"'fixed_dir' must be set to serve static_files.\"` if unconfigured\n- **Schematic-level**: `Schematic.dispatch_fixed_document()` (src/quill/schematics.py L82-102) \u2014 same error handling\n\nBoth call `dispatch_from_folder(fixed_dir, filename, max_age=max_age)`, where `max_age` is computed from the app's configuration.\n\n### 4. **Consistent Caching Configuration**\n\n**Static route registration** (src/quill/sansio/schematics.py facts):\n```\nRule: f\"{self.fixed_address_route}/<path:filename>\"\nTerminus: 'static'  (or 'schematic_name.static' for nested schematics)\nView: dispatch_fixed_document\n```\n\nCaching behavior is controlled app-wide via:\n- `SEND_FILE_MAX_AGE_DEFAULT` config key (src/quill/app.py L209)\n- Both App and Schematic dispatch methods use the same `max_age` computation\n\n### 5. **Static Directory Abstraction** (`src/quill/sansio/skeleton.py` L223-231)\n\nThe `Armature.fixed_dir` property (base class for both App and Schematic):\n- Returns absolute path: `os.path.join(root_path, _static_folder)` or `None`\n- Setter performs normalization: `os.fspath()` then `rstrip()` of path separators\n- Associated property `owns_fixed_directory` (L240-246) returns `True` only if `fixed_dir is not None`\n\n**Critical constraint** (docs/schematics.rst L212-217): Schematic static folders are unreachable without a `url_prefix` because the app's `/static` route takes precedence\u2014unlike templates, which are searched as a fallback.\n\n## Separation Mechanism\n\n**Options override defaults** (src/quill/sansio/app.py L579-591):\n```python\n@preparationmethod\ndef enroll_plan(self, schematic: Schematic, **options: t.Any) -> None:\n    # Keyword arguments override schematic defaults\n    schematic.enroll(self, options)\n```\n\nEach schematic can configure:\n- `fixed_dir`: Custom static directory path\n- `fixed_address_route`: Custom URL route prefix\n- `url_prefix`: Schematic route prefix (affects both views and static URLs)\n- `subdomain`: Route matching on subdomain (L118-138 in tests/test_trialing.py demonstrates this)\n\nThis architecture ensures that:\n1. Static asset configuration is **decoupled per schematic**\n2. **Caching behavior remains consistent** across all schematics (via `SEND_FILE_MAX_AGE_DEFAULT`)\n3. **Setup must occur before serving** (enforced by `@preparationmethod`), preventing inconsistent registration across WSGI workers\n4. **Registration state tracks** `first_registration` to ensure idempotent setup when schematics are registered multiple times",
+ "cost": 0.02121,
+ "turns": 1,
+ "duration_s": 18.9,
+ "tokens": {
+  "input": 7580,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7580
+ },
+ "pack_tokens": 4294,
+ "score": {
+  "correctness": 10,
+  "completeness": 9,
+  "relevance": 11,
+  "clarity": 13,
+  "reasoning": 11,
+  "total": 54
+ }
+}

@@ -1,0 +1,35 @@
+{
+ "answer": "**The `g` namespace object has no locking of its own. It gets thread-safety and isolation from being per-context, not from synchronization.**\n\n**The namespace object.** `_AppCtxGlobals` in `src/flask/ctx.py:29-114` is a plain object.\n- `__getattr__`, `__setattr__` and `__delattr__` (L52-65) just read, write and delete entries in the instance's `__dict__`.\n- `get`, `pop`, `setdefault`, `__contains__` and `__iter__` (L67-108) also delegate to `__dict__`.\n- No locks are used anywhere in the class.\n\n**One instance per app context.**\n- `AppContext.__init__` (`ctx.py:245-249`) builds `self.g = app.app_ctx_globals_class()`. That class attribute is `_AppCtxGlobals` by default (`sansio/app.py:185`) and can be overridden.\n- Every `AppContext` therefore owns its own `g` and its own `_cv_tokens` list (L249). Data set on one context's `g` is never visible on another's.\n\n**The contextvar.**\n- `src/flask/globals.py:24` defines `_cv_app: ContextVar[AppContext] = ContextVar(\"flask.app_ctx\")`.\n- `AppContext.push` (`ctx.py:251-254`) calls `_cv_app.set(self)` and appends the returned token to `_cv_tokens`.\n- `AppContext.pop` (`ctx.py:256-272`) does the following:\n  - It runs `do_teardown_appcontext` only when one token is left (`len(_cv_tokens) == 1`).\n  - It then calls `_cv_app.reset(token)` to restore the previous value.\n  - It asserts that the popped context is `self`.\n- Because a `ContextVar` holds a separate value in each thread and each asyncio task or greenlet context, each concurrent execution flow sees its own `AppContext`, and so its own `g`.\n- The token stack lets nested pushes of the same context restore correctly. Contexts are re-entrant.\n\n**The proxy.**\n- `globals.py:31-33` defines `g = LocalProxy(_cv_app, \"g\", unbound_message=_no_app_msg)`, and `current_app` is defined the same way just above it.\n- On every attribute access, the werkzeug `LocalProxy` looks up `_cv_app.get()` in the calling context, takes that context's `.g`, and forwards the operation to it.\n- If the variable is unbound, it raises `RuntimeError(\"Working outside of application context\u2026\")`.\n- `has_app_context` (`ctx.py:228-235`) checks whether the variable is set.\n- `_AppCtxGlobals.__repr__` (L110-114) also reads `_cv_app.get(None)` to show `<flask.g of 'app.name'>`.\n\n**Related points.**\n- `RequestContext.push` (`ctx.py:367-394`) pushes a new app context if none is active or the active one belongs to a different app. Request-scoped `g` data is therefore isolated the same way.\n- Isolation applies to the context, not to the object. If code shares one `AppContext` or `g` object across threads, for example by copying a context with `copy_current_request_context` or by handing the object to a worker thread, the dict access is not synchronized. Only the individual dict operations are atomic under the GIL.",
+ "cost": 0.0705722,
+ "turns": 3,
+ "duration_s": 10.796,
+ "tokens": {
+  "input": 4,
+  "cache_write": 12549,
+  "cache_read": 32891,
+  "output": 1379,
+  "total": 46823
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/ctx.py\", \"offset\": 25, \"limit\": 95}",
+  "Grep {\"pattern\": \"_cv_app|app_ctx_globals_class|_cv_tokens|\\\\.g = |g: \", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 20,
+ "question": "How does the namespace object that stores application-level data during an application context maintain thread-safety and context isolation when accessed concurrently through the contextvars mechanism?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 82
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 36,
+ "question": "Where does the control flow in the CLI group class's directive retrieval method determine whether to return a directly registered directive, an entry point loaded directive, or an application CLI group directive?",
+ "model": "haiku",
+ "answer": "# CLI Directive Resolution Control Flow\n\nThe control flow is determined in **`QuillCollection.obtain_directive`** (src/quill/cli.py:L609-634):\n\n## Resolution Order\n\n1. **Load Entry Points** (L610): `self._read_extension_directives()` loads 'quill.commands' entry points once and registers them via `add_command()` (src/quill/cli.py:L600-607)\n\n2. **Check Built-in + Loaded Plugin Directives** (L613): `super().obtain_directive(ctx, name)` checks directives already in the group (built-in ones added in `__init__` at L593-596, plus entry point ones loaded in step 1)\n\n3. **Return if Found** (L615-616): If `rv is not None`, return immediately \u2014 **directly registered and entry-point-loaded directives short-circuit here**\n\n4. **Load the App** (L623): Only if step 3 found nothing, attempt `info.read_program()`\n\n5. **Handle App Load Failure** (L624-626): If `MissingProgramFailure`, print red error to stderr and return `None`\n\n6. **Delegate to App's CLI** (L634): If app loads successfully, return `app.cli.obtain_directive(ctx, name)` \u2014 **application-provided directives come from here**\n\n**Key distinction**: Entry point directives are pre-loaded into the `QuillCollection` group itself via `add_command()`, so they're checked together with built-in directives in step 2. App directives are only checked *after* the app successfully loads in step 4-6.",
+ "cost": 0.018628,
+ "turns": 1,
+ "duration_s": 11.7,
+ "tokens": {
+  "input": 7684,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7684
+ },
+ "pack_tokens": 5080,
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 83
+ }
+}

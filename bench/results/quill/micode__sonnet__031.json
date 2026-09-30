@@ -1,0 +1,39 @@
+{
+ "answer": "The test is `test_periodic_title_forbidden` in `tests/test_schematics.py:254-256`. It calls `quill.Schematic(\"app.ui\", __name__)` inside `pytest.raises(ValueError)`. \"Modular route component\" means a Schematic, which is Quill's Blueprint analogue.\n\n**Why the `ValueError` is raised.** `Schematic.__init__` in `src/quill/sansio/schematics.py:198-199` contains `if \".\" in name: raise ValueError(\"'name' may not contain a dot '.' character.\")`. The runtime `Schematic` in `src/quill/schematics.py` extends the sansio class and inherits that check. The empty-name check just above it, at lines 195-196, raises `ValueError(\"'name' may not be empty.\")`. `test_vacant_title_forbidden` at line 259 covers that one.\n\n**Why the rule exists.** I inferred this from the code and the changelog entry for 2.0.1 rather than from a comment at the check. A dot is the separator in the fully qualified names built when a schematic is registered. `Schematic.enroll` builds them as `f\"{name_prefix}.{name}\"`, and nested schematics get their parent's name as a prefix. Terminus names for routes take the form `schematic_name.terminus`. If a schematic name could contain a dot, `app.ui` would look the same as a schematic `ui` nested in `app`. That would make URL building and name lookups in `app.schematics` ambiguous.\n\nThe check runs in the constructor, so the error appears when the object is created. It does not wait until registration.\n\nThe test passes a single name, `\"app.ui\"`, so it doesn't exercise several dotted names. I only searched for tests that call `Schematic(...)` with a dotted literal, and that was the only one.",
+ "cost": 0.0805234,
+ "turns": 7,
+ "duration_s": 16.981,
+ "tokens": {
+  "input": 12,
+  "cache_write": 9927,
+  "cache_read": 120257,
+  "output": 1674,
+  "total": 131870
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"dot\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"-n\": true, \"-C\": 4, \"glob\": \"*schematic*\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 190, \"limit\": 15}",
+  "Grep {\"pattern\": \"dot|\\\\.\\\\\\\"\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"-n\": true, \"-i\": true, \"glob\": \"test_schem*\"}",
+  "Grep {\"pattern\": \"may not contain|def test_.*dot\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"-n\": true, \"-B\": 3, \"-A\": 6}",
+  "Grep {\"pattern\": \"pytest.raises\\\\(ValueError\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"-n\": true, \"-B\": 4, \"-A\": 3, \"glob\": \"*m",
+  "Grep {\"pattern\": \"Schematic\\\\(.*\\\\.\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"-n\": true, \"-B\": 4, \"-A\": 3}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

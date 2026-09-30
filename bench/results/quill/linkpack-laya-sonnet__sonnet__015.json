@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "answer": "The short version: the filter is not tied to the URL prefix at all. The prefix only affects routing, and the filter is installed on the application's shared template environment when the schematic is enrolled.\n\n**1. Deferral at declaration time**\n- `Schematic.program_layout_sieve(name=None)` (src/quill/sansio/schematics.py:L443-458) returns a decorator that calls `attach_program_layout_sieve(f, name=name)` and returns `f` unchanged.\n- `attach_program_layout_sieve` (L460-475) defines an inner `register_template(state)`. That function does `state.app.markup_engine_env.filters[name or f.__name__] = f`.\n- It then calls `self.note_once_only(register_template)` (L475). The filter is not put in any environment yet. The callback is only queued on the schematic, which is what the class's `deferred_functions` list (set in `__init__`, L204) is for. I infer that `note_once_only` does the queuing. Its body is not in the material, so I can't confirm it from the excerpts.\n\n**2. Execution at enroll time**\n- `App.enroll_plan(schematic, **options)` calls `Schematic.enroll(app, options)` (L273-377). Per the compiled answer, the steps are:\n  - Build the dotted name from `name_prefix` and `name`, and raise `ValueError` on a duplicate.\n  - Build the `SchematicSetupStatus` via `build_registration_state` (L246-253).\n  - Run `_combine_schematic_functions`.\n  - Call each function in `deferred_functions` with the state.\n- That last step is where `register_template(state)` runs. `state.app` is the real application, so the filter lands in `app.markup_engine_env.filters` (the `markup_engine_env` property is on `App`, around L469-477 of src/quill/sansio/app.py).\n\n**3. Why `url_prefix` doesn't matter**\n- `url_prefix` (and `subdomain`) are passed in `options`. `SchematicSetupStatus.__init__` (L64-73) reads them into `state.url_prefix` and `state.subdomain`, and these are used for URL rules.\n- `register_template` never reads them. It writes to the app-wide environment, so the filter is available to every template the app renders, not just the schematic's own views.\n\n**4. Evidence in tests**\n- `test_layout_sieve_with_layout` (tests/test_schematics.py:L414-428) registers `super_reverse` on a schematic and calls `app.enroll_plan(bp, url_prefix=\"/py\")`. It then defines a route `/` on the app itself, which is outside the schematic and its prefix. `draw_layout(\"layout_sieve.html\", value=\"abcd\")` returns `b\"dcba\"`, showing the filter is globally visible.\n- `test_layout_sieve_with_label` (L388-398) checks that the custom name `\"strrev\"` ends up in `app.markup_engine_env.filters` and is the same function.\n\n**Caveats**\n- Registration happens only at `enroll_plan` time. A filter declared on a schematic that is never enrolled is never installed.\n- The compiled answer says the item is registered only on the first registration of that schematic object, which is the \"once only\" behavior. The mechanism for that (`note_once_only` using `first_registration`) is not shown in the excerpts, so check its definition in src/quill/sansio/schematics.py if you need the details.\n- The same applies to `_combine_schematic_functions` (step 6), which is named in the compiled answer but not shown.",
+ "cost": 0.037488,
+ "turns": 1,
+ "duration_s": 21.1,
+ "tokens": {
+  "input": 7624,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7624
+ },
+ "pack_tokens": 3976,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

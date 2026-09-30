@@ -1,0 +1,31 @@
+{
+ "answer": "The class is `_AppCtxGlobals` in `src/flask/ctx.py` (lines 29\u2013110). It is the object exposed as `flask.g`. It stores everything in the instance `__dict__` and splits its error handling across two groups of methods: strict attribute-protocol methods, and dict-like methods that accept defaults.\n\n**Strict: raise `AttributeError` for missing names**\n- `__getattr__(self, name)` (line 52) returns `self.__dict__[name]`. On `KeyError` it raises `AttributeError(name) from None`. Python only calls `__getattr__` when normal lookup fails, so `g.missing` follows the normal attribute contract. `hasattr` and `getattr(g, \"x\", default)` work correctly. The `from None` hides the internal `KeyError`.\n- `__delattr__(self, name)` (line 61) does `del self.__dict__[name]` and translates `KeyError` into `AttributeError(name) from None`. `del g.missing` therefore raises `AttributeError`, not the `KeyError` that a dict would raise.\n- `__setattr__` (line 58) writes straight to `__dict__` and has no error case.\n\n**Lenient: defaults instead of errors**\n- `get(name, default=None)` (line 67) returns `self.__dict__.get(name, default)`. It never raises for a missing name and returns `None` unless you pass a default. It mirrors `dict.get`.\n- `setdefault(name, default=None)` (line 92) delegates to `__dict__.setdefault`. It returns the existing value, or sets and returns the default. It never raises.\n- `pop(name, default=_sentinel)` (line 78) is the mixed case. It uses a module-level `_sentinel` object, not `None`, to tell \"no default given\" apart from \"default is `None`\":\n  - With no default, it calls `self.__dict__.pop(name)`. A missing name raises a raw `KeyError`, not `AttributeError`.\n  - With a default, including an explicit `None`, it calls `self.__dict__.pop(name, default)` and returns the default.\n\n**Balance**\n- Operators and attribute syntax (`g.x`, `del g.x`) follow Python's attribute protocol and raise `AttributeError`. This keeps `hasattr`, `getattr` with a default, and type checkers working.\n- Named methods (`get`, `pop`, `setdefault`) follow the `dict` API and let the caller choose a default.\n- `pop` is inconsistent with `__delattr__`. It raises `KeyError`, as `dict.pop` does, even though the class is an attribute namespace. The docstring says \"instead of raising a ``KeyError``\", so this is documented and intentional.\n- The class also defines `__contains__` and `__iter__` (the docstring documents `'key' in g` and `iter(g)`), so callers can check for a name up front instead of catching an error.",
+ "cost": 0.0183666,
+ "turns": 2,
+ "duration_s": 9.381,
+ "tokens": {
+  "input": 4,
+  "cache_write": 0,
+  "cache_read": 36743,
+  "output": 1101,
+  "total": 37848
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (lines 290\u2013295). It delays the lookup of `hashlib.sha1` until the function is called.\n\n**The wrapper**\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)\n```\n- The module only does `import hashlib` at the top (line 4). That import does not check whether SHA-1 is available.\n- The attribute `hashlib.sha1` is read inside the function body. So it is only resolved when the function is called, not when the module is imported or the class is defined.\n- On a FIPS-restricted Python build, SHA-1 may be missing or blocked. If the code used `digest_method = hashlib.sha1` directly, the attribute lookup would run at class-definition time. That is at import of `quill.sittings`, and it could raise before the developer has a chance to configure another algorithm.\n\n**How it is wired in**\n- `ProtectedBiscuitSessionAdapter` (the default cookie session interface, which subclasses `SessionContract`) sets `digest_method = staticmethod(_postponed_sha1)` at line 307.\n- `staticmethod` keeps Python from binding `self` to the function when it is accessed through an instance.\n- `fetch_signature_encoder` (lines 317\u2013335) reads `self.digest_method` and passes it to itsdangerous. It goes into `URLSafeTimedSerializer(..., signer_kwargs={\"key_derivation\": ..., \"digest_method\": self.digest_method})`.\n- itsdangerous calls the `digest_method` callable only when it signs or verifies a cookie. `launch_sitting` triggers this through `s.loads(...)`. `store_sitting` triggers it when it saves the cookie. Only at that point does `hashlib.sha1` get accessed, and the availability check happens there.\n\n**Why it prevents import-time failures**\n- Import and class definition never touch SHA-1.\n- On a restricted build without SHA-1, the app still imports. A developer can override `digest_method` on a subclass, for example with SHA-256, and never trigger the failure.\n- If nobody overrides it, the error appears only when a session is actually signed or loaded.\n\n`digest_method` is not referenced anywhere else in `src`.",
+ "cost": 0.0453662,
+ "turns": 4,
+ "duration_s": 10.348,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5908,
+  "cache_read": 48411,
+  "output": 1204,
+  "total": 55529
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"hashlib|usedforsecurity|md5|sha1\", \"output_mode\": \"content\", \"glob\": \"*.py\", \"head_limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sittings.py\", \"offset\": 285, \"limit\": 80}",
+  "Grep {\"pattern\": \"digest_method\", \"output_mode\": \"content\", \"path\": \"/home/sq/micode-bench/base/quill/src\"}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 87
+ }
+}

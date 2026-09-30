@@ -1,0 +1,9 @@
+{
+  "name": "micode",
+  "version": "0.1.0",
+  "description": "Compile a repository once into a verified, agent-facing understanding (.micode/); every later session reads the compiled knowledge instead of re-reading the source.",
+  "author": {"name": "hmtp.ai"},
+  "homepage": "https://github.com/Sqqlcyy/micode", "repository": "https://github.com/Sqqlcyy/micode",
+  "license": "MIT",
+  "keywords": ["context", "tokens", "codebase", "compile", "memory", "mcp"]
+}

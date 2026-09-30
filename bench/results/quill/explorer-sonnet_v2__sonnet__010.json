@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "answer": "The test class is `TestFlowing` in `tests/test_aids.py` (L236-307). It is a plain pytest class with no base class and no `setUp`/`tearDown`. It uses a fixture-driven, black-box integration pattern.\n\n**Structure**\n- Each test method takes the shared `app` and `client` fixtures. These are `Quill('flask_test')` with `TESTING=True`, plus its test client.\n- Each test defines a route on `app` and defines the generator inside the view. It returns `quill.Response(quill.flow_with_environment(...))`.\n- The test then makes a real request with `client.get(...)` and asserts on `rv.data`. It never pushes or pops contexts by hand.\n\n**How it separates the two concerns**\n- **Streaming logic:** the local `generate()` generators only yield strings. One of them reads `quill.request.args` or `quill.session`, and that read is what the test exercises.\n- **Context lifecycle:** this is left entirely to `flow_with_environment` (`src/quill/helpers.py`, L62-136) and the gateway. The generator runs after the view has returned, when the request context would normally be gone. A passing assertion shows the wrapper kept the request context alive.\n\n**Variants covered**\n- `test_flowing_with_scope` wraps a generator object directly.\n- `test_flowing_with_scope_as_wrapper` uses `@quill.flow_with_environment` as a decorator on a generator function that takes arguments.\n- `test_flowing_with_scope_and_bespoke_shutdown` wraps a custom iterator that has its own `close()`. It checks that `close()` is still called, using the `called == [42]` spy list.\n- `test_flow_retains_visit` writes to the session in the view and reads it inside the generator. This shows the session state survives into the stream.\n\n**Related check elsewhere**\n`tests/test_trialing.py:L382-396` (`test_caller_remove_every_retained`) covers cleanup. It checks that after `rv.close()`, the extra contexts pushed by `flow_with_environment` are gone.",
+ "cost": 0.029283999999999998,
+ "turns": 2,
+ "duration_s": 10.0,
+ "tokens": {
+  "input": 14751,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14751
+ },
+ "pack_tokens": 1986,
+ "score": {
+  "correctness": 13,
+  "completeness": 10,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 67
+ }
+}

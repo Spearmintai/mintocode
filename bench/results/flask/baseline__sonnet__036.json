@@ -1,0 +1,31 @@
+{
+ "answer": "The decision is in `FlaskGroup.get_command` in `src/flask/cli.py` (lines 609\u2013634). `FlaskGroup` subclasses `AppGroup`, which subclasses `click.Group`. The method decides in this order:\n\n1. **Load entry points.** `self._load_plugin_commands()` (lines 600\u2013607) runs first. It runs only once, guarded by `self._loaded_plugin_commands`. It iterates `importlib.metadata.entry_points(group=\"flask.commands\")` and calls `self.add_command(ep.load(), ep.name)` for each one. Entry-point commands therefore become ordinary registered commands on the group.\n\n2. **Return a registered or entry-point command.** `rv = super().get_command(ctx, name)` (line 613) looks the name up in the group's own `commands` dict. That dict holds commands added directly, such as the built-in `run`, `shell` and `routes` (or anything added with `add_command`/`@group.command`), plus the entry-point commands just added in step 1. The two are indistinguishable at this point. `if rv is not None: return rv` (lines 615\u2013616) returns the match. This branch needs no app, so these commands work even if the app fails to load.\n\n3. **Fall back to the app's CLI group.** This happens only if step 2 found nothing:\n   - `info = ctx.ensure_object(ScriptInfo)` (line 618) gets the script info.\n   - `info.load_app()` (line 623) loads the application. If it raises `NoAppException`, the method prints the error in red with `click.secho` and returns `None` (lines 624\u2013626).\n   - If no app context for that app is active, `ctx.with_resource(app.app_context())` (lines 631\u2013632) pushes one.\n   - `return app.cli.get_command(ctx, name)` (line 634) returns the command from the app's own `AppGroup`. That group holds commands registered with `@app.cli.command()` and blueprint CLI groups.\n\n`FlaskGroup.list_commands` (line 636) mirrors this. It combines the group's own commands, the plugin commands, and `info.load_app().cli.list_commands(ctx)`.",
+ "cost": 0.025785400000000003,
+ "turns": 3,
+ "duration_s": 10.094,
+ "tokens": {
+  "input": 6,
+  "cache_write": 1287,
+  "cache_read": 52927,
+  "output": 1004,
+  "total": 55224
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 36,
+ "question": "Where does the control flow in the CLI group class's command retrieval method determine whether to return a directly registered command, an entry point loaded command, or an application CLI group command?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 87
+ }
+}

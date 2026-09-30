@@ -1,0 +1,37 @@
+{
+ "answer": "`test_1` isn't a single function in this repo. The minimal one is `def test_1(self): pass`, and it appears in two generated benchmark modules:\n\n- `bench/xunit.py` builds 5000 plain classes `Test{i}` with `setup_class` and `test_1`/`test_2`/`test_3`.\n- `bench/unit_test.py` builds 15000 `unittest.TestCase` subclasses with `setUpClass` and the same three tests.\n\n(The many `def test_1(): pass` strings in `testing/*.py` are just sample source inside `pytester` tests.) The existing parametrized benchmark is `bench/manyparam.py`, which I didn't read.\n\n**Refactor for plain-class tests (`bench/xunit.py`)**\n\nAdd `@pytest.mark.parametrize` and give the new argument a default:\n\n```python\nimport pytest\n\nclass Test0:\n    @classmethod\n    def setup_class(cls): pass\n\n    @pytest.mark.parametrize(\"value\", [None, 0, \"x\", [1, 2]], ids=[\"none\", \"zero\", \"str\", \"list\"])\n    def test_1(self, value=None): pass\n```\n\n- **Backward compatibility:** the marker is applied in `Metafunc.parametrize` (`src/_pytest/python.py:1163`) during collection, and pytest only runs `test_1` with the values you list. If you call `Test0().test_1()` directly, the `value=None` default lets it still work. Without the default, a direct call would fail.\n- **Node IDs change:** `Test0::test_1` becomes `Test0::test_1[none]`, `[zero]` and so on. Anything that selects `test_1` by exact node ID, such as `-k` or `--lf` cache entries, has to be updated.\n- **Data-driven scenarios:** for reusable data, keep a module-level list of `pytest.param(..., id=...)` values, or use `ids=callable`. Use `indirect=` with a fixture if setup is needed. To keep some cases from running, use `pytest.param(..., marks=pytest.mark.xfail)`.\n- **Scale:** the generator `exec` loop runs the same source 5000 times, so each parametrized case multiplies collection cost. Keep the value list small there.\n\n**Refactor for `unittest.TestCase` tests (`bench/unit_test.py`)**\n\n`@pytest.mark.parametrize` does not work on `TestCase` methods, because pytest's unittest integration doesn't run `Metafunc` parametrization for them. There are two options that keep the tests backward compatible:\n\n- Use `self.subTest(value=v)` inside `test_1`, looping over the scenarios. `test_1` stays one test item, and the loop is the data. pytest reports subtests only with the pytest-subtests plugin (or newer built-in support).\n- Move the test out of `TestCase` into a plain class or function and parametrize there. That changes the test's identity and drops `setUpClass` semantics unless you use `setup_class`.\n\n**Verifying**\n\n- Run `pytest bench/xunit.py --collect-only -q` to confirm the generated IDs.\n- Run `pytest testing/python/metafunc.py` for the parametrize behaviour itself.",
+ "cost": 0.0486274,
+ "turns": 5,
+ "duration_s": 13.16,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5979,
+  "cache_read": 49347,
+  "output": 1483,
+  "total": 56815
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def test_1\\\\(\", \"output_mode\": \"content\", \"head_limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/bench/unit_test.py\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/bench/xunit.py\"}",
+  "Bash {\"command\": \"cd /home/sq/micode-bench/base/pytest; ls bench; grep -n \\\"def parametrize\\\" -A12 src/_pytest/python.py | head -40\"}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 15,
+ "question": "How would you refactor a minimal test function like test_1 to implement a parameterized testing strategy that maintains backward compatibility while enabling data-driven test execution across multiple input scenarios?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 9,
+  "completeness": 11,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 12,
+  "total": 61
+ }
+}

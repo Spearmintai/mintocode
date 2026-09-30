@@ -1,0 +1,34 @@
+{
+ "answer": "The branching is in `QuillCollection.obtain_directive` in `src/quill/cli.py:609-634`. `QuillCollection` extends `ProgramBundle`, which is a `click.Group` subclass.\n\n1. **Entry-point loading (`cli.py:600-607`).** The method first calls `self._read_extension_directives()`. On its first call, this loads every entry point in the `quill.commands` group and registers each with `self.add_command(ep.load(), ep.name)`. It then sets `_loaded_plugin_commands` so the load doesn't repeat. Entry-point commands therefore become ordinary registered commands on the group.\n\n2. **Directly registered or entry-point directive (`cli.py:613-616`).**\n   - `rv = super().obtain_directive(ctx, name)` looks the name up in the group's own command table. That table holds the built-ins added in `__init__` (`run`, `shell`, `routes`) and the entry-point commands just loaded.\n   - If `rv is not None`, the method returns it right away. The code cannot tell built-in from plugin here, because both are in the same table. The comment says these stay available even if the app fails to load.\n\n3. **Application CLI group directive (`cli.py:618-634`).** The method only reaches this step when the lookup returned `None`.\n   - `info = ctx.ensure_object(RoutineDetails)` gets the context object.\n   - `info.read_program()` loads the app. If it raises `MissingProgramFailure`, the method prints the error in red to stderr and returns `None` (`cli.py:622-626`).\n   - Unless the loaded app is already current, `ctx.with_resource(app.program_scope())` pushes its context (`cli.py:631-632`). The check is `not current_app or current_app._get_current_object() is not app`.\n   - It returns `app.cli.obtain_directive(ctx, name)` (`cli.py:634`). This delegates to the app's own CLI group, which holds commands registered with `@app.cli.directive()`.\n\n`enumerate_directives` (`cli.py:636` onward) mirrors this order for listing commands. It merges the group's own names, including entry-point ones, with the app's.",
+ "cost": 0.045313599999999996,
+ "turns": 2,
+ "duration_s": 7.489,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7595,
+  "cache_read": 32778,
+  "output": 837,
+  "total": 41214
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/cli.py\", \"offset\": 598, \"limit\": 42}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 36,
+ "question": "Where does the control flow in the CLI group class's directive retrieval method determine whether to return a directly registered directive, an entry point loaded directive, or an application CLI group directive?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

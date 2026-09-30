@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py:L155-193`. It works in two steps: it copies the scope when the function is decorated, and it pushes that copy when the function is called.\n\n**Capture at decoration time (L179-187)**\n- It reads the current scope with `_cv_request.get(None)`. If none is active, it raises `RuntimeError` saying it can only be used while a request context is active, such as in a view function (L181-185).\n- It then calls `ctx.copy()` (L187). The copy happens when the decorator is applied, not when the wrapped function runs.\n\n**What `InquiryScope.copy` shares (`ctx.py:L337-355`)**\n- It builds a new `InquiryScope` with the same `app`, `environ=self.request.environ`, the same `request` object, and `session=self.session`.\n- Because the request object is the same, the docstring warns that this is safe for greenlets but not for moving between threads unless access to the request is locked (L340-343).\n- Since 1.1, the current session object is passed in rather than reloaded from the original data. This keeps `quill.session` from pointing at an out-of-date object (L346-348).\n\n**Isolation at call time (L189-191)**\n- The wrapper runs `with ctx:` and then `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- Entering the `with` calls `InquiryScope.push` (`ctx.py:L367-394`):\n  - If no `ProgramScope` for this app is active in `_cv_app`, it pushes a new one (L370-376).\n  - It sets `_cv_request` to the copy, and stores the token so the scope can be reset later (L378).\n  - Since `_cv_request` is a context variable, the copy is bound only inside the greenlet's own context. Outside the `with` block, `quill.request` and `quill.current_app` are unbound.\n- `update_wrapper(wrapper, f)` keeps the original function's metadata (L193).\n\n**Session preservation**\n- In `push`, the session is opened only if `self.session is None` (L384-389). The comment at L380-383 says this avoids losing the session when the scope is pushed again.\n- A copy already carries `session=self.session`, so `push` does not call `launch_sitting`. The greenlet sees the same session data, such as `session[\"fizz\"] = \"buzz\"`.\n- The `session` global is a `LocalProxy` over `_cv_request`'s `\"session\"` attribute (`globals.py:L49-51`), so it resolves to the copied scope's session.\n\n**Test evidence (`tests/test_callscope.py`)**\n- `test_microthread_scope_duplicating` (L150-177) does the same thing manually with `request_ctx.copy()`. Inside the greenlet, before `with reqctx`, `quill.request` and `quill.current_app` are falsy. Inside the block, the request path is `/`, `args[\"foo\"] == \"bar\"`, `session.get(\"fizz\") == \"buzz\"`, and `current_app == app`. After the block, `quill.request` is falsy again. The greenlet returns 42.\n- `test_microthread_scope_duplicating_interface` (L179-202) decorates `g` with `@quill.duplicate_active_inquiry_scope` and asserts the same values inside, without a manual `with`.\n\n**Not settled by the material**\n- What `guarantee_blocking` does is not shown. Look at `Quill.guarantee_blocking` to see how it wraps `f`.\n- What `InquiryScope.__exit__` and `pop` do on exit, which restores the context variable, is not in the excerpts.",
+ "cost": 0.027372,
+ "turns": 1,
+ "duration_s": 11.1,
+ "tokens": {
+  "input": 5038,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5038
+ },
+ "pack_tokens": 2326,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 82
+ }
+}

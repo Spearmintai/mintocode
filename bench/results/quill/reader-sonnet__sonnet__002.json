@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "The material describes a layered design with static serving on both sides. It does not fully show that caching behaviour is consistent between the app and a schematic, so that part is flagged below.\n\n## Layers\n\n1. **Shared base: `Armature`** (`src/quill/sansio/skeleton.py` L52-698). Both the app and schematics inherit from it. It holds the static and template configuration, and the per-scope handler registries.\n   - `fixed_dir` (L223-238) returns `os.path.join(root_path, _static_folder)` or `None`.\n   - `owns_fixed_directory` (L240-246) is true when `fixed_dir` is not `None`.\n   - The card lists the `fixed_dir` span twice (L223-231 and L233-238), so check the exact lines when reading.\n\n2. **Sansio app: `App`** (`src/quill/sansio/app.py` L59-964). It does no IO. Its defaults are `fixed_dir='static'` and `template_folder='templates'` (L286, L290).\n   - `App.enroll_plan` (L569-595) is a `@preparationmethod`. It only calls `schematic.enroll(self, options)`, and the options override the schematic's defaults.\n\n3. **Sansio schematic** (`src/quill/sansio/schematics.py`, 632 lines). It is the Flask-Blueprint analogue. It records deferred setup callbacks and replays them onto the app.\n   - `SchematicSetupStatus` (L34-116) is created per enrollment and passed to each deferred function.\n   - `note_once_only` (L232-244) wraps a callback so it runs only when `state.first_registration` is true.\n   - `enroll` (L273-377) builds the dotted name and raises `ValueError` on a duplicate name. It computes `first_bp_registration` and `first_name_registration`, and stores the schematic in `app.schematics[name]`.\n   - If the schematic `owns_fixed_directory`, `enroll` adds the static route. The rule is `f\"{self.fixed_address_route}/<path:filename>\"`, the terminus is `'static'`, and the view is `dispatch_fixed_document` (L323-328).\n\n4. **Concrete runtime classes.** Each provides its own `dispatch_fixed_document`.\n   - `Quill.dispatch_fixed_document` (`src/quill/app.py` L308-328) raises `RuntimeError \"'fixed_dir' must be set to serve static_files.\"` if there is no fixed dir. Otherwise it computes `max_age` and returns `dispatch_from_folder(fixed_dir, filename, max_age=max_age)`.\n   - `Schematic.dispatch_fixed_document` (`src/quill/schematics.py` L82-102) raises the same `RuntimeError` when `not owns_fixed_directory`. Otherwise it returns `dispatch_from_folder(fixed_dir, filename, max_age=ttl)`.\n\n## How the separation works\n\n- Static serving is a per-component route. Each component gets its own static view and its own `fixed_dir`. A schematic's static terminus is `<schematic>.static` (docs/schematics.rst L206-210).\n- Both views delegate to the same `dispatch_from_folder` helper, and both guard with the same error message. That shared helper is the only thing in the material that supports the \"consistent\" part of your question.\n\n## What the material does not settle\n\n- **Caching consistency.** The app passes a computed `max_age` and the schematic passes `ttl`. The excerpts don't show how either value is derived.\n  - The config `SEND_FILE_MAX_AGE_DEFAULT` defaults to `None` (`src/quill/app.py` L178-209), and it is the likely source of `max_age`.\n  - To confirm both paths use the same setting, read `src/quill/app.py` L308-328 and `src/quill/schematics.py` L82-102.\n- **Reachability.** A schematic's static folder is unreachable without a `url_prefix`, because the app's `/static` route takes precedence. Unlike templates, static is not searched as a fallback (docs/schematics.rst L212-217).\n- **Setup timing.** Enrollment via `enroll_plan` is a setup method. Calling it after the first request triggers the \"setup method ... can no longer be called\" error (docs/lifecycle.rst L36-61).",
+ "cost": 0.049244,
+ "turns": 1,
+ "duration_s": 15.4,
+ "tokens": {
+  "input": 9213,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9213
+ },
+ "pack_tokens": 4294,
+ "score": {
+  "correctness": 11,
+  "completeness": 9,
+  "relevance": 13,
+  "clarity": 14,
+  "reasoning": 12,
+  "total": 59
+ }
+}

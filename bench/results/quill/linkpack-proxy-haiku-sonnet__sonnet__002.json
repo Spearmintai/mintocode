@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "answer": "# Static serving and caching across Quill and Schematics\n\nThe material doesn't show static serving separated from the framework. Static handling sits in a shared base class, and schematics are enrolled into the app through a registration step. Caching stays consistent because both components call the same hook and the same helper.\n\n## Shared base: `Armature`\n- `Armature` (`src/quill/sansio/skeleton.py` L52-698) is the base for both `Quill` and `Schematic`.\n- It owns the static and template configuration: `fixed_dir`, `fixed_address_route` and `template_folder`. Its docstring says a static route is added if `fixed_dir` is set.\n- It exposes `fixed_dir`, `owns_fixed_directory` and `fixed_address_route` (L223-269).\n- It also holds the per-scope handler registries: `route`, `get`/`post`/..., `preceding_inquiry`, `following_inquiry`, and others.\n\n## Schematic as the modular component\n- `Schematic` (`src/quill/schematics.py` L18-128) extends the sansio schematic base. It has its own `cli` group (`ProgramBundle`) and its own `fetch_file_transfer_ttl` (L55-80), `dispatch_fixed_document` (L82-102) and `launch_asset` (L104-128).\n- `App.enroll_plan` (`src/quill/sansio/app.py` L569-595) is a `@preparationmethod`. It calls `schematic.enroll(self, options)`, and keyword options override the schematic's defaults.\n- `Schematic.enroll` (`src/quill/sansio/schematics.py` L273-377) builds the dotted name from `name_prefix` and `name`. It raises `ValueError` if that name is already in `app.schematics`. The rest of its body isn't in the excerpt.\n- Because `enroll_plan` is a preparation method, it must run before the first request. Otherwise you get the \"setup method ... can no longer be called\" error.\n\n## Consistent caching\n- `dispatch_fixed_document` (`src/quill/app.py` L308-328) raises `RuntimeError` if `owns_fixed_directory` is false.\n- Otherwise it computes `max_age = self.fetch_file_transfer_ttl(filename)` and returns `dispatch_from_folder(self.fixed_dir, filename, max_age=max_age)`.\n- Its comment explains why: `dispatch_document` only knows to call `fetch_file_transfer_ttl` on the app, so the view calls it itself so that it works for schematics too. Its docstring calls it a duplicate of the same method in the other class, which matches `Schematic.dispatch_fixed_document` existing separately.\n- `dispatch_document` (`src/quill/helpers.py` L400-523) accepts `max_age` as an int or a callable taking the filename. It defaults to `conditional=True`, `etag=True` and `as_attachment=False`.\n\n## Observable behavior\n`tests/test_elementary.py` L1403-1409 checks that `GET /static/index.html` returns 200 with `<h1>Hello World!</h1>`. It also checks that `build_link_to(\"static\", filename=\"index.html\") == \"/static/index.html\"`.\n\n## Not settled by the material\n- Where the static route is actually registered. It is probably in `Armature.__init__` (L75-215), which is not shown.\n- How `Quill.fetch_file_transfer_ttl` and `Schematic.fetch_file_transfer_ttl` compute their values, for example from config.\n- The internals of `dispatch_from_folder`.",
+ "cost": 0.041574,
+ "turns": 1,
+ "duration_s": 16.7,
+ "tokens": {
+  "input": 7438,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7438
+ },
+ "pack_tokens": 3304,
+ "score": {
+  "correctness": 12,
+  "completeness": 11,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 64
+ }
+}

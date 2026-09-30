@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _locate_fault_processor create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "answer": "The material doesn't show a measured performance problem, so the overhead is real but small and only shows up in the worst case.\n\n**What the code does (`src/quill/sansio/app.py:L823-846`)**\n\n1. `_obtain_exception_type_and_status(type(e))` runs on every lookup (`skeleton.py:L656-698`). It is a few `isinstance`/`issubclass` checks.\n2. The outer loop runs over `(code, None)`, or just `(None,)` when `code` is `None`. That is at most 2 iterations.\n3. The middle loop runs over `names = (*schematics, None)`, so it does `len(schematics) + 1` iterations. `Request.schematics` (`envelope_types.py:L180-195`) supplies the schematic name and its parents.\n4. For each pair, `handler_map = self.error_handler_spec[name][c]` is fetched. If it is empty, the code `continue`s and skips the MRO scan (L838-839).\n5. Otherwise the innermost loop walks `exc_class.__mro__` and calls `handler_map.get(cls)` on each class until one matches (L841-845).\n\n**Where the cost comes from**\n\n- The worst case is a miss, or a match only at a distant ancestor such as `Exception` or `object`. It costs about `2 \u00d7 (S+1) \u00d7 len(MRO)` dict `.get` calls, where S is the schematic nesting depth.\n- The MRO scan is repeated in full for every non-empty `(code, name)` map. The search order is precedence-based (schematic code, app code, schematic class, app class), not \"closest class anywhere\". So a deep chain is re-walked for each map that has any handlers.\n- Nothing is cached. Every exception re-runs the whole search. When a 500 occurs, `manage_failure` calls `_locate_fault_processor` again with an `InternalServerError`, which has a short MRO.\n\n**Why it stays small**\n\n- `__mro__` is a precomputed tuple, so nothing is computed while walking it.\n- Each step is an O(1) dict lookup, so the total is linear in MRO length.\n- The empty-map short-circuit skips most of the work when few handlers are registered.\n- Real exception chains are usually 3-6 classes deep.\n- This is the error path, not the normal request path.\n\nThe behavior is covered by `test_faultcatcher_priority` (`tests/test_elementary.py:L999-1029`). It checks correctness: `E3(E1, E2)` resolves to the `E2` handler because it is nearest in the MRO. It says nothing about speed. If you want to know whether this matters, profile a realistic handler setup. The source here contains no benchmarks and no caching layer, such as a per-class handler cache, to check against.",
+ "cost": 0.027824,
+ "turns": 1,
+ "duration_s": 13.8,
+ "tokens": {
+  "input": 4929,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 4929
+ },
+ "pack_tokens": 2029,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

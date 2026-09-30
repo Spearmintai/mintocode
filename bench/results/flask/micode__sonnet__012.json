@@ -1,0 +1,31 @@
+{
+ "answer": "The wrapper is `_lazy_sha1` in `src/flask/sessions.py` (L290-295). It is wired in as the default hash for `SecureCookieSessionInterface`.\n\n**The function**\n\n```python\ndef _lazy_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)\n```\n\n**Where the delay comes from**\n\n- The module only does `import hashlib` (L4), and that import is safe. Looking up `hashlib.sha1` is the step that can fail on a FIPS-restricted OpenSSL build with no SHA-1.\n- That lookup sits inside the body of `_lazy_sha1`, so it runs only when the function is called. Nothing checks SHA-1 while `flask.sessions` is imported or while the class body is executed.\n- The function takes the same argument (`string`) as `hashlib.sha1` and returns the hash object. `itsdangerous` can therefore treat it as a normal hash constructor.\n\n**How it is used**\n\n- In `SecureCookieSessionInterface` (L298), the class attribute is `digest_method = staticmethod(_lazy_sha1)` (L307). The class body stores a reference to the wrapper and does not call `hashlib.sha1` itself. `staticmethod` stops Python from binding the instance as the first argument when it is accessed through `self`.\n- `get_signing_serializer` (L317) builds `URLSafeTimedSerializer(keys, salt=..., serializer=..., signer_kwargs={\"key_derivation\": ..., \"digest_method\": self.digest_method})`. `itsdangerous` calls the digest method only when it signs or verifies a cookie. That happens in `open_session` and `save_session`, and only if `app.secret_key` is set.\n\n**Effect**\n\n- `import flask` and `Flask(__name__)` succeed even where SHA-1 is unavailable.\n- A developer can set `digest_method` on a `SecureCookieSessionInterface` subclass, for example to `hashlib.sha256`, before any session is signed.\n- Without the wrapper, `digest_method = hashlib.sha1` would be evaluated at import time and would raise before the developer had a chance to change it. That is what the docstring means by \"fail before the developer can configure something else.\"\n- SHA-1 availability is therefore only checked when a session is actually signed or verified.",
+ "cost": 0.0711242,
+ "turns": 3,
+ "duration_s": 10.238,
+ "tokens": {
+  "input": 6,
+  "cache_write": 12232,
+  "cache_read": 56371,
+  "output": 1091,
+  "total": 69700
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 18,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 88
+ }
+}

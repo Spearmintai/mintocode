@@ -1,0 +1,36 @@
+{
+ "answer": "**Current state**\n\n`PyCollector.isnosetest` (`src/_pytest/python.py:347`) does two jobs in one line. It reads `__test__` safely with `safe_getattr(obj, \"__test__\", False)`, and it validates the value with `is True`. The `is True` check guards against objects whose `__getattr__` returns something truthy.\n\nTwo callers use it as a \"force-collect\" override:\n- `istestfunction` (line 359) calls it after `funcnamefilter`. It then unwraps `staticmethod`/`classmethod` and checks `callable` and `getfixturemarker`.\n- `istestclass` (line 368) calls it after `classnamefilter`. It then rejects abstract classes.\n\n`__test__` is also read separately in three places, each with different semantics:\n- `PyCollector.collect` (line 391) uses `getattr(self.obj, \"__test__\", True)`. Here it works as an opt-out with truthiness.\n- `Class.collect` (line 748) uses `safe_getattr(self.obj, \"__test__\", True)`.\n- The module-level code near line 234 uses `getattr(obj, \"__test__\", True)`.\n\nSo the \"nose marker\" rule is spread across four places. The opt-in and opt-out sides use different default values and different strictness.\n\n**Proposed refactor**\n\n1. Extract the attribute validation into one small, pure helper. It could be a module-level function or a `staticmethod`, for example `_get_test_marker(obj) -> bool | None`.\n   - It calls `safe_getattr(obj, \"__test__\", _NOTSET)`.\n   - It returns `True` only when the value `is True`, `False` when it is explicitly falsy, and `None` when it is absent or not a real bool.\n   - It contains no config or collector state.\n2. Rewrite `isnosetest(obj)` as a one-line policy on top of that helper: `return _get_test_marker(obj) is True`. The opt-out sites (lines 234, 391 and 748) can use the same helper. This gives one definition of \"what counts as a marker\" and removes the getattr/safe_getattr inconsistency.\n3. Keep the `isnosetest` name and signature on `PyCollector`. Subclasses and plugins, including `Module`, `Class` and third-party collectors, can still override it and the `istest*` methods still call it, so nothing breaks.\n\n**Design pattern**\n\nThe best fit is a **Strategy**. It can be combined with **Template Method**, which `PyCollector` already uses.\n- `istestfunction` and `istestclass` stay as template methods. They run name filter, then marker override, then type-specific checks.\n- \"Is this object selected by name?\" (`funcnamefilter`, `classnamefilter`) and \"is it selected by marker?\" (`isnosetest`) become interchangeable predicates. The template composes them with `or`.\n- If more marker styles are needed, such as unittest or other plugins, the predicates can be held as a list of `Callable[[object], bool]`. The template then does `any(p(obj) for p in self._selection_predicates(...))`.\n\nA lighter alternative is a plain **predicate function**, which is Strategy without the class hierarchy. That is probably enough for pytest's small code size.\n\n**Backward compatibility**\n\n- The default behaviour is unchanged. `is True` stays strict, so classes with a custom `__getattr__` are still not collected by mistake.\n- `isnosetest` remains an overridable public-ish method.\n- Only the validation moves. The precedence stays as before: a name match or a marker match selects the object, and the abstract, fixture and callable checks still apply afterwards.\n\nI did not run tests or make changes. This answer comes from reading `python.py` only.",
+ "cost": 0.05144560000000001,
+ "turns": 4,
+ "duration_s": 14.373,
+ "tokens": {
+  "input": 6,
+  "cache_write": 6283,
+  "cache_read": 48858,
+  "output": 1653,
+  "total": 56800
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"isnosetest|def istestfunction|def istestclass|def funcnamefilter|def classnamefilter|def _matches_prefix_or_glob_option\", \"path\": \"/home/sq/micode-",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/python.py\", \"offset\": 335, \"limit\": 70}",
+  "Grep {\"pattern\": \"class PyCollector|class Module|class Class\\\\(|class Package|class PyobjMixin|__test__\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pyth"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 25,
+ "question": "How should the `isnosetest` method be refactored to separate the concern of attribute validation from test detection logic, and what design pattern would enable this separation while maintaining backward compatibility with nose-style test markers across the PyCollector hierarchy?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 16,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 75
+ }
+}

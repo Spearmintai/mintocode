@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "answer": "The test class is `TestFlowing` in `tests/test_aids.py:L236-307`. It doesn't isolate request-context lifecycle management from streaming generation through a formal architectural pattern. What it does is exercise one decorator/wrapper, `flow_with_environment` (`src/quill/helpers.py:L62-136`), through the real WSGI lifecycle. The separation is in the implementation, and the tests check it from the outside.\n\n**Test structure (black-box, fixture-driven)**\n- Each test uses the `app` and `client` fixtures. It registers a route on `app`, defines a small generator inside the view, and calls `client.get(...)`. Each then asserts on `rv.data`.\n- The lifecycle is not mocked. The full `gateway_application` path (`app.py:L1479-1527`) runs: `ctx.push()`, the view, the response, then `ctx.pop(error)`. The tests only check that the generator can still read request-bound data (`quill.request.args`, `quill.session`) after the view has returned.\n- The generator bodies are trivial (`yield \"Hello \"`, `yield quill.request.args[\"name\"]`, `yield \"!\"`), so any failure points to context handling, not generation logic.\n- The `qry_scope` fixture (`conftest.py:L60-63`) is not used here. Those tests go through the client, not a manually pushed context.\n\n**What each test covers**\n- `test_flowing_with_scope` (L237-248): wrapper form, `flow_with_environment(generate())`.\n- `test_flowing_with_scope_as_wrapper` (L250-262): decorator form, `@flow_with_environment` on a generator function that takes arguments (`generate(\"Hello \")`).\n- `test_flowing_with_scope_and_bespoke_shutdown` (L264-293): a custom `Wrapper` iterator with its own `close()`. It asserts `called == [42]`, which confirms the `finally: gen.close()` cleanup at `helpers.py:L124-128`.\n- `test_flow_retains_visit` (L295-307): sets `quill.session[\"test\"]` in the view and reads it inside the generator. This relates to the comment in `InquiryScope.push` (`ctx.py:L380-389`) that the session is opened only on the first push, so re-pushing the context doesn't lose it.\n\n**How the implementation separates the two concerns (what the tests verify)**\n- The wrapper `generator()` (`helpers.py:L108-128`) grabs the current request context from `_cv_request` and enters `with ctx:`. Inside, it yields a dummy `None`, then does `yield from gen`. The user's generator therefore knows nothing about contexts.\n- `next(wrapped_g)` (L134-135) primes the wrapper, so the context is pushed before the view returns. The sentinel is discarded, and later iteration runs the real generator inside the held context.\n- The decorator path (L98-106) catches the `TypeError` from `iter()` on a function and returns a wrapper that calls the function and re-wraps the resulting generator.\n- The outermost `InquiryScope.pop` (`ctx.py:L396-431`) only tears down when `len(self._cv_tokens) == 1`. The re-entrant `with ctx:` in the wrapper adds a token, which keeps the context alive until the stream finishes.\n\n**Not covered by the material**\n- The error path (calling outside a request context raises `RuntimeError`, `helpers.py:L110-114`) has no test in `TestFlowing`. Look elsewhere in `tests/` if such a test exists.",
+ "cost": 0.033108,
+ "turns": 1,
+ "duration_s": 11.7,
+ "tokens": {
+  "input": 6502,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6502
+ },
+ "pack_tokens": 3342,
+ "score": {
+  "correctness": 14,
+  "completeness": 12,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 71
+ }
+}

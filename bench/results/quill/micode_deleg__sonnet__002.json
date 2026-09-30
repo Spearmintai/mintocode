@@ -1,0 +1,38 @@
+{
+ "answer": "Static file serving in Quill (the Flask fork) is split into three layers. A shared IO-free base holds the static configuration. The app and each schematic (blueprint) register their own static route. Both compute cache lifetime from the same config key, `SEND_FILE_MAX_AGE_DEFAULT`.\n\n## 1. Shared base: `Armature` (`src/quill/sansio/skeleton.py:52-698`)\n- `Armature` is the base class of both `App` (`src/quill/sansio/app.py:59`) and the sansio `Schematic` (`src/quill/sansio/schematics.py:119`).\n- The `fixed_dir` property (getter `:223-231`, setter `:233-238`) returns `os.path.join(root_path, folder)` or `None`.\n- `fixed_address_route` (`:248-269`) returns the explicit URL path, or else `/basename(fixed_dir)`.\n- `owns_fixed_directory` is true when `fixed_dir` is not `None`. Both the app and the schematic use it to decide whether to register a static route.\n- The defaults differ. `App` defaults `fixed_dir=\"static\"`. The sansio `Schematic` defaults it to `None`, so static files for a schematic are opt-in.\n- This layer has no I/O and no `current_app`. It only stores configuration.\n\n## 2. App registration (`src/quill/app.py`)\n- `Quill.__init__` (`:262-279`) checks `owns_fixed_directory`. It then calls `attach_link_regulation(f\"{fixed_address_route}/<path:filename>\", terminus=\"static\", host=static_host, view_func=lambda **kw: self_ref().dispatch_fixed_document(**kw))`. The lambda goes through a `weakref` to avoid a reference cycle.\n- `Quill.fetch_file_transfer_ttl` (`:281-306`) reads `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`. The default is `None` (`:201`), which means conditional requests. A `timedelta` becomes `int(total_seconds())`.\n- `Quill.dispatch_fixed_document` (`:308-328`) raises `RuntimeError` if there is no static folder. Otherwise it computes `max_age` and calls `dispatch_from_folder` in `src/quill/helpers.py` (about `:526-567`).\n- Flask's `send_static_file`, `get_send_file_max_age` and `send_from_directory` correspond to `dispatch_fixed_document`, `fetch_file_transfer_ttl` and `dispatch_from_folder`.\n\n## 3. Schematic registration\n- The sansio `Schematic.enroll` (`src/quill/sansio/schematics.py:273-377`) registers the route at lines `:323-328`. It runs `state.attach_link_regulation(f\"{fixed_address_route}/<path:filename>\", view_func=self.dispatch_fixed_document, terminus=\"static\")` when `owns_fixed_directory` is true.\n- `SchematicSetupStatus.attach_link_regulation` (`:87-116`) adds the `url_prefix` and the dotted terminus (`<schematic>.static`). It then delegates to `App.attach_link_regulation` (`src/quill/sansio/app.py:604-661`).\n- The concrete `Schematic` (`src/quill/schematics.py:18`) supplies the runtime pieces, `fetch_file_transfer_ttl` (`:55-80`) and `dispatch_fixed_document` (`:82-102`). Both duplicate the `Quill` versions.\n\n## How caching stays consistent\n- The app and the schematic each call their own `fetch_file_transfer_ttl`, but both read the same key, `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`, and convert it the same way.\n- Both pass the resulting `max_age` to the same helper, `dispatch_from_folder`.\n- App and schematic static files therefore get the same caching behavior, and the sansio layer never needs to touch `current_app`.",
+ "cost": 0.12958630000000002,
+ "turns": 1,
+ "duration_s": 7.632,
+ "tokens": {
+  "input": 14,
+  "cache_write": 23190,
+  "cache_read": 80674,
+  "output": 4072,
+  "total": 107950
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Agent {\"description\": \"Investigate static/app registration\", \"subagent_type\": \"micode:micode-explorer\", \"prompt\": \"What is the modular component registration architec",
+  "mcp__micode__ask {\"question\": \"Armature sansio, App, Schematic static folder, static route registration, send_static_file, get_send_file_max_age, SEND_FILE_MAX_AGE_DEFAULT\"}",
+  "Grep {\"pattern\": \"fixed_dir|fixed_address_route|static\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"SEND_FILE_MAX_AGE_DEFAULT|fixed_dir=|class App|class Armature|class Schematic|class Quill\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", ",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 318, \"limit\": 16}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 75
+ }
+}

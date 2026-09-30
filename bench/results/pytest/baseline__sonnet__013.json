@@ -1,0 +1,35 @@
+{
+ "answer": "`Skip` is a small result object that `evaluate_skip_marks()` returns when a skip or skipif mark applies to a test. Its only field is `reason`. All of this is in `src/_pytest/skipping.py`.\n\n**`Skip` (line 162)**\n- It is a frozen dataclass with one field, `reason: str = \"unconditional skip\"`.\n- Its docstring calls it \"The result of evaluate_skip_marks()\".\n- It carries no condition logic. It only records that skipping was triggered, and why.\n\n**`evaluate_skip_marks(item)` (line 168)**\n- It returns `Skip | None`. `None` means nothing triggered, so the test runs.\n- It first goes through `item.iter_markers(name=\"skipif\")`, so it also picks up marks inherited from class, module or parametrize.\n  - The conditions come from `mark.args`, or from `mark.kwargs[\"condition\"]` if that keyword is given.\n  - With no conditions at all, it returns `Skip(mark.kwargs.get(\"reason\", \"\"))`. That is an unconditional skipif with an empty default reason.\n  - Otherwise each condition goes through `evaluate_condition(item, mark, condition)` (line 88). The first condition that evaluates true returns `Skip(reason)`.\n- It then goes through `item.iter_markers(name=\"skip\")`. The mark's arguments are forwarded straight into the constructor: `Skip(*mark.args, **mark.kwargs)`.\n  - `@pytest.mark.skip(\"why\")` and `@pytest.mark.skip(reason=\"why\")` both work because `reason` is the dataclass's first and only field.\n  - A bare `@pytest.mark.skip` gets the default `\"unconditional skip\"`.\n  - If a skip mark gets arguments `Skip` doesn't accept, such as `skip(True, reason=...)` or `skip(condition=...)`, the constructor raises `TypeError`. The function re-raises it with the added hint \"maybe you meant pytest.mark.skipif?\".\n- skipif marks are checked before skip marks, so a skipif that triggers determines the reason.\n\n**How `reason` is produced**\n- For skipif, `evaluate_condition()` returns `(result, reason)`.\n  - The reason is `mark.kwargs[\"reason\"]` if given.\n  - If it is missing and the condition is a string, the reason becomes `\"condition: \" + condition`.\n  - If it is missing and the condition is a boolean, it calls `fail(...)` saying you must specify `reason=STRING`.\n  - The reason is only meaningful when the result is true. `evaluate_skip_marks()` passes it into `Skip(reason)`.\n- For skip, the reason comes from the mark arguments through the constructor, as above.\n\n**Where it is used**\n- `pytest_runtest_setup` (line 242) is a `@hookimpl(tryfirst=True)` hook. It calls `evaluate_skip_marks(item)`.\n- If the result is truthy, it raises `skip.Exception(skipped.reason, _use_item_location=True)`.\n  - `skip` comes from `_pytest/outcomes.py`, where `_Skip` is defined at line 106.\n  - `_use_item_location=True` makes the report point at the test item rather than at the internal raise site.\n- The runner catches that skip exception and turns it into a skipped report. The `reason` becomes the skip message that appears in the `-rs` summary.\n- The same hook then evaluates xfail marks. `Xfail` and `evaluate_xfail_marks` follow the same pattern, with the extra fields `run`, `strict` and `raises`.",
+ "cost": 0.056243,
+ "turns": 3,
+ "duration_s": 12.322,
+ "tokens": {
+  "input": 6,
+  "cache_write": 7931,
+  "cache_read": 48935,
+  "output": 1472,
+  "total": 58344
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"Skip\\\\b|def evaluate_skip_marks|evaluate_skip_marks\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/skipping.py\", \"offset\": 80, \"limit\": 210}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 13,
+ "question": "How does the Skip class integrate with pytest's mark evaluation framework to determine when a test should be skipped, and what is the relationship between the reason attribute and the evaluate_skip_marks() function that produces Skip instances?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 81
+ }
+}

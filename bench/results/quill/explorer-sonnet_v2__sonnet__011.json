@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The code doesn't have one coupling that matches your wording exactly. The closest match is a set of three flag-driven couplings between registration state and the hooks that run in the request/response lifecycle. I read the code and did not run anything.\n\n**1. The setup guard is a one-way flag, not a check of the actual lifecycle.**\n- `@preparationmethod` (`sansio/skeleton.py:42-49`) calls `self._verify_configuration_completed(name)` before every setup method.\n- For a `Schematic` (`schematics.py:213-221`), that check reads only `_got_registered_once`.\n- `Schematic.enroll` sets that flag at line 320. It is set before the deferred functions run and before the nested schematics are enrolled.\n- Any decorator applied after a schematic has been enrolled anywhere raises `AssertionError`. This covers `following_inquiry`, `faulthandler`, `preparation_inquiry` and `enroll_plan`.\n- The check can't tell a schematic that is part of a conditional or nested registration from any other. A late decorator therefore fails, and the same schematic enrolled at two places behaves the same way.\n- One side effect: `enroll_plan` on a parent only appends to `_blueprints` (line 271). A child is not enrolled until the parent is. Registering a child on a parent that is already registered raises, because the guard is on the parent.\n\n**2. Hooks that are copied once cannot be undone or re-scoped.**\n- `Schematic.enroll` calls `_combine_schematic_functions` (lines 379-410) only if `first_bp_registration or first_name_registration` (lines 316-332).\n- That function copies the schematic's `error_handler_spec`, `view_functions`, `before_request_funcs`, `after_request_funcs`, `teardown_request_funcs` and the other hook registries into the app. Each is keyed by the dotted name, such as `parent.child`.\n- The response-time hooks that run afterwards (`after_request_funcs`, `teardown_request_funcs`, error handlers) are therefore snapshots taken at enroll time. Nothing updates them afterwards.\n- The lookup key is the dotted name, so a schematic nested under different parents, or under a `name=` override, gets a separate copy of the hooks.\n- The hooks are chosen per request by the matched endpoint's dotted name, not by the schematic object. Nesting changes the name a request resolves to, and so which hooks apply.\n\n**3. `note_once_only` depends on `state.first_registration`.**\n- `note_once_only` (`schematics.py:232-244`) wraps a function so it runs only when `state.first_registration` is true.\n- `first_registration` is computed at line 316 as \"no schematic in `app.schematics` is this one\".\n- Some schematic decorators use it. One example is `program_faulthandler` (`schematics.py:595-610`), which calls `state.app.faulthandler(code)(f)`.\n- Those handlers are installed on the app once, on the first registration only. Registering the same schematic again under another name or prefix does not re-run them. A conditional or repeated registration therefore gets the app-wide handler from the first registration only.\n\n**Where nesting adds to this.**\n- Subdomain and `url_prefix` are merged from the parent's state, and `name_prefix` is set to the parent's dotted name, in the loop at lines 349-377.\n- Hook keys, endpoint names and URL rules are all built from that same dotted name and prefix. Changing one of them changes the hooks that a request runs.\n\n**Tests that pin this behaviour:**\n- `tests/test_schematics.py::test_call_handling` (L696-724) covers the order of schematic-scoped hooks.\n- `tests/test_schematics.py::test_embedding_link_stems` (L922-950) covers prefix and name resolution.\n- `tests/test_elementary.py::test_fault_management_transforming` (L905-923) shows that a handler's response still passes through the following-inquiry hooks.",
+ "cost": 0.0607032,
+ "turns": 6,
+ "duration_s": 21.4,
+ "tokens": {
+  "input": 29497,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 29497
+ },
+ "pack_tokens": 2028,
+ "score": {
+  "correctness": 5,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 14,
+  "reasoning": 10,
+  "total": 37
+ }
+}

@@ -1,0 +1,225 @@
+{
+ "arm": "micode",
+ "repo": "flask",
+ "session": 3,
+ "model": "sonnet",
+ "steps": [
+  {
+   "answer": "`TagUUID` (`src/flask/json/tag.py:191-202`) converts in both directions because the tagged serializer, `TaggedJSONSerializer`, has to round-trip values. Its main use is the session cookie in `src/flask/sessions.py`. JSON has no UUID type, so the value is stored as a string and then rebuilt into a real `UUID` object when it is loaded.\n\n**How it works**\n- `key = \" u\"` is the tag marker. `check(value)` matches `isinstance(value, UUID)`.\n- `to_json(value)` returns `value.hex`. That is a 32-character hex string with no dashes, and it is JSON-safe and compact.\n- `to_python(value)` returns `UUID(value)`. The `UUID` constructor accepts that hex string and gives back an equal `UUID`, so nothing is lost.\n\n**Why both directions matter**\n- `TaggedJSONSerializer.tag` applies the first matching tag in its `order`. It wraps the result as `{\" u\": \"<hex>\"}`.\n- On load, `loads` runs `_untag_scan`. That scan looks for single-key dicts whose key is in `self.tags`, and `\" u\"` selects `TagUUID.to_python`. The value therefore comes back as a `UUID` again and not a plain string.\n- The leading space in the key makes a collision with real user dict keys unlikely. `TagDict` also handles user dicts that happen to have one of these keys.\n\n**Contrast with the plain JSON provider**\n`DefaultJSONProvider._default` in `src/flask/json/provider.py` also handles `uuid.UUID`, but only one-way, as `str(o)`. That gives the dashed form and cannot be turned back into a `UUID` automatically. `TagUUID` is the lossless version, which is needed for sessions.",
+   "cost": 0.040121000000000004,
+   "turns": 2,
+   "tokens": {
+    "input": 4,
+    "cache_write": 6501,
+    "cache_read": 32945,
+    "output": 752,
+    "total": 40202
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Grep {\"pattern\": \"class TagUUID\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/json/tag.py\", \"output_mode\": \"content\""
+   ],
+   "k": 24,
+   "score": {
+    "correctness": 17,
+    "completeness": 15,
+    "relevance": 16,
+    "clarity": 17,
+    "reasoning": 16,
+    "total": 81
+   }
+  },
+  {
+   "answer": "Flask has no separate asynchronous method view class, so the question's premise doesn't match the code. `src/flask/views.py` defines only two classes:\n\n- `View` at line 16.\n- `MethodView(View)` at line 138.\n\nA search of `src` found no async view class. The only `MethodView` subclass hit is a docstring example, `CounterAPI`.\n\n**What `MethodView` is**\n\n`MethodView` is the one view class that dispatches on HTTP method. It inherits from `View`, which is the generic base class. Its `dispatch_request` (ending at line 191) looks up the lowercase method name on the instance. `HEAD` falls back to `get`. It then calls the handler as `current_app.ensure_sync(meth)(**kwargs)`. `MethodView.__init_subclass__` builds `methods` from the handlers that exist.\n\n**Why no async subclass is needed**\n\nAsync support is handled outside the view classes:\n\n- `View.as_view` wraps `self.dispatch_request` in `current_app.ensure_sync(...)` at lines 110 and 116.\n- `MethodView.dispatch_request` wraps the handler in the same call at line 191.\n- `Flask.ensure_sync` (`src/flask/app.py:966-978`) checks `inspect.iscoroutinefunction(func)`. If the function is a coroutine, it returns `async_to_sync(func)`, which is the wrapper from the `asgiref` package. Otherwise it returns `func` unchanged.\n\nSo a `MethodView` can declare `async def get(self)` or `async def post(self)` and get async behavior without a separate class. This also works for `View` subclasses that define `async def dispatch_request`. Sync and async handlers can be mixed in the same class, and each one is adapted at call time.\n\nI can't say why the maintainers chose this design, because the code has no comment on the point. The practical effect is that there is one dispatch implementation and one place, `ensure_sync`, that bridges async to sync. A parallel async class would have duplicated the `HEAD` fallback, the `methods` computation, and the `as_view` logic.\n\nIf you meant a different class, such as one in a third-party extension, tell me which and I'll look at it.",
+   "cost": 0.0677438,
+   "turns": 3,
+   "tokens": {
+    "input": 8,
+    "cache_write": 8803,
+    "cache_read": 74379,
+    "output": 1764,
+    "total": 84954
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Grep {\"pattern\": \"^class |ensure_sync|async\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/views.py\", \"output_mode\": ",
+    "Grep {\"pattern\": \"class \\\\w*Async\\\\w*|class \\\\w*\\\\(MethodView\\\\)\", \"path\": \"/home/sq/micode-bench/repos/flask/src\", \"output_m"
+   ],
+   "k": 25,
+   "score": {
+    "correctness": 13,
+    "completeness": 12,
+    "relevance": 16,
+    "clarity": 17,
+    "reasoning": 15,
+    "total": 73
+   }
+  },
+  {
+   "answer": "`ScriptInfo` (`src/flask/cli.py:293-372`) takes both parameters because the app can come from two different places. Programmatic callers can supply a callable. The command line can supply a string. `ScriptInfo.load_app` (lines 333-372) picks between them.\n\n**`create_app` (a callable)**\n- It is stored as `self.create_app` (line 316), and `load_app` calls it as `self.create_app()` (lines 341-342).\n- It is meant for code that already holds a factory in Python. That includes a custom `FlaskGroup(create_app=...)`. `FlaskGroup.__init__` stores it (around line 589) and passes it into `ScriptInfo(create_app=self.create_app, ...)` (around line 670).\n- No import or path parsing happens on this route, so `--app` and `FLASK_APP` are not consulted. The `cli.py` docstring describes it as an optional function that creates the app instance.\n\n**`app_import_path` (a string)**\n- It comes from `--app` or `FLASK_APP`, so it is text that only exists at runtime.\n- `load_app` splits it on the regex `:(?![\\\\/])`. That leaves a Windows drive colon alone, so `C:\\path\\app.py:app` still splits correctly.\n- It then calls `prepare_import(path)` and `locate_app(import_name, name)`. Those functions import the module and find the app object or factory. The name lookup tries `app`, `application`, `create_app` and `make_app` (line 67), or a `name(args)` expression.\n\n**Precedence and fallback in `load_app`**\n1. If `create_app` is set, use it and ignore the import path.\n2. Otherwise, if `app_import_path` is set, import and locate the app from it.\n3. Otherwise, try `wsgi.py` and then `app.py` in the current directory, with `raise_if_not_found=False`.\n4. If nothing is found, raise `NoAppException`, which tells the user to use `--app`, `FLASK_APP`, or one of those files.\n\nAfter loading, `load_app` applies `set_debug_flag` and caches the result in `_loaded_app`. Repeated calls return the same app.\n\nThe two parameters exist because they cover different situations. A developer embedding or customizing the CLI has a Python callable. A user running `flask` from the shell has only a string, and it has to be resolved lazily by importing it. Neither can stand in for the other. The code does not say why the design was chosen, so this is what the structure shows.",
+   "cost": 0.10953560000000001,
+   "turns": 3,
+   "tokens": {
+    "input": 14,
+    "cache_write": 12904,
+    "cache_read": 146258,
+    "output": 2864,
+    "total": 162040
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Grep {\"pattern\": \"class ScriptInfo\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"output_mode\": \"content\", ",
+    "Grep {\"pattern\": \"create_app|ScriptInfo\\\\(\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"output_mode\": \"co"
+   ],
+   "k": 26,
+   "score": {
+    "correctness": 16,
+    "completeness": 14,
+    "relevance": 17,
+    "clarity": 16,
+    "reasoning": 15,
+    "total": 78
+   }
+  },
+  {
+   "answer": "`Flask.open_resource` (`src/flask/app.py:330-361`) allows only read modes. The code doesn't state a reason, but its structure and docstring point to one: the root path is the application's code and packaged data, and that isn't a place for the app to write.\n\n**What it does**\n- The check is `if mode not in {\"r\", \"rt\", \"rb\"}: raise ValueError(\"Resources can only be opened for reading.\")` (lines 353-354).\n- The docstring says \"Open a resource file relative to :attr:`root_path` for reading\". It also says \"Only reading is supported\", with valid values `\"r\"`, `\"rt\"` and `\"rb\"`.\n- The default mode is `\"rb\"`. The path is `os.path.join(self.root_path, resource)`.\n- `\"rb\"` calls `open(path, mode)` with no encoding. Text mode passes `encoding`, which defaults to `None`.\n- `Blueprint.open_resource` (`src/flask/blueprints.py:104-128`) applies the same restriction. Its encoding default is `\"utf-8\"`.\n\n**Why read-only fits**\n- `root_path` is where the app or blueprint module lives, for example a `schema.sql` next to `app.py`. These are packaged, deployed files such as SQL schemas and bundled data. They may sit in a read-only or installed package directory, such as site-packages or a zip.\n- Writing there would change the application's own source tree.\n- Flask provides a separate method for writable files. `Flask.open_instance_resource` (`app.py:363-383`) opens paths relative to `instance_path` and accepts any mode. Its docstring says \"Unlike :meth:`open_resource`, files in the instance folder can be opened for writing.\" The two methods divide the work: packaged resources are read-only, and runtime or instance data goes in the instance folder.\n\nThe explicit `ValueError` makes a write attempt fail immediately with a clear message. Otherwise the failure would depend on filesystem permissions.",
+   "cost": 0.1435236,
+   "turns": 2,
+   "tokens": {
+    "input": 18,
+    "cache_write": 16759,
+    "cache_read": 200858,
+    "output": 3628,
+    "total": 221263
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/app.py\", \"offset\": 330, \"limit\": 55}"
+   ],
+   "k": 27,
+   "score": {
+    "correctness": 17,
+    "completeness": 15,
+    "relevance": 17,
+    "clarity": 17,
+    "reasoning": 16,
+    "total": 82
+   }
+  },
+  {
+   "answer": "The source doesn't state a rationale, so this is my reading of how the code is structured. `ScriptInfo.__init__` (`src/flask/cli.py:305-331`) stores `_loaded_app = None`. It imports nothing. The import happens later, in `ScriptInfo.load_app` (lines 333-372), which returns the cached `_loaded_app` if it is set. Several parts of the CLI depend on that timing.\n\n**1. The inputs aren't known when the object is created.**\n- `FlaskGroup.make_context` creates the `ScriptInfo`.\n- The `--app` option is eager, and its callback `_set_app` (lines 440-446) later sets `info.app_import_path = value`.\n- The `-e/--env-file` callback `_env_file_callback` (line 493) loads dotenv files. `load_app` has to run after those are applied, because `FLASK_APP` and other variables may come from them.\n- Loading in `__init__` would run before `--app` had been parsed.\n\n**2. Many commands never need the app.**\n- `FlaskGroup.get_command` (lines 609-634) first looks up built-in and plugin commands. The comment there says these \"should be available even if the app fails to load\". It only calls `info.load_app()` if that lookup fails.\n- Examples are `flask --version` and `flask --help`, and `flask run` with an explicit `--app` also resolves the app through `load_app`. Importing user code, which may have side effects or errors, is skipped whenever it isn't required.\n\n**3. Failures can be reported cleanly.**\n- `get_command` catches `NoAppException` and prints a red `Error: ...` message, then continues. `list_commands` (lines 636-653) does the same for `--help`. It prints a plain message for `NoAppException` and a full traceback for any other exception.\n- If loading happened in `__init__`, a broken app would abort before click could show help or the built-in commands.\n\n**4. The result is cached.**\n- The app is needed from several places: `get_command`, `list_commands`, `run_command` (line 955), and the `with_appcontext` decorator (line 397). `load_app` returns `_loaded_app` after the first call, so the module is imported and the factory called once per invocation. Without the cache, each of those callers would call `create_app()` again, and the app would be created more than once.\n- `load_app` also applies `set_debug_flag` to the app once, just before it sets `_loaded_app` (line 371).",
+   "cost": 0.1938162,
+   "turns": 3,
+   "tokens": {
+    "input": 24,
+    "cache_write": 21489,
+    "cache_read": 296161,
+    "output": 4858,
+    "total": 322532
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Grep {\"pattern\": \"app_import_path|load_app\\\\(|_set_app|_env_file_callback|is_eager|_loaded_app\", \"path\": \"/home/sq/micode-ben",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"offset\": 605, \"limit\": 50}"
+   ],
+   "k": 28,
+   "score": {
+    "correctness": 16,
+    "completeness": 16,
+    "relevance": 17,
+    "clarity": 15,
+    "reasoning": 16,
+    "total": 80
+   }
+  },
+  {
+   "answer": "The code doesn't support that premise. Setting `accessed` on reads has no effect on how costly it is to serialize and sign the cookie. I found no comment or code linking the two.\n\n**What the `accessed` writes do**\n- In `SecureCookieSession` (`src/flask/sessions.py:52-94`), `__getitem__` (line 84), `get` (line 88) and `setdefault` (line 92) each run `self.accessed = True` and then delegate to the parent. That is one attribute assignment per call.\n- The `on_update` callback (lines 78-80) sets `modified = True` and `accessed = True` on any write.\n- The class default is `accessed = False` (line 72). The comment above it says it is used by `SecureCookieSessionInterface` \"to add a ``Vary: Cookie`` header\".\n\n**Where `accessed` is read**\n- `save_session` checks `if session.accessed:` (line 363) and adds `Vary: Cookie`. That is a header-only operation.\n- The cookie's serialization and signing happen elsewhere in `save_session`, and only after `should_set_cookie` (line 247) passes. That method returns `session.modified or (session.permanent and SESSION_REFRESH_EACH_REQUEST)`. It never looks at `accessed`.\n- The string conversion is `serializer.dumps(dict(session))`. `serializer` is the `URLSafeTimedSerializer` from `get_signing_serializer` (lines 317-335). It runs `TaggedJSONSerializer`, then the HMAC signature, and only when the session is being written out.\n\n**Consequences for read-heavy requests**\n- A request that only reads the session sets `accessed = True` and leaves `modified = False`.\n- Unless the session is permanent and `SESSION_REFRESH_EACH_REQUEST` is on, no signing or serialization runs for that request. The result is a `Vary: Cookie` header and no `Set-Cookie`.\n- The unconditional flag write is a negligible constant cost on each read. It does not change how much serialization work is done, or how often.\n\n**The case that is costly**\nIf the session is permanent, `SESSION_REFRESH_EACH_REQUEST` is on (the default), and the session is non-empty, the cookie is re-serialized and re-signed on every request. That is true whether or not the code read anything. The cause is `should_set_cookie`, not the `accessed` flag.\n\nIf you saw this claim in a specific issue or comment, tell me where and I'll check it against that text.",
+   "cost": 0.247647,
+   "turns": 3,
+   "tokens": {
+    "input": 28,
+    "cache_write": 28435,
+    "cache_read": 367655,
+    "output": 6032,
+    "total": 402150
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sessions.py\", \"offset\": 14, \"limit\": 100}",
+    "Grep {\"pattern\": \"accessed|Vary|should_set_cookie\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/sessions.py\", \"outpu"
+   ],
+   "k": 29,
+   "score": {
+    "correctness": 10,
+    "completeness": 13,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 13,
+    "total": 67
+   }
+  },
+  {
+   "answer": "I don't think meaningful degradation would occur. Nothing in the code makes repeating this registration across many blueprints costly.\n\n**The mechanism**\n- The test cases use `Blueprint.app_template_filter` and `add_app_template_filter`, defined in `src/flask/sansio/blueprints.py` (around lines 443-551). The matching `app_template_test` and `app_template_global` methods work the same way.\n- Each call defines `register_template(state)` and passes it to `record_once`. When the blueprint is registered, `register_template` runs `state.app.jinja_env.filters[name or f.__name__] = f`. That is a single dict assignment.\n- The `Blueprint.app_template_*` methods are just the blueprint-level counterparts of `App.template_filter` and `add_template_filter` in `src/flask/sansio/app.py` (around lines 663-776). Both routes end in the same `jinja_env.filters` assignment.\n\n**Why repeating it stays cheap**\n- **Registration cost:** the work is one dict write per filter, once per blueprint, at startup. It scales linearly, and the constant is tiny.\n- **No cost per request:** the filters live in one shared `jinja_env.filters` dict, and Jinja looks them up at template compile time. The number of blueprints that contributed filters doesn't change render cost.\n- **`record_once`:** it runs the callback only on the first registration of that blueprint object, even if it is registered several times.\n\n**What can go wrong**\n- **Name collisions:** the filters are app-wide, not scoped to the blueprint. Two blueprints registering a filter with the same name silently overwrite each other, and the last registration wins. That is a correctness problem, not a performance one.\n- **Timing:** registration must happen during setup. After the first request, Flask's setup-method check raises an error. This is described in `docs/lifecycle.rst` around lines 36-61.\n\nIf you saw a specific test or benchmark that suggested a slowdown, point me to it and I'll check it. Otherwise I would not expect one.",
+   "cost": 0.2710994,
+   "turns": 1,
+   "tokens": {
+    "input": 30,
+    "cache_write": 30343,
+    "cache_read": 409537,
+    "output": 6776,
+    "total": 446686
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [],
+   "k": 30,
+   "score": {
+    "correctness": 11,
+    "completeness": 8,
+    "relevance": 15,
+    "clarity": 17,
+    "reasoning": 12,
+    "total": 63
+   }
+  },
+  {
+   "answer": "`test_dotted_name_not_allowed` (`tests/test_blueprints.py:254-256`) checks that `flask.Blueprint(\"app.ui\", __name__)` raises `ValueError`. That constructor call has to fail because Flask uses the dot as its nesting separator.\n\n**What the test exercises**\n- The check is in `Blueprint.__init__` in `src/flask/sansio/blueprints.py:195-199`. An empty name raises `ValueError(\"'name' may not be empty.\")`. A name containing a dot raises `ValueError(\"'name' may not contain a dot '.' character.\")`.\n- The neighbouring `test_empty_name_not_allowed` covers the empty-name case.\n- The test uses a bare `pytest.raises(ValueError)`, so it checks the exception type and not the message.\n\n**Why the dot is forbidden**\nThe rest of the framework builds names by joining parts with `.`, and a dot in a name would make those names ambiguous. The code doesn't spell this out beyond the checks themselves, so this is inferred from how the dot is used:\n\n- **Endpoints:** a blueprint's routes are named `<blueprint name>.<endpoint>`. `Flask.url_for` (`src/flask/app.py:1003+`) documents this and treats an endpoint starting with `.` as relative to the current blueprint. A blueprint named `app.ui` would produce `app.ui.index`, which could equally mean blueprint `app`, then `ui`, then `index`.\n- **Nesting:** nested blueprints register under dotted names such as `parent.child`. `test_dotted_names_from_app` uses `url_for(\"test.index\")`. A dotted top-level name would collide with that scheme.\n- **Related checks:** the same rule applies to route names. `Blueprint.add_url_rule` (`src/flask/sansio/blueprints.py:427-431`) rejects an `endpoint` containing a dot and a `view_func.__name__` containing a dot. `test_route_decorator_custom_endpoint_with_dots` (`tests/test_blueprints.py:327-342`) tests those cases.\n\nThe check is in `__init__` so the error appears when the blueprint is created, not later when its URLs fail to resolve.",
+   "cost": 0.31592960000000003,
+   "turns": 2,
+   "tokens": {
+    "input": 34,
+    "cache_write": 34639,
+    "cache_read": 500828,
+    "output": 7714,
+    "total": 543215
+   },
+   "session_id": "0a34405e-b88a-4032-9959-b2cfd233725b",
+   "calls": [
+    "Grep {\"pattern\": \"dot|\\\"\\\\.\\\"|'\\\\.'\", \"path\": \"/home/sq/micode-bench/repos/flask/tests/test_blueprints.py\", \"output_mode\": \"c"
+   ],
+   "k": 31,
+   "score": {
+    "correctness": 16,
+    "completeness": 14,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 15,
+    "total": 76
+   }
+  }
+ ],
+ "reader_tokens": 0,
+ "reader_cost": 0.0,
+ "tokens": 2223042,
+ "cost": 1.3894162,
+ "turns": 19,
+ "score": [
+  81,
+  73,
+  78,
+  82,
+  80,
+  67,
+  63,
+  76
+ ]
+}

@@ -1,0 +1,34 @@
+{
+ "answer": "`write_captured_output` is a method of `_NodeReporter` in `src/_pytest/junitxml.py` (line 159). It reads `self.xml.logging`, which is the `junit_logging` option, and `self.xml.log_passing_tests`.\n\n## Conditional logic\n\n1. **Passing tests.** If `not self.xml.log_passing_tests and report.passed`, it returns and writes nothing.\n2. **Reading the streams.** It reads `report.capstdout`, `report.caplog` and `report.capstderr` into `content_out`, `content_log` and `content_err`.\n3. **Mode `\"no\"`.** It returns and writes nothing.\n4. **Log section.** It starts with `content_all = \"\"`. If the mode is `\"log\"` or `\"all\"`, `content_all` becomes the log text, prepared with the header \" Captured Log \".\n5. **Stdout section.** If the mode is `\"system-out\"`, `\"out-err\"` or `\"all\"`:\n   - It appends the stdout text (header \" Captured Out \") to `content_all`.\n   - It writes `content_all` as a `<system-out>` element.\n   - It resets `content_all` to `\"\"`.\n6. **Stderr section.** If the mode is `\"system-err\"`, `\"out-err\"` or `\"all\"`:\n   - It appends the stderr text (header \" Captured Err \") to `content_all`.\n   - It writes `content_all` as a `<system-err>` element.\n   - It resets `content_all` to `\"\"`.\n7. **Leftover content.** If `content_all` is still non-empty, it is written as `<system-out>`. This only happens in `\"log\"` mode, because the stdout and stderr branches clear the buffer.\n\n`_prepare_content` builds each section as `\"\\n\".join([header.center(80, \"-\"), content, \"\"])`. `_write_content` creates the XML element and sets its text to `bin_xml_escape(content)`. The `_write_content` call is what actually appends the element to the testcase.\n\n## `all` versus `system-out` plus `system-err`\n\nThe `junit_logging` modes are single values, not combinable flags. The closest match to \"system-out plus system-err\" is `out-err`. Comparing that with `all`:\n\n- **`system-out` alone:** only the stdout section goes into `<system-out>`. It has no log section and no `<system-err>` element.\n- **`system-err` alone:** only the stderr section goes into `<system-err>`. It has no log section and no `<system-out>` element.\n- **`out-err`:** stdout goes into `<system-out>` and stderr into `<system-err>`. The captured log is excluded.\n- **`all`:** the captured log is put in the `content_all` buffer first. The stdout branch then appends to that buffer, so `<system-out>` contains the log section followed by the stdout section. `<system-err>` contains only stderr, because the buffer was reset after the stdout write.\n\nThe semantic difference is that `all` aggregates the log and stdout into a single `<system-out>` element. `out-err` keeps stdout and stderr as separate elements and drops the log. In `all` mode, log output never gets its own element and is never merged into `<system-err>`.",
+ "cost": 0.0399144,
+ "turns": 2,
+ "duration_s": 9.994,
+ "tokens": {
+  "input": 4,
+  "cache_write": 5482,
+  "cache_read": 30892,
+  "output": 1180,
+  "total": 37558
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def write_captured_output\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\", \"-A\": 40}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 10,
+ "question": "What is the conditional logic in write_captured_output that determines which captured output streams are written to the XML report, and what is the semantic difference between the 'all' logging mode and the combination of 'system-out' and 'system-err' modes in terms of content aggregation?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 18,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 89
+ }
+}

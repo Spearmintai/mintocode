@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "answer": "The \"pass-through dictionary tag class\" is `ForwardMapping` in `src/quill/json/tag.py:L119-130`. Its `into_json` (L125-128) returns `{k: self.serializer.tag(v) for k, v in value.items()}`. The reasoning is stated in the code comment at L126-127: \"JSON objects may only have string keys, so don't bother tagging the key here.\"\n\n**Why keys are left alone**\n\n- JSON object keys can only be strings, so a key can never be one of the non-string types the labels handle (bytes, UUID, timestamps, Markup, tuples, and so on). Tagging a key would have nothing to act on.\n- Tagging a key would also turn it into a dict (`{key: ...}`), and a dict cannot be a JSON object key.\n\n**Why values are tagged recursively**\n\n- Values can be any Python type, including bytes, UUID, datetime, tuples, or nested dicts and lists. Each one needs `self.serializer.tag(v)` so that the first matching label in `order` can wrap it.\n- Recursion through the serializer is how nested structures get fully tagged.\n\n**How it fits with the rest**\n\n- `ForwardMapping` is a keyless label. It adds no wrapper of its own, and `tag = into_json` (L130) bypasses `JSONLabel.tag`'s `{self.key: ...}` wrapping (L87-90). The output is a plain JSON object with tagged values.\n- It sits second in `default_tags` (L238-247), after `LabelMapping`. `LabelMapping` catches 1-key dicts whose key collides with a registered tag key, and escapes them by appending `__` (L110-112). Because of that escaping, `ForwardMapping` only sees dicts that cannot be mistaken for tagged values, and it can leave their keys as they are.\n- On the load side, `_unlabel_sweep` (L309-319) processes dict children first and then calls `untag` on the dict itself. `untag` (L297-307) only converts 1-key dicts whose key is in `tags`. That is why untouched keys round-trip cleanly, and why `LabelMapping` is needed for the collision case.",
+ "cost": 0.024988,
+ "turns": 1,
+ "duration_s": 7.5,
+ "tokens": {
+  "input": 5180,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5180
+ },
+ "pack_tokens": 2320,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

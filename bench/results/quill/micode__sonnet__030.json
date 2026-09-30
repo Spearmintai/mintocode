@@ -1,0 +1,38 @@
+{
+ "answer": "Repeating this registration across many schematics would add a small cost per schematic at startup, and the cost is not itself severe. It grows with the number of schematics. There is also a separate correctness risk from name collisions.\n\n**The mechanism**\n\nThe pattern is in `tests/test_schematics.py`. `test_layout_sieve` (L362) uses `@bp.program_layout_sieve()`. `test_append_layout_sieve` (L375) calls `bp.attach_program_layout_sieve(my_reverse)`.\n\nBoth go through `Schematic.attach_program_layout_sieve` (`src/quill/sansio/schematics.py:460-475`):\n1. It defines a closure `register_template(state)`. The closure does `state.app.markup_engine_env.filters[name or f.__name__] = f`.\n2. It hands the closure to `Schematic.note_once_only` (L232-244).\n3. `note_once_only` wraps the closure so it runs only when `state.first_registration` is true. It then appends the wrapper to `self.deferred_functions` through `Schematic.record` (L223-230).\n4. Nothing touches the app when the decorator runs. `Schematic.enroll` (L273 onward) replays every deferred function when `app.enroll_plan(bp, ...)` is called.\n\nThe same pattern applies to `program_layout_probe` (writes `.tests`) and `program_layout_universal` (writes `.globals`).\n\n**Where the cost comes from**\n\n- Each schematic object gets its own closure, its own `update_wrapper`'d wrapper, and its own entry in `deferred_functions`. The work is per schematic, not shared.\n- The `first_registration` guard only stops a *single* schematic object from re-registering if it is enrolled twice. It does not deduplicate across distinct schematics. Each distinct schematic has its own first registration, so each one runs its own write into the shared Jinja environment during `enroll`. With N schematics registering the same filter, that is N closures, N wrappers and N dict writes, all during startup enrolment.\n- These writes go to the one shared `app.markup_engine_env.filters` dict, so N-1 of them overwrite the previous one.\n- Each `enroll` also does its other setup work, such as merging hooks and recursing into nested schematics. That work adds to the startup cost.\n- Each of these calls is decorated with `@preparationmethod`, so each also goes through `_verify_configuration_completed`.\n\n**Correctness risk**\n\nBecause the filter table is one dict keyed by `name or f.__name__`, the last schematic enrolled silently wins when two schematics register different functions under the same name. That is hard to notice.\n\n**How much it matters**\n\nI did not run or profile this. The cost is a startup-time linear overhead, not a per-request one. Once the environment is populated, template rendering does not go through these closures.\n\nA single app-level registration through `Quill.layout_sieve` or `attach_layout_sieve` avoids the per-schematic duplication.",
+ "cost": 0.0822986,
+ "turns": 6,
+ "duration_s": 16.104,
+ "tokens": {
+  "input": 8,
+  "cache_write": 12335,
+  "cache_read": 79063,
+  "output": 1713,
+  "total": 93119
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"program_layout_sieve|attach_program_layout_sieve\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\", \"head_limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 440, \"limit\": 115}",
+  "Grep {\"pattern\": \"def note_once_only|def record\\\\b|_got_registered_once|def enroll|deferred_functions|def _verify_configuration_completed|def preparationmethod\", \"pa",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 222, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_schematics.py\", \"offset\": 360, \"limit\": 25}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

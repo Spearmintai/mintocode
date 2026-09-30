@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "answer": "The class is `_ProgramScopeShared` in `src/quill/ctx.py`, the default `app.app_ctx_globals_class()` behind `g`. It splits its methods into two groups: attribute-style access raises, and dict-style methods offer defaults.\n\n**Attribute protocol: strict, always `AttributeError`**\n- `__getattr__` (L52-56) returns `self.__dict__[name]`. On `KeyError` it raises `AttributeError(name) from None`.\n- `__delattr__` (L61-65) does `del self.__dict__[name]`. On `KeyError` it raises `AttributeError(name) from None`.\n- Both translate the dict's `KeyError` into `AttributeError`, because Python's attribute protocol requires it (`hasattr` and `getattr(obj, n, default)` depend on it). `from None` suppresses the chained `KeyError` context. No default is possible here, since `g.foo` and `del g.foo` take no fallback argument.\n\n**Dict-like methods: explicit, caller-controlled defaults**\n- `get(name, default=None)` (L67-76) delegates to `self.__dict__.get`. It never raises and returns `None` if you give no default.\n- `pop(name, default=_sentinel)` (L78-90) uses a sentinel to tell \"no default given\" from \"default is `None`\". With no default it calls `self.__dict__.pop(name)`, which raises `KeyError`, not `AttributeError`. With a default it returns that value instead. The test (L147-150) confirms this: `pop(\"bar\")` raises `KeyError` once the key is gone, and `pop(\"bar\", \"more cake\")` returns the default.\n- `assumefallback(name, default=None)` (L92-102) is meant to be a `setdefault` (get, or set and return the default). Test L143-145 expects it to keep the first value.\n\n**Balance in short**\n- Attribute syntax (`g.x`, `del g.x`) raises `AttributeError` for a missing name and has no default.\n- `get` never raises, and `pop` raises only when you give no default.\n- The one inconsistency is that `pop` raises `KeyError`, not `AttributeError`, following `dict.pop` rather than the attribute protocol.\n\n**Broken piece:** `assumefallback` (L102) calls `self.__dict__.assumefallback(name, default)`. A dict has no such method (it looks like a rename artifact of `setdefault`), so the call raises `AttributeError`, and the L143-145 test expectations can't be met. The docstring at L94 has the same rename. The default-providing branch of the API is therefore broken for this method. Changing L102 to `self.__dict__.setdefault(name, default)` would presumably fix it, though the material doesn't show any other callers.",
+ "cost": 0.01904,
+ "turns": 1,
+ "duration_s": 9.8,
+ "tokens": {
+  "input": 3390,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 3390
+ },
+ "pack_tokens": 1144,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 79
+ }
+}

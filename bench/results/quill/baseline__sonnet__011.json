@@ -1,0 +1,41 @@
+{
+ "answer": "The hidden coupling is that `following_current_inquiry` keeps its state on the request context, and that list is only read and applied once, inside `treat_reply`. I read the code and did not run it, so the failure cases below come from tracing it.\n\n**The pieces**\n\n- `src/quill/ctx.py:117` defines `following_current_inquiry(f)`, the runtime \"after this request\" decorator. It looks up `_cv_request.get(None)` and appends `f` to `ctx._after_request_functions`. That list is created empty in the request-context constructor at `ctx.py:331`. The decorator returns `f` unchanged. It raises `RuntimeError` if no request context is active.\n- `src/quill/app.py:1298` defines `treat_reply`. It is the only reader of that list (`app.py:1313`). It runs the per-request functions first, in registration order.\n- It then runs the declaratively registered `after_request_funcs`, in reverse order. For each name in `chain(request.schematics, (None,))` it runs the functions registered through `following_inquiry` (`sansio/skeleton.py:487`) or `following_program_inquiry` (`sansio/schematics.py:564`).\n- `treat_reply` is called from `conclude_inquiry` (`app.py:922\u2013951`). That runs after `build_reply(rv)` and for both normal dispatch and error handlers.\n\n**The hidden coupling**\n\nThe decorator does not hook into the response at all. It only appends to a list on the request context. It works only if code later reaches `treat_reply`. Three things follow from that.\n\n1. **Registration is tied to the request context, not to the code that registered it.** A function registered during the view (for example inside a helper decorator, or nested inside another function's call) is applied to the response. One registered after `treat_reply` has run does nothing. Streaming generators are the usual case, because they execute after the response is built. Nothing raises an error in that case.\n2. **Conditional or nested registration changes the ordering and the number of callbacks.** The list is per-request, and nothing deduplicates or scopes it. A helper that registers on some paths only, or on every call, adds one callback per call. Callers of `treat_reply` see different response mutations depending on control flow.\n3. **The two mechanisms run in opposite orders, in one fixed sequence.** Dynamic callbacks run first, in registration order. Static callbacks then run last-registered-first. So a dynamic callback always sees the response before any `following_inquiry` handler does. A nested registration cannot be interleaved with the static ones.\n\n**Interaction with the error path**\n\n- `conclude_inquiry` runs for error-handler responses too, with `from_error_handler=True`. In that mode any exception in `treat_reply` is only logged.\n- If a view registers a callback and then raises, the callback is still in the list. It is applied to the error response, which was built for a different code path. It was never meant for that response.\n- If one callback raises, the remaining ones are skipped, as the docstring at `skeleton.py:494` says. Registered callbacks are therefore silently dropped, and under the error-handler path the failure is only logged.\n- Because the `from_error_handler` swallow is around `treat_reply`, a failing callback can also leave `request_finished` unsent.\n\n**Where the session sits in this**\n\nAfter all callbacks run, `treat_reply` calls `session_interface.store_sitting` (`app.py:1321\u20131322`). The response mutations therefore share one fixed sequence with session saving. A callback registered late, or after the session was already handled, cannot influence it.\n\n**Also note**\n\n`following_program_inquiry` (`sansio/schematics.py:569`) does not register directly on the schematic. It defers its registration to a lambda that appends to `s.app.after_request_funcs` under the `None` key. So the schematic-level \"runs on every request\" registration depends on when the schematic is registered with the app. That is a second, independent piece of timing state, alongside the request-context list.",
+ "cost": 0.08405299999999999,
+ "turns": 9,
+ "duration_s": 22.664,
+ "tokens": {
+  "input": 12,
+  "cache_write": 9339,
+  "cache_read": 109765,
+  "output": 2472,
+  "total": 121588
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"decorator|def (after|before)_|_state|_after|_before\", \"-i\": true, \"output_mode\": \"count\", \"head_limit\": 40}",
+  "Grep {\"pattern\": \"after_request|_got_first_request|_is_setup_finished|def setupmethod|_check_setup_finished|after_this_request|_after_request_functions\", \"path\": \"/h",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/ctx.py\", \"offset\": 105, \"limit\": 60}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"offset\": 1295, \"limit\": 40}",
+  "Grep {\"pattern\": \"after_this_request|_after_request_functions\", \"path\": \"/home/sq/micode-bench/base/quill\", \"output_mode\": \"content\", \"glob\": \"!src/**\"}",
+  "Grep {\"pattern\": \"treat_reply|_after_request_functions|def finalize|def handle_user_exception|def handle_exception\", \"path\": \"/home/sq/micode-bench/base/quill/src/qu",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"offset\": 905, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/skeleton.py\", \"offset\": 485, \"limit\": 22}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 13,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 70
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 36,
+ "question": "Where does the control flow in the CLI group class's directive retrieval method determine whether to return a directly registered directive, an entry point loaded directive, or an application CLI group directive?",
+ "model": "sonnet",
+ "answer": "The decision happens in `QuillCollection.obtain_directive` in `src/quill/cli.py`, L609-634.\n\n**1. Directly registered and entry-point directives (L610-616)**\n- L610 calls `self._read_extension_directives()` (L600-607). On its first call, it loads every entry point in group `quill.commands` and registers each with `self.add_command(ep.load(), ep.name)`. It is guarded by `_loaded_plugin_commands`, so later calls return early.\n- After that, directly registered commands (such as the defaults added in `__init__` at L593-596) and plugin commands are in the same command table. They are not distinguished in the lookup.\n- L613 does `rv = super().obtain_directive(ctx, name)`.\n- L615-616 is the first branch: `if rv is not None: return rv`. This returns a directly registered or entry-point directive, and the app is never loaded. The comment at L611-612 says these commands should be available even if the app fails to load.\n\n**2. Application CLI directives (L618-634)**\nThis runs only if the lookup above found nothing.\n- L618 gets the `RoutineDetails` from `ctx.ensure_object`.\n- L622-626 calls `info.read_program()`. If it raises `MissingProgramFailure`, the error is printed in red to stderr and the method returns `None` (L626).\n- L631-632 pushes `app.program_scope()` with `ctx.with_resource`, unless `current_app` is already that app.\n- L634 returns `app.cli.obtain_directive(ctx, name)`, which is the application CLI group's directive.\n\n**Summary**\n- Return at L616: directly registered or entry-point directive.\n- Return at L626: `None`, because the app could not be loaded.\n- Return at L634: application CLI directive.\n\nThe material does not distinguish built-in from plugin commands in the control flow. The only difference is when each is added to the table. It also does not show `super().obtain_directive`'s implementation, which is presumably the base click group lookup.",
+ "cost": 0.038432,
+ "turns": 1,
+ "duration_s": 7.4,
+ "tokens": {
+  "input": 8619,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8619
+ },
+ "pack_tokens": 4733,
+ "score": {
+  "correctness": 18,
+  "completeness": 17,
+  "relevance": 18,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 88
+ }
+}

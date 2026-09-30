@@ -1,0 +1,31 @@
+{
+ "answer": "**Flask has no separate asynchronous view class, so the question's premise doesn't quite match this repository.** `src/flask/views.py` defines only two classes: `View` and `MethodView(View)`. Async support is not a subclass at all. It is built into the synchronous dispatch path.\n\n**How async works instead**\n- `View.dispatch_request` (`views.py:78`) and `MethodView.dispatch_request` (`views.py:182`) can each be written as `async def`.\n- Neither calls the handler directly. `View.as_view` (`views.py:110` and `116`) calls `current_app.ensure_sync(self.dispatch_request)(**kwargs)`. `MethodView.dispatch_request` calls `current_app.ensure_sync(meth)(**kwargs)` (`views.py:191`), where `meth` is the method handler such as `get` or `post`.\n- `Flask.ensure_sync` (`app.py:966`) returns plain functions unchanged. If `iscoroutinefunction(func)` is true, it hands the function to `Flask.async_to_sync` (`app.py:980`).\n- `Flask.async_to_sync` wraps the coroutine function with `asgiref.sync.async_to_sync`. It raises a `RuntimeError` telling you to install the `async` extra if `asgiref` is missing.\n\n**Why this design**\n- **Flask is WSGI.** WSGI is synchronous. A worker thread must run the view and return a response before it can proceed, so the request/response cycle can't be truly async. An async dispatch base would still have to block on the coroutine, and that is what `async_to_sync` does.\n- **`MethodView` only adds routing.** It picks a handler from `self.methods` and the lowercased request method. Whether that handler is `def` or `async def` doesn't matter to this routing, so it needs no second class hierarchy.\n- **Async is decided per callable.** `ensure_sync` inspects the specific function at call time. Sync and async handlers can coexist on the same `MethodView`, for example an `async def get` next to a plain `def post`.\n- **It is overridable in one place.** Applications can override `Flask.ensure_sync` or `Flask.async_to_sync` to change how async code runs. That includes views, and also route handlers, hooks and other callables that go through `ensure_sync`.",
+ "cost": 0.024381600000000003,
+ "turns": 3,
+ "duration_s": 9.524,
+ "tokens": {
+  "input": 4,
+  "cache_write": 1561,
+  "cache_read": 34698,
+  "output": 1119,
+  "total": 37382
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 25,
+ "question": "Why does the asynchronous HTTP method view class inherit from the synchronous HTTP method dispatch base class rather than implementing async dispatch independently?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 12,
+  "completeness": 11,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 68
+ }
+}

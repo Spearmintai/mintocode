@@ -1,0 +1,31 @@
+{
+ "answer": "The class is most likely `TestStreaming` in `tests/test_helpers.py` (L236-307), though the question's wording is loose and I'm matching it by behaviour. It is a plain pytest test class with no base class and no `setUp` or `tearDown`. Its shared dependencies come from the `app` and `client` fixtures in `tests/conftest.py`.\n\n**How it separates the two concerns**\n- Each test registers its own route on the `app` fixture. The route defines a local generator that only yields data and never manages any context. Examples are `generate()` at L240 and L254, and `gen()` at L301.\n- The generator reads request-bound state. It uses `flask.request.args[\"name\"]` at L242, L256 and L286, or `flask.session[\"test\"]` at L302.\n- Context lifetime is handled entirely by `flask.stream_with_context` (`src/flask/helpers.py:L62-136`). The tests use it in three ways:\n  - Wrapping an iterator: `Response(stream_with_context(generate()))`.\n  - As a decorator on a generator function: `@stream_with_context` on `generate(hello)` at L253 and on `gen()` at L300.\n  - Wrapping a custom iterator: `Wrapper`, a hand-written iterator with `close()`, `__next__` and `__iter__`, at L267-289.\n- `stream_with_context` keeps the request context alive while the response body is iterated, after the view function has returned. The test client then reads `rv.data` to consume the stream.\n\n**What each test checks**\n- `test_streaming_with_context` (L237) checks that `request.args` is readable during iteration. The response is `b\"Hello World!\"`.\n- `test_streaming_with_context_as_decorator` (L250) checks the same result when the decorator form passes arguments to the generator.\n- `test_streaming_with_context_and_custom_close` (L264) checks that the wrapper forwards `close()` to the underlying iterator. It asserts `called == [42]`.\n- `test_stream_keeps_session` (L295) checks that a session value set in the view is still readable inside the generator.\n\n`tests/test_testing.py:L385-393` covers the same mechanism from the opposite side. There, `stream_with_context` pushes an extra context that the response holds, and closing the response releases it. That test is a function, not a class.\n\nI ruled out `TestGreenletContextCopying` in `tests/test_reqctx.py`. That file has no streaming tests.",
+ "cost": 0.0866912,
+ "turns": 6,
+ "duration_s": 16.04,
+ "tokens": {
+  "input": 10,
+  "cache_write": 12177,
+  "cache_read": 102216,
+  "output": 1752,
+  "total": 116155
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 13,
+  "completeness": 10,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 67
+ }
+}

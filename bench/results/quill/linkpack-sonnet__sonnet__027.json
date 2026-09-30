@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "answer": "The material shows *what* is restricted, and it implies the intent, but no code comment or docstring states an explicit rationale for the read-only rule.\n\n**What the code does**\n\n`Quill.launch_asset` (`src/quill/app.py:L330-361`) and its schematic counterpart `Schematic.launch_asset` (`src/quill/schematics.py:L104-128`) use the same guard:\n\n```python\nif mode not in {\"r\", \"rt\", \"rb\"}:\n    raise ValueError(\"Resources can only be opened for reading.\")\npath = os.path.join(self.root_path, resource)\n```\n\n- Only `\"r\"`, `\"rt\"` and `\"rb\"` are accepted.\n- Every other mode raises `ValueError`. That includes `\"w\"`, `\"x\"`, `\"a\"` and `\"r+\"`, which `tests/test_aids.py:L346-351` (`test_read_asset_failures`) confirms.\n- `\"rb\"` opens with no encoding. Text modes use `encoding`.\n\n**Why, as far as the code shows**\n\n- The docstrings describe the method as opening \"a resource file relative to :attr:`root_path` for reading\" and say \"Only reading is supported\".\n- `root_path` is where the application or schematic is defined. Its files are bundled assets, such as `schema.sql` next to `app.py` (docstring example, and `setup_datastore` in `examples/walkthrough/flaskr/db.py:L33-38`) or `static/index.html` (tests). These are part of the code package, not runtime data.\n- The design separates that read-only package data from writable, deployment-specific data. `Quill.launch_deployment_asset` (`app.py:L363-383`) is the writable counterpart. It opens files relative to `instance_path`, and its docstring says \"Unlike :meth:`launch_asset`, files in the instance folder can be opened for writing.\" It performs no mode check.\n\nSo the restriction enforces a split. Package resources under `root_path` are read-only, and anything the app needs to write goes in the instance folder via `launch_deployment_asset`.\n\n**Not settled by the material**\n\nThe source never says why the split exists. Likely reasons are that installed packages may be read-only or shared, and that writes would mix mutable state into code. That is inference, not something the code states. To confirm, check the project's docs, changelog, or git history for `launch_asset` (the `versionchanged:: 3.1` notes only cover the `encoding` parameter).",
+ "cost": 0.02543,
+ "turns": 1,
+ "duration_s": 8.0,
+ "tokens": {
+  "input": 5160,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5160
+ },
+ "pack_tokens": 2394,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

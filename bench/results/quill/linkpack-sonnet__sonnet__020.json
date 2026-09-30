@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 20,
+ "question": "How does the namespace object that stores application-level data during an application context maintain thread-safety and context isolation when accessed concurrently through the contextvars mechanism?",
+ "model": "sonnet",
+ "answer": "The namespace object is `_ProgramScopeShared` (`src/quill/ctx.py:L29-114`), exposed as `g`. It has no locking or thread-safety logic of its own. Isolation comes from having one instance per application context, reached through a contextvar-backed proxy.\n\n**1. The object is plain per-instance storage**\n- `__getattr__`, `__setattr__` and `__delattr__` (L52-65) read, write and delete entries in `self.__dict__`. A missing key raises `AttributeError`.\n- There is no synchronization here. Nothing in the object makes it safe for two threads to share one instance.\n\n**2. Each application context gets its own instance**\n- `ProgramScope.__init__` (`ctx.py:L245-249`) builds `g` with `app.app_ctx_globals_class()`. That class attribute defaults to `_ProgramScopeShared` (`sansio/app.py:L185`).\n- Every new `ProgramScope` therefore has a fresh, empty namespace.\n\n**3. `g` is a proxy that resolves through the contextvar**\n- `globals.py:L31-33` defines `g` as `LocalProxy(_cv_app, \"g\", unbound_message=_no_app_msg)`.\n- Each access to `g.x` looks up the `_cv_app` ContextVar and returns the `g` attribute of whichever `ProgramScope` is current in the calling thread or async task.\n- If no context is bound, the proxy raises with `_no_app_msg`.\n\n**4. The token stack keeps contexts separate**\n- `ProgramScope` keeps a `_cv_tokens` list. `pop` (`ctx.py:L256-272`) calls `_cv_app.reset(self._cv_tokens.pop())` in a `finally` block. This restores the previous context value.\n- It also checks that `_cv_app.get()` is `self` and raises `AssertionError(\"Popped wrong app context...\")` otherwise. This catches contexts that were popped out of order.\n- Teardown, `app.perform_dismantle_program_scope(exc)`, runs only when the last token is popped (`len(self._cv_tokens) == 1`). Nested pushes of the same context therefore share the same `g`.\n\n**Summary**\nIsolation is by context, not by locking. Each thread or task has its own `ContextVar` value, so `g` resolves to a different `_ProgramScopeShared` instance in each. Sharing one context's `g` across threads is not protected. The shown code does not include `ProgramScope.push`, so I can't say from this material exactly how the token is set. Look at `ctx.py` around L238-284 for that.",
+ "cost": 0.023896,
+ "turns": 1,
+ "duration_s": 8.7,
+ "tokens": {
+  "input": 4667,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 4667
+ },
+ "pack_tokens": 1915,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

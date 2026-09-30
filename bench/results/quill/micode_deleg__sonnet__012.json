@@ -1,0 +1,36 @@
+{
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295).\n\n**How it works**\n\n- The body is one line: `return hashlib.sha1(string)`, with `string` defaulting to `b\"\"`. The attribute lookup `hashlib.sha1` sits inside the function body, so it only runs when the function is called.\n- The docstring gives the reason. FIPS builds may not include SHA-1. If the default were `hashlib.sha1` itself, evaluating it at class-definition time would fail on import. The developer would then have no chance to configure a different digest.\n- `_postponed_sha1` is used as the class attribute `ProtectedBiscuitSessionAdapter.digest_method = staticmethod(_postponed_sha1)` (L307). The `staticmethod` wrapper stops Python from binding `self` when it is called through an instance. Importing `quill.sittings` therefore never touches SHA-1.\n- The function is only called when itsdangerous invokes it. That happens in the adapter's serializer setup at about L333, where `digest_method` is passed in `signer_kwargs` along with `key_derivation`, to `URLSafeTimedSerializer`. This serializer setup runs when a session is loaded or saved (`launch_sitting` / `store_sitting`).\n- A restricted environment can also replace `digest_method` on a subclass, for example with a SHA-256 callable. The import then never needs SHA-1, and any failure appears only if the default is actually used at runtime.",
+ "cost": 0.0650608,
+ "turns": 4,
+ "duration_s": 9.682,
+ "tokens": {
+  "input": 6,
+  "cache_write": 11248,
+  "cache_read": 53834,
+  "output": 929,
+  "total": 66017
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"usedforsecurity|hashlib\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"_lazy_sha1|digest_method\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\", \"-n\": true, \"-B\": 1, \"-A\": 1}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sittings.py\", \"offset\": 285, \"limit\": 15}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

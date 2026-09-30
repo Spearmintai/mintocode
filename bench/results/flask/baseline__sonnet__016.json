@@ -1,0 +1,31 @@
+{
+ "answer": "The class is `TagBytes` in `src/flask/json/tag.py`, a `JSONTag` subclass. It is registered with `TaggedJSONSerializer`, whose default tags are in `TaggedJSONSerializer.default_tags`.\n\n**Encoding, `TagBytes.to_json` (line 166).** It runs `b64encode(value).decode(\"ascii\")`. Base64 turns any byte sequence into ASCII-only text, so the result is always a valid JSON string. That matters because raw bytes are not JSON-serializable and may not be valid UTF-8. Base64 is lossless, so no information is dropped.\n\n**Tagging.**\n- `check` (line 163) matches only `isinstance(value, bytes)`.\n- `JSONTag.tag` (line 87) wraps the encoded string as `{\" b\": \"<base64>\"}`, using `key = \" b\"`.\n- The key starts with a space and is only two characters, so it is unlikely to collide with real data.\n- The wrapper records the original type, so the decoder knows the string was bytes rather than an ordinary `str`.\n\n**Decoding, `TagBytes.to_python` (line 169).** It runs `b64decode(value)` and returns the original `bytes`.\n\n**Reversibility through the serializer.**\n- `TaggedJSONSerializer.dumps` (line 321) calls `self.tag(value)`. That walks `self.order` and uses the first tag whose `check` passes. It then dumps compact JSON with `separators=(\",\", \":\")`.\n- `TaggedJSONSerializer.loads` (line 325) parses the JSON and calls `_untag_scan` (line 309). That recurses through dicts and lists depth-first. Each dict then goes through `untag` (line 297), which does the following:\n  - It only acts on dicts with exactly one key, and only when that key is in `self.tags`.\n  - It then calls `self.tags[\" b\"].to_python(...)`, restoring the bytes.\n- Nested bytes inside lists, tuples or dicts are handled because `PassDict`, `PassList` and `TagTuple` call `serializer.tag` on each item.\n\n**Collision safety.** A user's own dict such as `{\" b\": \"x\"}` would otherwise be misread as bytes on decode. `TagDict` (key `\" di\"`, line 93) prevents this. Its `check` matches any one-item dict whose key is a registered tag, and it rewrites the key to `\" b__\"`. On decoding, `to_python` strips the `__` suffix. A genuine bytes value is therefore always distinguishable from a user dict that happens to use the same key.\n\n**Ordering.** `TagDict` is listed first in the default order, so the collision case is checked before `TagBytes`. Together these keep the bytes \u2192 tagged JSON \u2192 bytes round trip exact.\n\nI read the code only and did not run a round-trip test.",
+ "cost": 0.043169799999999994,
+ "turns": 5,
+ "duration_s": 13.299,
+ "tokens": {
+  "input": 8,
+  "cache_write": 3523,
+  "cache_read": 72009,
+  "output": 1466,
+  "total": 77006
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 16,
+ "question": "How does the tagged JSON serializer class that handles bytes maintain data consistency and reversibility when encoding binary data through base64?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

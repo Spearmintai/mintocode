@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "haiku",
+ "answer": "# Why Dot Validation in Schematic Names Ensures Route Component Validation\n\nThe tests validate both schematic names and terminus (route endpoint) names cannot contain dots because **the dot character is reserved as a separator in the nested naming scheme**.\n\n## The Architectural Reason\n\nFrom the compiled knowledge:\n\n> \"Names may not contain `.`, because the dot separates nested schematic names from the terminus name (2.0.1).\"\n\nThe system constructs fully-qualified endpoint names using dots to separate hierarchical components. The dotted name is built as:\n\n```\nf\"{name_prefix}.{self_name}\".lstrip('.')\n```\n\n(src/quill/sansio/schematics.py:L304)\n\nThis means a qualified endpoint looks like: `parent.child.terminus`\n\n## Why Both Must Be Validated\n\nIf either schematic names **or** terminus names could contain dots, the parsing would become ambiguous:\n\n- `parent.child.view.html` \u2192 Is this schematic `parent` \u2192 `child` \u2192 endpoint `view.html`?  \n  Or schematic `parent.child` \u2192 endpoint `view.html`?\n\n## The Validation Points\n\n**Schematic names** are rejected in `Schematic.__init__` (L195-199):\n```python\nif \".\" in name:\n    raise ValueError(\"'name' may not contain a dot '.' character.\")\n```\n\n**Terminus names** are rejected in `Schematic.attach_link_regulation` (L427-431):\n```python\nif terminus and \".\" in terminus:\n    raise ValueError(\"'terminus' may not contain a dot '.' character.\")\n\nif view_func and hasattr(view_func, \"__name__\") and \".\" in view_func.__name__:\n    raise ValueError(\"'view_func' name may not contain a dot '.' character.\")\n```\n\nThe test `test_path_wrapper_bespoke_terminus_with_periods` (tests/test_schematics.py:L327-342) validates both paths to ensure unambiguous endpoint name parsing throughout the routing system.",
+ "cost": 0.0189,
+ "turns": 1,
+ "duration_s": 14.0,
+ "tokens": {
+  "input": 7622,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7622
+ },
+ "pack_tokens": 4932,
+ "score": {
+  "correctness": 13,
+  "completeness": 12,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 14,
+  "total": 67
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "Everything below is in `src/_pytest/pathlib.py`. The entry point is `import_path(path, *, mode, root, consider_namespace_packages)`, at line 489.\n\n## Core idea\n\nA module's identity is its **dotted name, which is the key in `sys.modules`**. Caching consistency comes from deriving that name from the file's location on disk, not from whichever `sys.path` entry happens to reach it. The result is then checked against the actual file.\n\n## Name resolution\n\n- **`resolve_pkg_root_and_module_name(path, consider_namespace_packages)`** returns `(pkg_root, module_name)`.\n  - `resolve_package_path` walks upward while each directory has an `__init__.py` and a valid identifier name. It returns the topmost such package directory, and `pkg_root` is that directory's parent.\n  - If `consider_namespace_packages` is set, it also scans upward through candidate roots. It accepts one when `compute_module_name(candidate, path)` gives a name for which `is_importable(name, path)` is true. `is_importable` uses `importlib.util.find_spec` and then `spec_matches_module_path`.\n  - `compute_module_name(root, path)` makes the dotted name from the path relative to the root. It drops the `.py` suffix and a trailing `__init__`.\n  - If no root can be found, it raises `CouldNotResolvePathError`.\n- **`module_name_from_path(path, root)`** is the fallback name. It is built from the path relative to `root`, or from the absolute path parts if the file is outside `root`. Dots in directory names become `_`, and a trailing `__init__` is dropped.\n\n## Behaviour by mode\n\n**`prepend` and `append`** (lines 568\u2013612):\n1. Resolve `pkg_root` and `module_name`. On `CouldNotResolvePathError`, use `path.parent` and `path.stem`.\n2. Change `sys.path` permanently. `prepend` inserts `pkg_root` at index 0 unless it is already there. `append` adds it only if it is not already in `sys.path`.\n3. Call `importlib.import_module(module_name)`. Python's own `sys.modules` cache does the caching.\n4. Check consistency. Unless `PY_IGNORE_IMPORTMISMATCH=1` or the path is an `__init__.py`, compare `mod.__file__` with `path`. The comparison strips `.pyc`/`.pyo` and `/__init__.py`, then uses `_is_same`, which is `os.path.samefile`. It has a Windows variant that also accepts equal paths (for UNC mounts). A mismatch raises `ImportPathMismatchError`.\n\nBecause the module's name and its `sys.modules` key are identical, importing the same file again through a different `sys.path` setup returns the cached module. If a different file has already claimed that name, for example two `test_foo.py` files that are not in packages, the `__file__` check catches the collision.\n\n**`importlib`** (lines 535\u2013566) does not touch `sys.path`:\n1. Resolve the name with `resolve_pkg_root_and_module_name`. If `sys.modules[module_name]` already exists, return it without re-importing.\n2. Otherwise call `_import_module_using_spec(module_name, path, pkg_root, insert_modules=False)`. It returns `None` if the spec doesn't match the path.\n3. If that fails or resolution raised, fall back to `module_name_from_path(path, root)`. Check `sys.modules` again, then call `_import_module_using_spec(..., path.parent, insert_modules=True)`. Failure raises `ImportError`.\n\nThis mode does no `__file__` mismatch check. Uniqueness comes from the root-anchored name, so same-named files in different directories get different keys.\n\n## `_import_module_using_spec` (line 615)\n\n- It imports the parent module first if it is missing from `sys.modules` or lacks `__path__`, recursing with the parent's path.\n- It asks each `sys.meta_path` finder for a spec. For pytest's assertion-rewrite hook it passes `[location, module_path]` so rewriting isn't skipped (#12659). It accepts a spec only if `spec_matches_module_path` says the spec's `origin` (or `submodule_search_locations`) equals the path.\n- Otherwise it builds a spec with `spec_from_file_location`, using `NamespaceLoader` for directories.\n- It then runs `module_from_spec`, sets `sys.modules[module_name] = mod` **before** `exec_module`, so circular imports resolve, and sets the module as an attribute on its parent (#12194).\n- When `insert_modules=True`, `insert_missing_modules` fills in the missing intermediate parents in `sys.modules`. It tries a real `importlib.import_module` first and falls back to an empty `ModuleType`. It also adds the child attribute to each parent.\n\nOther pieces: `ImportMode` (line 472) is the mode enum, and `ImportPathMismatchError` (line 480) is the mismatch exception.",
+ "cost": 0.0845642,
+ "turns": 4,
+ "duration_s": 16.98,
+ "tokens": {
+  "input": 8,
+  "cache_write": 12152,
+  "cache_read": 73701,
+  "output": 2120,
+  "total": 87981
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def import_path|def _import_module_using_spec|def module_name_from_path|def resolve_pkg_root_and_module_name|def insert_missing_modules|def _import",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pathlib.py\", \"offset\": 470, \"limit\": 450}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pathlib.py\", \"offset\": 919, \"limit\": 30}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 18,
+ "question": "How does the import_path API framework resolve module identity and ensure module caching consistency when the same file path is imported multiple times through different sys.path configurations?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py` (lines 155\u2013193). It's the Quill equivalent of Flask's `copy_current_request_context`.\n\n**How it works**\n\n1. **The copy is made when the function is decorated.** It reads the active request context with `_cv_request.get(None)`. If none is active, it raises `RuntimeError(\"'duplicate_active_inquiry_scope' can only be used when a request context is active\u2026\")`. Otherwise it calls `ctx.copy()` immediately (line 187), not when the wrapped function is later called.\n\n2. **`InquiryScope.copy()` (lines 337\u2013355) builds the copy.** It constructs a new `InquiryScope` with the same `app`, the same `environ`, the **same `request` object**, and the **same `session` object**. The docstring's versionchanged 1.1 note says the current session object is reused instead of being reloaded. That way `quill.session` doesn't point to an out-of-date object.\n\n3. **The wrapper runs the function inside the copied context.** `wrapper` (lines 189\u2013191) does `with ctx:` and then calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`. The `with` block calls `InquiryScope.push()` and `pop()`. `guarantee_blocking` makes the function callable in a blocking way (an async function is presumably wrapped for this). `update_wrapper` keeps the original function's metadata.\n\n**Isolation of greenlets**\n\n- The active context is stored in a `contextvars` variable, `_cv_request`. `push()` sets it and saves the token in `_cv_tokens`. A new greenlet starts with no request context, so `quill.request` and `quill.current_app` are falsy there. This is confirmed in `test_microthread_scope_duplicating`, which asserts `not quill.request` both before and after the `with reqctx:` block.\n- Each call to the wrapper pushes its own copy, so the greenlet gets its own context stack. `push()` also creates a new `ProgramScope` (app context) if none is active or if the active one belongs to a different app.\n\n**Session preserved across the boundary**\n\n- `push()` (lines 384\u2013389) only opens a session if `self.session is None`. Because `copy()` passes in the existing session, the copy skips `launch_sitting`. The comment there says opening a new one would make it lose the session.\n- Session changes made before the copy, such as `quill.session[\"fizz\"] = \"buzz\"`, are therefore visible inside the greenlet.\n- The request object is shared, not cloned. `copy()`'s docstring warns that this makes it safe for greenlets but not for other threads unless access to the request is locked.\n\n**Tests** are in `tests/test_callscope.py`, class `TestMicrothreadScopeDuplication` (lines 148\u2013202). They are skipped if greenlet is not installed.\n- `test_microthread_scope_duplicating` uses `request_ctx.copy()` manually.\n- `test_microthread_scope_duplicating_interface` uses the decorator.\n- Both assert that the request path and args, `current_app` and `session[\"fizz\"] == \"buzz\"` are available inside the greenlet.",
+ "cost": 0.05619020000000001,
+ "turns": 9,
+ "duration_s": 20.1,
+ "tokens": {
+  "input": 41160,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 41160
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 83
+ }
+}

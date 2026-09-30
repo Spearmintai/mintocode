@@ -1,0 +1,31 @@
+{
+ "answer": "`ensure_ascii` is a class attribute on `DefaultJSONProvider` in `src/flask/json/provider.py`. It decides whether non-ASCII characters in serialized JSON come out as `\\uXXXX` escapes or as literal Unicode characters.\n\n**Definition (`provider.py:144`).** `DefaultJSONProvider.ensure_ascii = True`. The docstring says it replaces non-ASCII characters with escape sequences. That may be more compatible with some clients, but it can be turned off for better performance and smaller output.\n\n**How it is applied.**\n- `DefaultJSONProvider.dumps()` (lines ~168\u2013179) calls `kwargs.setdefault(\"ensure_ascii\", self.ensure_ascii)`, then `json.dumps(obj, **kwargs)`.\n- Because it uses `setdefault`, the provider attribute is only a default. A caller can pass `ensure_ascii=...` directly to `dumps()` and override it for that one call.\n- `DefaultJSONProvider.response()` (lines ~189\u2013215) builds its output with `self.dumps(obj, **dump_args)`. That covers `flask.jsonify` and returning a dict from a view, so both follow the same setting.\n- `loads()` is unaffected. `json.loads` reads escaped and literal characters the same way, so the setting only changes the serialized text, not the decoded data.\n\n**Effect on output.**\n- With `True` (the default), the standard library's `json.dumps` writes every non-ASCII character as an escape, so the output is pure ASCII. For example, `\"\u00e9\"` becomes `\"\\u00e9\"`, and characters outside the BMP become surrogate-pair escapes.\n- With `False`, characters are written literally as Unicode. The result is shorter and faster to produce, and it is read as UTF-8 by clients.\n- Both forms decode to the same data.\n\n**How to change it.**\n- Set `app.json.ensure_ascii = False`. Tests do this in `tests/test_json.py:52` (parametrized over `test_value`) and `tests/test_testing.py:112`.\n- The old config key `JSON_AS_ASCII` no longer does anything. The changelog (`CHANGES.rst`, around lines 153 and 286) and `docs/config.rst` say `JSON_AS_ASCII`, `JSON_SORT_KEYS` and similar options moved to attributes on the `app.json` provider.",
+ "cost": 0.0313316,
+ "turns": 4,
+ "duration_s": 11.356,
+ "tokens": {
+  "input": 6,
+  "cache_write": 2077,
+  "cache_read": 52808,
+  "output": 1245,
+  "total": 56136
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization provider and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

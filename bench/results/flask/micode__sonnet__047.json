@@ -1,0 +1,31 @@
+{
+ "answer": "`_find_error_handler` (`src/flask/sansio/app.py:823-846`) does a nested linear scan with no caching. The cost comes from three multiplied loops.\n\n**How the lookup works**\n1. `_get_exc_class_and_code(type(e))` resolves the exception class and its HTTP code.\n2. The outer loop runs over `(code, None)` if the exception has a code, and over `(None,)` otherwise.\n3. The middle loop runs over `names = (*blueprints, None)`. That is every blueprint in the request's blueprint chain, then the app.\n4. For each pair, it reads `self.error_handler_spec[name][c]`. That is a dict keyed by exception class, holding the registered handlers. If the dict is empty, it skips the pair.\n5. The inner loop walks `exc_class.__mro__` from most specific to least specific. It calls `handler_map.get(cls)` on each class and returns the first hit.\n\n**Where the overhead comes from**\n- **MRO walk per handler map.** Each `handler_map.get` is O(1), but the walk is O(depth of the MRO). The MRO of a deep exception class includes `Exception`, `BaseException` and `object`, so it can be long.\n- **Repeated walks.** The MRO is walked again for every non-empty handler map. That is up to `len(codes) \u00d7 (len(blueprints)+1)` walks, and the total is roughly O(codes \u00d7 scopes \u00d7 MRO depth).\n- **Worst case is a miss or a late match.** Handlers registered only on a base class such as `Exception`, or no handler at all, force every walk to run to the end of the MRO. The walk only stops early when a specific class is registered in an earlier map.\n- **No memoization.** The result is not cached per `(exception type, blueprint chain)`. Every call redoes the same lookups, and the scan re-walks the same MRO even though it never changes for a given class.\n- **Precedence order.** This order is required: code before class, and blueprint before app. It prevents a cheap early exit on the most specific class across all scopes. Flask has to finish one scope's MRO walk before it tries the next scope.\n- **Hot path.** The function runs inside `handle_user_exception` and `handle_http_exception` in `src/flask/app.py`, so it runs once for every error response.\n\nEach `handler_map.get` is cheap and the cost is small per request. It grows only when the inheritance chain is deep and there are many blueprints and codes, because those multiply the number of walks. I read only `_find_error_handler` itself. I did not open its callers in `src/flask/app.py`, so that last point about where it is called comes from my recall of Flask, not from reading the code.",
+ "cost": 0.0454108,
+ "turns": 2,
+ "duration_s": 10.738,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7148,
+  "cache_read": 32854,
+  "output": 1024,
+  "total": 41030
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _find_error_handler create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

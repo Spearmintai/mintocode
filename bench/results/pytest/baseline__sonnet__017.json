@@ -1,0 +1,34 @@
+{
+ "answer": "The method is `TerminalReporter.pytest_internalerror` in `src/_pytest/terminal.py:560-563`:\n\n```python\ndef pytest_internalerror(self, excrepr: ExceptionRepr) -> bool:\n    for line in str(excrepr).split(\"\\n\"):\n        self.write_line(\"INTERNALERROR> \" + line)\n    return True\n```\n\n**How it iterates**\n- The hook receives `excrepr`, an `ExceptionRepr`. The hook spec is in `src/_pytest/hookspec.py:1239`.\n- `str(excrepr)` gives the full formatted error. That is normally a multi-line traceback.\n- `.split(\"\\n\")` breaks that text into individual lines.\n- The loop calls `self.write_line(\"INTERNALERROR> \" + line)` once for each line. Every physical output line therefore gets the `INTERNALERROR> ` prefix.\n- If the whole string were passed to `write_line` in one call, only the first line would get the prefix. The continuation lines would print unprefixed.\n- The method then returns `True`. Per the hookspec, this suppresses the fallback of printing the INTERNALERROR message to `sys.stderr`.\n\n**Optimization if the format were guaranteed single-line**\n- The split and the loop would be unnecessary. The body could be one call: `self.write_line(\"INTERNALERROR> \" + str(excrepr))`, followed by `return True`.\n- That removes the `split` allocation of a list of strings and the per-line loop iteration.\n- The gain is small, because this only runs on an internal error.\n\nThe other `pytest_internalerror` implementations don't loop over lines. `junitxml.py:631` passes `str(excrepr)` straight to `_add_simple`. `capture.py:912` and `debugging.py:302` don't use the representation text at all.",
+ "cost": 0.0359136,
+ "turns": 2,
+ "duration_s": 6.491,
+ "tokens": {
+  "input": 4,
+  "cache_write": 5570,
+  "cache_read": 30878,
+  "output": 745,
+  "total": 37197
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def pytest_internalerror\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\", \"-A\": 8}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 17,
+ "question": "How does the pytest_internalerror method iterate through split lines instead of directly passing the exception representation to write_line, and what control flow optimization could be applied if the exception representation format were guaranteed to be single-line?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 16,
+  "total": 81
+ }
+}

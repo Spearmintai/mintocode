@@ -1,0 +1,31 @@
+{
+ "answer": "The question's premise doesn't match this codebase. Flask has no separate asynchronous method-view class, and no async dispatch base class.\n\n**What exists in `src/flask/views.py`**\n- `View` (L16) is the generic class-based view base. It has `dispatch_request` (L78-83), which is abstract, and the `as_view` classmethod (L85-135).\n- `MethodView(View)` (L138) dispatches on the HTTP method. `__init_subclass__` (L165-180) builds `methods` from the `http_method_funcs` handlers that the subclass defines. Its `dispatch_request` (L182-191) looks up `getattr(self, request.method.lower())`, falls back to `get` for HEAD, and raises `AssertionError` if no handler exists.\n\n**Why async support doesn't need its own class**\n- Async support is handled by the app, not by the view hierarchy. `Flask.ensure_sync` in `src/flask/app.py:966-978` returns `async_to_sync(func)` if `inspect.iscoroutinefunction(func)` is true, and returns `func` unchanged otherwise.\n- `View.as_view` wraps `self.dispatch_request` in `current_app.ensure_sync(...)` (`views.py:110` and `views.py:116`).\n- `MethodView.dispatch_request` calls `current_app.ensure_sync(meth)(**kwargs)` (`views.py:191`). You can therefore write `async def get(self): ...` on a plain `MethodView`, and it runs through the same synchronous dispatch path.\n- The same wrapper is used for view functions (`app.py:902`), hooks, error handlers and signals. Treating async as a per-call adaptation is consistent across Flask, so it needs no parallel async class hierarchy.\n\n**Why the design is this way**\n- Flask is a WSGI framework, and WSGI is synchronous. Even an `async def` handler is bridged to sync code, so the request cycle is synchronous either way.\n- A separate async dispatch base would duplicate the `methods` computation, HEAD-to-GET fallback, `decorators` and `init_every_request` logic without changing how requests are served.\n- The framework's `sansio` layer and `ensure_sync` override point are how a truly async framework such as Quart diverges from Flask. It does that by replacing `ensure_sync` and the app class, not by subclassing views differently.\n\nIf you saw a specific async view class somewhere, for example in a fork or an extension, tell me where and I'll look at it.",
+ "cost": 0.046819,
+ "turns": 2,
+ "duration_s": 9.84,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7479,
+  "cache_read": 32775,
+  "output": 1034,
+  "total": 41292
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 25,
+ "question": "Why does the asynchronous HTTP method view class inherit from the synchronous HTTP method dispatch base class rather than implementing async dispatch independently?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 12,
+  "completeness": 13,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 70
+ }
+}

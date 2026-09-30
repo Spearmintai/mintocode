@@ -1,0 +1,17 @@
+{
+  "name": "micode",
+  "owner": {
+    "name": "hmtp.ai"
+  },
+  "plugins": [
+    {
+      "name": "micode",
+      "source": "./",
+      "description": "Compile your repository once; every Claude Code session reads the compiled understanding instead of re-reading the source."
+    }
+  ],
+  "description": "micode: compile your repository once; Claude Code gets only the minimal linked paragraphs it needs.",
+  "metadata": {
+    "description": "micode: compile your repository once; Claude Code gets only the minimal linked paragraphs it needs."
+  }
+}

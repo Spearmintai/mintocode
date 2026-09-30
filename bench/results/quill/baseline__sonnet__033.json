@@ -1,0 +1,35 @@
+{
+ "answer": "The class is `ForwardMapping` in `src/quill/json/tag.py` (lines 119\u2013130). It is the pass-through dict tag: it has no `key` of its own, and it sets `tag = into_json`.\n\n```python\ndef into_json(self, value):\n    # JSON objects may only have string keys, so don't bother tagging the\n    # key here.\n    return {k: self.serializer.tag(v) for k, v in value.items()}\n```\n\n**Why only values are tagged:**\n\n- **Keys can't carry tags.** JSON object keys must be strings, and a tag wraps a value into a one-key dict like `{\" t\": ...}`, which is not a string. Dict keys that are already strings are valid JSON as they are, so there is nothing to tag.\n- **Values can be anything.** A value might be a tuple, bytes, datetime, UUID, or another dict, and each of those needs its own tag to survive the round trip. So `ForwardMapping.into_json` calls `self.serializer.tag(v)` on each value. The serializer then picks the matching tag class, and that recursion is what handles nested structures.\n- **It is a pass-through.** It has no `into_native` and no `key`, because the dict itself needs no marker. The `tag = into_json` alias means `ForwardMapping` acts as its own tagger. Its output is a plain dict whose values have been tagged.\n\n**Related class:** `LabelDictEscape` (lines ~90\u2013116, key `\" di\"`) handles a dict that would be misread as a tag. That is a one-key dict whose key is a registered tag key. It renames the key to `key + \"__\"` and tags the value. `into_native` strips the `__` suffix again. This is what keeps `ForwardMapping`'s untagged keys safe.",
+ "cost": 0.0415878,
+ "turns": 3,
+ "duration_s": 11.168,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5858,
+  "cache_read": 48919,
+  "output": 836,
+  "total": 55619
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class .*Passthrough|class .*PassThrough|def _to_json|to_json\", \"-i\": true, \"output_mode\": \"content\", \"head_limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/json/tag.py\", \"offset\": 95, \"limit\": 75}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "answer": "The traversal is all in `App._locate_fault_processor` (`src/quill/sansio/app.py:L823-846`). One detail about the question's wording: the nesting is codes outermost, then scopes, then MRO. Schematic scopes are not traversed before codes.\n\n**Step by step**\n\n1. **Type and code resolution (L831).** `exc_class, code = self._obtain_exception_type_and_status(type(e))`. This is defined in `src/quill/sansio/skeleton.py:L656-698`. It returns `(cls, cls.code)` for `HTTPException` classes. For non-HTTP errors the code is `None`.\n\n2. **Scope list (L832).** `names = (*schematics, None)`. `schematics` comes from `request.schematics` (`envelope_types.py:L180-195`), which lists the current schematic name and then its parents. The trailing `None` stands for the app-level scope.\n\n3. **Outer loop, status codes (L834).** `for c in (code, None) if code is not None else (None,)`. A specific code is tried first, then the `None` key, which holds exception-class handlers. Non-HTTP errors only use `(None,)`.\n\n4. **Middle loop, scopes (L835-836).** `for name in names:` fetches `handler_map = self.error_handler_spec[name][c]`. Schematics are checked innermost to outermost, and the app is checked last. An empty map is skipped (L838-839).\n\n5. **Inner loop, MRO (L841-845).** `for cls in exc_class.__mro__:` calls `handler_map.get(cls)` and returns the first non-`None` handler. Specific subclasses are therefore matched before their bases.\n\n6. If nothing matches, the function returns `None` (L846).\n\n**Resulting priority**\n\nBecause the code loop is outermost and the scope loop sits inside it, the order is:\n\n1. schematic + code\n2. app + code\n3. schematic + exception class\n4. app + exception class\n\nThe MRO walk happens only within a single `(code, scope)` map.\n\n**Callers and evidence**\n\n- The callers are `manage_web_failure` (`app.py:L774`), `manage_client_failure` (`L804`), and `manage_failure` (`L857`, called with an `InternalServerError`).\n- `tests/test_elementary.py:L967-996` shows the MRO and code behavior. The `ForbiddenSubclass` handler wins for the subclass, while the `403` handler handles `abort(403)` and a plain `Forbidden`.\n- `tests/test_custom_fault_handler.py:L136-160` shows the schematic scope taking precedence over the app scope for a 500 handler.",
+ "cost": 0.035298,
+ "turns": 1,
+ "duration_s": 14.9,
+ "tokens": {
+  "input": 7516,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7516
+ },
+ "pack_tokens": 3969,
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 87
+ }
+}

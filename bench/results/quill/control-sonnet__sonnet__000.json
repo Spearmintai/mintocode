@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "answer": "`ensure_ascii` on `StandardJSONSupplier` decides whether non-ASCII characters in serialized JSON are written as `\\uXXXX` escapes or left as literal Unicode characters.\n\n**Definition and default.** The attribute is a class attribute, `ensure_ascii = True`, at `src/quill/json/supplier.py:144-148`. Its docstring says it replaces non-ASCII characters with escape sequences. That may be more compatible with some clients, but it can be disabled for better performance and size.\n\n**How it reaches the output.** `StandardJSONSupplier.dumps` (L166-179) calls `kwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)` and then `json.dumps(obj, **kwargs)`.\n- I read `assumefallback` as a setdefault-style helper, which this repo apparently adds to dicts. I didn't look at its definition.\n- If that's right, the attribute is only a default. A caller can pass `ensure_ascii=...` directly to `dumps` and override it for that one call.\n- `response()` (L189-215) builds its output through `self.dumps`, so it follows the same setting. It only adds `indent` or `separators` on top.\n\n**Effect on output.**\n- With `True` (the default), the output is pure ASCII. For example, `\"\\N{SNOWMAN}\"` (\u2603) is serialized as `\"\\u2603\"`.\n- With `False`, the literal character is emitted, as `\"\u2603\"`. The output is smaller and faster to produce, but it contains non-ASCII text that clients must decode as Unicode (UTF-8).\n\n**Test that pins this.** `tests/test_objtext.py:48-54` (`test_objtext_as_universal_text`) sets `app.json.ensure_ascii = test_value` and checks `app.json.dumps(\"\\N{SNOWMAN}\")`. `True` gives `'\"\\\\u2603\"'` and `False` gives `'\"\\u2603\"'`. `tests/test_trialing.py:112` also sets `app.json.ensure_ascii = False`.\n\n**Legacy config.** `docs/config.rst` and `CHANGES.rst` (around L153 and L286) say the old `JSON_AS_ASCII` config key was replaced by this attribute on the `app.json` supplier.",
+ "cost": 0.0315164,
+ "turns": 4,
+ "duration_s": 13.0,
+ "tokens": {
+  "input": 15851,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 15851
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 17,
+  "completeness": 18,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

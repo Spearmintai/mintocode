@@ -1,0 +1,31 @@
+{
+ "answer": "The method is `Flask.handle_exception` in `src/flask/app.py` (lines 811\u2013862). It decides between re-raising and returning a 500 as follows.\n\n1. **Signal.** It first sends `got_request_exception`, whatever the configuration (L839\u2013840).\n\n2. **Propagation flag.** It reads `propagate = self.config[\"PROPAGATE_EXCEPTIONS\"]` (L841).\n   - If the value is `None`, which is the default, it falls back to `self.testing or self.debug` (L843\u2013844).\n   - If the value is explicitly `True` or `False`, that setting wins. For example, `PROPAGATE_EXCEPTIONS=False` yields a 500 even with `app.testing=True`.\n\n3. **Re-raise branch (`if propagate:`, L846\u2013852).**\n   - If `sys.exc_info()[1] is e`, meaning the exception being handled is still the active one, it does a bare `raise`. This keeps the original traceback.\n   - Otherwise it does `raise e`.\n   - This is how the test client and the debugger see the real exception.\n\n4. **500 branch (propagate is falsy, L854\u2013862).**\n   - It calls `self.log_exception(exc_info)`.\n   - It builds `InternalServerError(original_exception=e)`.\n   - It looks up a registered 500 or `InternalServerError` handler with `self._find_error_handler(server_error, request.blueprints)`. If one exists, it calls it through `ensure_sync`, and the handler receives the `InternalServerError`. The original exception is available as `.original_exception`.\n   - It returns `self.finalize_request(server_error, from_error_handler=True)`. This turns the result into a response and runs the `after_request` functions.\n\n**Context:** `handle_exception` is reached only for exceptions that no handler dealt with, or that were raised inside an error handler. `handle_user_exception` sends `HTTPException`s to `handle_http_exception`, and looks up other exceptions with `_find_error_handler`. It re-raises when it finds no handler, and that re-raised exception is what `handle_exception` then processes.",
+ "cost": 0.046744,
+ "turns": 2,
+ "duration_s": 9.158,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7999,
+  "cache_read": 32850,
+  "output": 817,
+  "total": 41670
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or convert them into HTTP 500 responses based on configuration state?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

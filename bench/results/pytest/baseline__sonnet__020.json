@@ -1,0 +1,40 @@
+{
+ "answer": "In current pytest, non-hashable parameter values, such as dicts, are never used as hash keys. Parameter values are stored by reference. Reordering uses integer indices, and fixture cache hits use `==` with an `is` fallback. I read the code and did not run anything.\n\n## Collection: `Metafunc.parametrize` (`src/_pytest/python.py`, ~L1165\u20131351)\n\n1. `parametrize` gets the argnames and the `ParameterSet`s. It then resolves ids with `_resolve_parameter_set_ids`. Ids are built from the dict's position, such as `a0`, `a1`, and not from its value.\n2. `_resolve_args_directness` (~L1420) maps each argname to `\"indirect\"` or `\"direct\"`. `indirect=True` or `indirect=[names]` marks the arg as indirect.\n3. For direct args (~L1313\u20131331), pytest builds a **pseudo-`FixtureDef`**. Its function is `get_direct_param_fixture_func` (L1109), which is just `return request.param`. The pseudo-fixturedef is cached per scope node in the stash under `name2pseudofixturedef_key`. Indirect args are skipped here, because a real fixture with that name already exists.\n4. `CallSpec2.setmulti` (L1068) is called for each existing callspec and each param set. This builds the cartesian product when `parametrize` is stacked. It:\n   - stores the raw object by reference in `params[arg] = val`, with no copy, hashing or freezing;\n   - stores `indices[arg] = param_index`, the position of the param set, as an int;\n   - records `_arg2scope[arg]`.\n\n   It raises a `CollectError` on duplicate parametrization of the same arg.\n\n## Reordering: `ParamArgKey` (`src/_pytest/fixtures.py`, ~L175\u2013224)\n\nHigher-scoped reordering (`reorder_items` and `get_param_argkeys`) needs hashable keys. `ParamArgKey` is a frozen dataclass of `(argname, param_index, scoped_item_path, item_cls)`. It uses the integer index from `callspec.indices`, not the param value. A dict param therefore never has to be hashable.\n\n## Setup: fixture request resolution\n\n- `FixtureRequest._get_active_fixturedef` (`fixtures.py` ~L614\u2013640) looks up `callspec.params[argname]`, `callspec.indices[argname]` and `callspec._arg2scope[argname]` when the arg was parametrized. It builds a `SubRequest(self, scope, param, param_index, fixturedef)` (L727). This is where the dict becomes `request.param`.\n  - For a non-parametrized fixture, `param` is `NOTSET` and `param_index` is 0.\n- `FixtureDef.execute` (`fixtures.py` ~L1094\u20131134) checks the cache with `cache_key(request)`. `FixtureDef.cache_key` (L1136) returns `getattr(request, \"param\", None)`, so the dict itself is the cache key.\n  - No hashing is involved. The key is compared with `==`, and if that raises `ValueError` or `RuntimeError` (the numpy case, #6497), it falls back to `is` (L1097\u20131103).\n  - A cache hit returns `cached_result[0]`, or re-raises the stored exception.\n  - A miss means the earlier instance was parametrized differently. The fixture is torn down with `self.finish(request)` and set up again.\n- `pytest_fixture_setup` (L1167) calls `fixturedef.cache_key(request)` again and stores `fixturedef.cached_result = (result, my_cache_key, None)` (or `(None, key, (exc, tb))` on failure). For an indirect param, the user's fixture function reads the dict through `request.param`. For a direct param, `get_direct_param_fixture_func` returns it.\n\n## Summary of transformations\n\n- The dict is not copied or transformed. It travels unchanged through `ParameterSet.values`, `CallSpec2.params[arg]`, `SubRequest.param` and `request.param`, and is stored as the element `cached_result[1]`.\n- Two stand-ins replace hashing:\n  - An integer index (`CallSpec2.indices` \u2192 `ParamArgKey.param_index`) is used for ordering and grouping.\n  - Equality (`==`, then `is`) is used for cache comparison.\n- Two equal dicts at different indices are still distinct for reordering, but they can hit the same fixture cache when they are adjacent.\n- Mutating the dict in a test or fixture affects the shared object and can change later cache comparisons. Nothing protects against that.",
+ "cost": 0.1031688,
+ "turns": 8,
+ "duration_s": 23.244,
+ "tokens": {
+  "input": 8,
+  "cache_write": 15598,
+  "cache_read": 72404,
+  "output": 2628,
+  "total": 90638
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"indirect|def _find_parametrized_scope|class CallSpec2|def getfixturevalue|param_index|_pytest_id|def _compute_fixture_value\", \"path\": \"/home/sq/mic",
+  "Grep {\"pattern\": \"cache_key|def get_direct_param_fixture_func|def pytest_generate_tests|SubRequest\\\\(|param_index|request\\\\.param|cached_result|def cache_key\", \"path",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 1085, \"limit\": 125}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 590, \"limit\": 60}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/python.py\", \"offset\": 1290, \"limit\": 65}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 178, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/python.py\", \"offset\": 1047, \"limit\": 70}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 20,
+ "question": "How does pytest's indirect parametrization mechanism resolve non-hashable dictionary items through fixture request parameters, and what internal transformations occur when parametrize decorators process mutable objects that cannot be used as cache keys?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 80
+ }
+}

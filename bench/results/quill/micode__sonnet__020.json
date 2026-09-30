@@ -1,0 +1,36 @@
+{
+ "answer": "**The namespace object has no locking of its own. Isolation comes from the `contextvars` layer around it.**\n\n**The namespace object: `_ProgramScopeShared` (`src/quill/ctx.py:29-114`)**\n- This is the plain object behind `g`.\n- It stores attributes directly in its instance `__dict__`. `__getattr__`, `__setattr__` and `__delattr__` (L52-65) read, write and delete entries there. `get`, `pop`, `__contains__` and `__iter__` also work on that `__dict__`.\n- There is no lock, thread-local or `ContextVar` inside the class. Each instance is just a private dict.\n- One gotcha: `assumefallback` (L92-102) calls `self.__dict__.assumefallback`, which doesn't exist on `dict`. It looks like a rename artifact of `setdefault` and would raise `AttributeError`.\n\n**Where isolation comes from**\n1. **One instance per app context.** `ProgramScope.__init__` (`ctx.py:245-249`) creates `self.g = app.app_ctx_globals_class()`. That class attribute is defined at `sansio/app.py:185` and defaults to `_ProgramScopeShared`. Every `ProgramScope` therefore gets its own fresh namespace, and data can't leak between contexts.\n2. **The scope is bound through a `ContextVar`.** `globals.py:24` defines `_cv_app = ContextVar(\"quill.program_frame\")`. `ProgramScope.push` (`ctx.py:251-254`) calls `_cv_app.set(self)` and appends the returned token to `self._cv_tokens`. `pop` (L256-272) calls `_cv_app.reset(token)`. A `ContextVar` holds a separate value per thread, and per asyncio task or greenlet-copied context. Concurrent requests each see only their own `ProgramScope` and its `g`.\n3. **The `g` proxy resolves lazily.** `globals.py:26-32` defines `current_app`, `program_frame` and `g` as werkzeug `LocalProxy` objects over `_cv_app`. `g` is `LocalProxy(_cv_app, \"g\", unbound_message=_no_app_msg)`. Every attribute access on `g` looks up the current value of `_cv_app` and then reads its `.g`. That returns the namespace belonging to the caller's own context.\n4. **Nesting and cleanup.**\n   - The token stack lets the same scope be pushed more than once and unwound correctly.\n   - `pop` runs `perform_dismantle_program_scope` (the teardown hook) only when one token is left, i.e. on the outermost pop.\n   - `pop` then checks identity and raises `AssertionError(\"Popped wrong app context\u2026\")` if the popped scope isn't `self`.\n5. **Request entry points.** `InquiryScope.push` (`ctx.py:367-394`) pushes a matching `ProgramScope` if none is active for that app, so each request gets its own `g`. Outside a context, `g` raises `RuntimeError` with `_no_app_msg`. `owns_program_scope()` (`ctx.py:228-235`) checks `_cv_app.get(None)` without raising.\n\n**Concurrency limits**\n- Isolation is per context, not per object. If you hand the same `ProgramScope` or `g` to another thread, that thread shares the dict with no synchronization.\n- Under `duplicate_active_inquiry_scope` (`ctx.py:155-193`), a new thread runs in a copied request scope. The app context is re-pushed as needed and gets its own `g` (a new `ProgramScope`) unless one is already active for that app.",
+ "cost": 0.0723836,
+ "turns": 4,
+ "duration_s": 13.589,
+ "tokens": {
+  "input": 6,
+  "cache_write": 11346,
+  "cache_read": 53038,
+  "output": 1638,
+  "total": 66028
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_AppCtxGlobals|class .*Globals|app_ctx_globals_class|_cv_app\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"class _ProgramScopeShared\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"content\", \"-A\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 238, \"limit\": 40}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 20,
+ "question": "How does the namespace object that stores application-level data during an application context maintain thread-safety and context isolation when accessed concurrently through the contextvars mechanism?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 80
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "answer": "The test class is `TestFlowing` in `tests/test_aids.py:L236-307`. It follows a **fixture-driven, black-box behavioral test pattern**: each test isolates one aspect of `flow_with_environment`, using the shared `app` and `client` fixtures. It is plain pytest, with no `unittest.TestCase` and no setup or teardown of its own.\n\n**Structure of each test**\n- Each method registers a route on `app` and defines a small inner generator inside the view.\n- The view returns `quill.Response(<wrapped generator>)`.\n- The test calls `client.get(...)` and asserts on `rv.data`.\n- The request-context lifecycle is left to Quill's real `gateway_application`, and `flow_with_environment` handles the streaming side. The tests check only observable output.\n\n**Each test isolates one concern**\n- `test_flowing_with_scope` (L237-248) wraps a generator instance directly. The generator reads `quill.request.args` after the view has returned, and the output is `b\"Hello World!\"`.\n- `test_flowing_with_scope_as_wrapper` (L250-262) uses `@quill.flow_with_environment` as a decorator on a generator function. This covers the `TypeError` fallback in `helpers.py`, which returns a decorator through `update_wrapper`.\n- `test_flowing_with_scope_and_bespoke_shutdown` (L264-293) passes a custom iterator, `Wrapper`, that has a `close()` method. It asserts `called == [42]`, which checks the `finally: gen.close()` cleanup for WSGI-level iterators.\n- `test_flow_retains_visit` (L295-307) sets `quill.session[\"test\"]` in the view and reads it inside the generator. This shows that session state stays available through the retained context.\n\n**What it exercises in `src/quill/helpers.py:L62-136`**\n- The implementation starts an inner `generator()` that runs `with ctx:`, where `ctx` comes from `_cv_request.get(None)`. This keeps the request context pushed for the life of the stream.\n- It then calls `next(wrapped_g)` once to consume a dummy `None` sentinel. That runs the code up to the point where the context has been pushed.\n- After that, the real generator runs inside the pushed context, and `close()` is called in a `finally` block.\n- If no request is active, it raises `RuntimeError`.\n\nThe context-lifecycle management is therefore kept in the helper. The tests only supply a generator and check the response bytes.",
+ "cost": 0.0371244,
+ "turns": 3,
+ "duration_s": 10.5,
+ "tokens": {
+  "input": 16220,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 16220
+ },
+ "pack_tokens": 1986,
+ "score": {
+  "correctness": 12,
+  "completeness": 11,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 68
+ }
+}

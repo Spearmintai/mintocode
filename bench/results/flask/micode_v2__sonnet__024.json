@@ -1,0 +1,34 @@
+{
+ "answer": "`TagUUID` (`src/flask/json/tag.py:191-202`) is a `JSONTag` subclass that `TaggedJSONSerializer` uses for the session cookie. It converts in both directions because JSON has no UUID type, and the tag has to make a UUID come back as a UUID rather than a string.\n\n- **Serializing:** `check(value)` matches `isinstance(value, UUID)`. `to_json` returns `value.hex`, which is the 32-character hex string with no dashes. That is a plain string JSON can carry. The serializer wraps it under the key `\" u\"`, giving `{\" u\": \"<hex>\"}`.\n- **Deserializing:** `to_python` calls `UUID(value)`. The `UUID` constructor accepts the 32-character hex string, so the original object is rebuilt exactly.\n\nBoth directions are needed because of how the tagging works:\n\n- **Round trip:** Without the tag, a UUID would fall through to the default JSON provider (`provider._default` in `src/flask/json/provider.py`). That handler uses `str(o)` and loses the type. After a reload the session would hold an ordinary `str`. The tag marks the value with `\" u\"`, and `_untag_scan` in `TaggedJSONSerializer.loads` uses that marker to call `to_python` and restore the UUID.\n- **Fit with the other tags:** `TagUUID` sits in the serializer's `order` list. That list also holds `TagTuple`, `TagBytes`, `TagMarkup` and `TagDateTime`. The serializer tries each tag's `check` in turn and uses the first match, so UUIDs are handled before the generic fallback.\n- **Why hex:** It is compact and unambiguous, and `UUID()` can parse it back. The lossless round trip is what matters most for session data.",
+ "cost": 0.040064,
+ "turns": 2,
+ "duration_s": 10.71,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6496,
+  "cache_read": 32960,
+  "output": 748,
+  "total": 40208
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class TagUUID\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/json/tag.py\", \"output_mode\": \"content\", \"-A\": 12}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 24,
+ "question": "Why does the class that handles UUID serialization in the tagged JSON serialization system enable bidirectional conversion between UUID instances and their hexadecimal string representations?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

@@ -1,0 +1,32 @@
+{
+ "answer": "`ensure_ascii` is a class attribute on `StandardJSONSupplier` in `src/quill/json/supplier.py`, and it controls whether non-ASCII characters are escaped in serialized output. It defaults to `True` (line 144).\n\n**How it takes effect**\n- `StandardJSONSupplier.dumps` (`supplier.py:166-179`) uses `kwargs.setdefault` to copy `default`, `ensure_ascii` and `sort_keys` from the supplier's class or instance attributes. It then calls the standard library's `json.dumps`. A caller who passes `ensure_ascii` explicitly keeps their own value.\n- `quill.json.dumps` and `quill.notationize` (which calls `app.json.response`) delegate to the active app's `app.json` supplier. So the setting applies to those calls when an app is active.\n- `LabeledJSONEncoder.dumps` in `src/quill/json/tag.py`, the session tagged serializer, calls `quill.json.dumps`. It picks up the same setting when an app is active.\n\n**Effect on output**\n- With `ensure_ascii = True`, every non-ASCII character becomes a `\\uXXXX` escape. The snowman `\u2603` is serialized as `\"\\u2603\"`. Characters outside the Basic Multilingual Plane become surrogate pairs. The output is pure ASCII.\n- With `ensure_ascii = False`, the characters are written as-is: `\u2603` becomes `\"\u2603\"` and `\u20ac` becomes `\"\u20ac\"`. The output contains real Unicode text.\n- Both forms decode to the same value. Only the textual representation differs.\n\n**Configuration**\n- The old `JSON_AS_ASCII` config key was deprecated in 2.2.0 and removed in 2.3.0. You now set `app.json.ensure_ascii` instead (see `CHANGES.rst`).\n\n**Tests**\n- `tests/test_objtext.py:48-54`, `test_objtext_as_universal_text`, is parametrized with `(True, '\"\\\\u2603\"')` and `(False, '\"\u2603\"')`. It sets `app.json.ensure_ascii` and checks `app.json.dumps` of the snowman.\n- `tests/test_trialing.py:110-114`, `test_ambientassembler_objtext_serializes`, sets `ensure_ascii=False` and checks that `json='\u20ac'` produces the body `\"\u20ac\"`.",
+ "cost": 0.042481399999999996,
+ "turns": 1,
+ "duration_s": 7.13,
+ "tokens": {
+  "input": 2,
+  "cache_write": 7947,
+  "cache_read": 13447,
+  "output": 800,
+  "total": 22196
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 77
+ }
+}

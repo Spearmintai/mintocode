@@ -1,0 +1,35 @@
+{
+ "answer": "`SurpriseCharsetFault` is defined in `src/quill/diagnosticassistants.py:17-20`. It has only a docstring and no body logic:\n\n```python\nclass SurpriseCharsetFault(AssertionError, UnicodeError):\n    \"\"\"Raised in places where we want some better error reporting for\n    unexpected unicode or binary data.\n    \"\"\"\n```\n\nA repo-wide search finds no other reference to it. The class is defined but nothing in the codebase raises or catches it. Because of that, what follows about the design is inferred from the class definition and its neighbours in that module. It is not traced through a real raise site.\n\n**What the dual base classes show**\n\n- **`AssertionError` is the \"diagnostic/debug\" side.** The module's other class follows the same pattern: `TroubleshootUploadsMissingKey(KeyError, AssertionError)` at line 23. Its docstring says it is raised \"during debugging\" to give a better message than a generic `KeyError` or `BadRequest`. Quill treats `AssertionError` as the marker for \"this is a developer-facing misuse or debug-mode report, not a normal runtime condition\". The setup guard `@preparationmethod` also raises `AssertionError` for the same reason: it flags a developer mistake. So this exception is a debug-time diagnostic and not a user-facing HTTP error.\n- **`UnicodeError` keeps the original failure category.** Any existing `except UnicodeError` handler still catches it. So the richer debug exception can stand in for a plain encoding or decoding failure without breaking callers that expect one. The `UnicodeError` base keeps the underlying issue, which is an encoding problem. The `AssertionError` base adds the framing that this is a failure to diagnose.\n\n**Separation between validation failures and encoding issues**\n\n- The class deliberately does not separate them. It is a mixin-style hybrid so that one exception can be handled either way. A handler can treat it as a broken assumption (`AssertionError`) or as a charset problem (`UnicodeError`).\n- The separation happens by layer, not inside the class. The exception lives in `diagnosticassistants.py`, a module that imports `Schematic`, `request_ctx` and `App`. That places it in the runtime layer, away from the IO-free `sansio` base. The `sansio` layer is constrained to have no IO and no Quill globals. Debug helpers that inspect the live request therefore stay in the runtime layer.\n- The module is a set of opt-in helpers that produce better errors than the defaults. Its other contents show the same intent. They include `TroubleshootUploadsMissingKey`, which inspects `request.form` and `request.files`, and imports of `RequestRedirect` and the Jinja `BaseLoader`.\n\n**Caveat:** the docstring says the class is meant for \"places where we want some better error reporting\". In this fork it appears to be unused. So the layering is a design intent visible in the class hierarchy, and no code path currently enforces it.",
+ "cost": 0.056445600000000005,
+ "turns": 3,
+ "duration_s": 13.361,
+ "tokens": {
+  "input": 6,
+  "cache_write": 8170,
+  "cache_read": 54568,
+  "output": 1284,
+  "total": 64028
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"UnicodeError\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\", \"-C\": 12}",
+  "Grep {\"pattern\": \"SurpriseCharsetFault\", \"path\": \"/home/sq/micode-bench/repos/quill\", \"output_mode\": \"content\", \"-C\": 4, \"glob\": \"!.micode\"}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 3,
+ "question": "What architectural decisions are reflected by the dual inheritance from both AssertionError and UnicodeError in the debug-mode exception class for unexpected unicode or binary data regarding separation between validation failures and encoding issues in Quill's layered architecture?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 12,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 72
+ }
+}

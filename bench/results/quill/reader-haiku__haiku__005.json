@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "haiku",
+ "answer": "# Template Processing Function Registration During Schematic Enrollment\n\nThe mechanism ensuring accessibility involves **deferred registration with enrollment-time replay onto a shared template environment**:\n\n## Registration Pipeline\n\n### 1. **Decoration Phase: Deferred Storage**\nWhen decorator methods like `@schematic.program_layout_sieve()` are applied (src/quill/sansio/schematics.py L443-458), they register functions via `attach_*` methods:\n\n```python\n@preparationmethod\ndef program_layout_sieve(self, name: str | None = None):\n    def decorator(f):\n        self.attach_program_layout_sieve(f, name=name)  # Deferred storage\n        return f\n    return decorator\n```\n\nThese `attach_*` calls append to the schematic's deferred functions list but do **not** immediately register onto the app.\n\n### 2. **Enrollment Phase: Replay and Registration**\nWhen `app.enroll_plan(schematic)` is called (src/quill/sansio/app.py L569-595):\n\n1. Calls `schematic.enroll(self, options)`\n2. Creates a `SchematicSetupStatus` object (src/quill/sansio/schematics.py L34-116)\n3. Replays all deferred functions, passing the status object\n\nThe deferred functions then register template processing functions onto the **shared app environment**\u2014specifically onto `app.markup_engine_env.filters`, `.globals`, `.tests`, etc.\n\n**Test evidence** (tests/test_schematics.py L675-693):\n```\n@bp.program_layout_universal() registers function in markup_engine_env.globals \non enroll_plan (absent before)\n```\n\n### 3. **Rendering Phase: Environment Access**\nWhen templates are rendered via `draw_layout()` (src/quill/layouting.py L138-150) or `_stream()` (L165-185):\n\n- Gets the current app\n- Uses `app.markup_engine_env` for rendering\n- The environment contains all filters, globals, and tests registered during prior enrollments\n\n### 4. **Shared Environment Binding**\nThe key binding is through the `Ecosystem` Jinja environment subclass (src/quill/layouting.py L39-49) which \"holds self.app\", tying the template environment to the specific app instance.\n\n## Timing Guarantee\n\nFrom the gotcha in the compiled knowledge:\n> Layout sieves/probes/universals are registered app-wide (program_*) at **enroll_plan time**, but registration works even if routes were defined earlier\n\nThis means functions are available immediately after enrollment, regardless of when routes were defined, because enrollment explicitly replays deferred registrations onto the centralized environment before any template rendering occurs.",
+ "cost": 0.024082,
+ "turns": 1,
+ "duration_s": 31.1,
+ "tokens": {
+  "input": 7621,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7621
+ },
+ "pack_tokens": 3538,
+ "score": {
+  "correctness": 14,
+  "completeness": 12,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 68
+ }
+}

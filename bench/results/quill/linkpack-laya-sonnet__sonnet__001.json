@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "The flag is `Schematic._got_registered_once`, in `src/quill/sansio/schematics.py`. It stops a schematic from being changed after it has been enrolled on an app.\n\n**Why it exists**\n\nEnrolling replays the schematic's deferred setup functions (routes, hooks, `record` callbacks) onto the application. A route or hook added afterwards would not reach apps that already enrolled the schematic. The schematic could end up applied differently on different apps, or on the same app enrolled twice. The flag blocks this, so every enrollment sees the same configuration.\n\n**How it works**\n\n- `Schematic.enroll` (L273-377) sets `self._got_registered_once = True` before it replays the deferred functions. The compiled notes state this ordering, but the shown excerpt stops at L312, so I have not seen the line itself.\n- Setup methods are wrapped with `@preparationmethod`. `note_once_only` (L232-244) is shown using it. According to the notes, `route`, `record` and the hook decorators are wrapped the same way.\n- Before each wrapped method runs, `Schematic._verify_configuration_completed(f_name)` (L213-221) checks the flag. If it is `True`, it raises `AssertionError`:\n  > The setup method '<f>' can no longer be called on the schematic '<name>'. It has already been registered at least once, any changes will not be applied consistently. Make sure all imports, decorators, functions, etc. needed to set up the schematic are done before registering it.\n\n**What it does not do**\n\n- It does not stop the same schematic from being enrolled again under a different name. That case is handled by the duplicate-name `ValueError` in `enroll` (L306-312) and by `SchematicSetupStatus.first_registration`. `note_once_only` uses `first_registration` to run a function only on the first registration (L240-242).\n- I did not see where `_got_registered_once` is initialized, or the rest of `enroll` past L312. That includes the `first_bp_registration` computation and the replay loop, which are in `enroll` (L313-377).\n\n**Practical rule**\n\nFinish defining the schematic (routes, hooks, records) before calling `app.enroll_plan`.",
+ "cost": 0.020132,
+ "turns": 1,
+ "duration_s": 14.1,
+ "tokens": {
+  "input": 3954,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 3954
+ },
+ "pack_tokens": 1901,
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 72
+ }
+}

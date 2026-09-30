@@ -1,0 +1,31 @@
+{
+ "answer": "The method is `Flask.open_resource` in `src/flask/app.py`, at line 330. `Blueprint.open_resource` in `src/flask/blueprints.py`, at line 104, has the same restriction.\n\n**What the code does.** Both methods start with this check:\n\n```python\nif mode not in {\"r\", \"rt\", \"rb\"}:\n    raise ValueError(\"Resources can only be opened for reading.\")\n```\n\nOnly text-read (`\"r\"` or `\"rt\"`) and binary-read (`\"rb\"`) are allowed. Anything else, such as `\"w\"`, `\"a\"`, `\"r+\"` or `\"x\"`, raises `ValueError`. The path is then built with `os.path.join(self.root_path, resource)`. The file is opened with `open(path, mode)` for `\"rb\"`, and with `open(path, mode, encoding=encoding)` for text mode.\n\n**Why it is read-only.** The reason below is inferred from the docstrings and the neighbouring method. I didn't find a comment or commit message that states it outright.\n\n- **The files are part of the code.** `root_path` is the directory of the application package, or of the blueprint's package. The resources there are files shipped with the code, such as `schema.sql` in the docstring example. They are meant to be read, not modified at runtime.\n- **The install location may not be writable.** Package files can sit in a read-only or shared location. That includes site-packages, zip or egg installs, and container images. Writing to them would not work reliably, and it would change the deployed code.\n- **A separate method exists for writable files.** `Flask.open_instance_resource` (`app.py:363`) opens files relative to `instance_path`. Its docstring says: \"Unlike `open_resource`, files in the instance folder can be opened for writing.\" Runtime data, uploads and local config are meant to go there.\n- **The docstrings say so.** Both `open_resource` docstrings say the method opens a file \"for reading\" and that \"Only reading is supported, valid values are `\"r\"` (or `\"rt\"`) and `\"rb\"`.\"",
+ "cost": 0.022948,
+ "turns": 2,
+ "duration_s": 8.884,
+ "tokens": {
+  "input": 4,
+  "cache_write": 1997,
+  "cache_read": 34660,
+  "output": 802,
+  "total": 37463
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 82
+ }
+}

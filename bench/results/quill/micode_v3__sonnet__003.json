@@ -1,0 +1,35 @@
+{
+ "answer": "**Short answer:** `SurpriseCharsetFault` (`src/quill/diagnosticassistants.py:17-20`) has two parents, and each one carries a different meaning. `AssertionError` marks it as a debug-time check failure. `UnicodeError` marks it as an encoding problem. The class body is only a docstring, so all of its behavior comes from those two bases.\n\n**What the code shows**\n\n- The docstring reads: \"Raised in places where we want some better error reporting for unexpected unicode or binary data.\"\n- Nothing in `src/` raises or catches `SurpriseCharsetFault`. A grep finds only its definition. The design intent is therefore visible in the class, but I can't cite a call site.\n- The other classes in `diagnosticassistants.py` follow the same pattern:\n  - `TroubleshootUploadsMissingKey(KeyError, AssertionError)` (L23-47) is raised from `request.files` when a form key is missing.\n  - `FormPayloadPathForwarding(AssertionError)` (L50-78) is raised when a reroute would drop the request body.\n- The `AssertionError` mixin is the common marker for \"debug-mode diagnostic\".\n- Setup guards such as `@preparationmethod` in `sansio` also raise `AssertionError`. `app.py:502` imports `FormPayloadPathForwarding` for the same purpose.\n\n**Architectural decisions this reflects**\n\n1. **Diagnostics are a separate layer.**\n   - These classes live in their own module, `diagnosticassistants.py`, and are imported lazily where they are used. Examples are `envelope_types.py:208`, `app.py:502` and `layouting.py:83`.\n   - Debug-only failures can therefore be tuned without touching the core request and response path.\n   - `AssertionError` says \"this is a developer-facing check that appears in debug\". The failure is not a normal runtime condition.\n\n2. **The two failure kinds are separate but can be combined.**\n   - `UnicodeError` keeps the domain meaning, so code that handles `UnicodeError` or `ValueError` still catches the fault. Werkzeug and Python codecs use the same hierarchy.\n   - `AssertionError` adds the debug meaning, so tooling can treat these as diagnostics rather than data errors.\n   - Because both are exception types, no wrapping or translation is needed. The fault stays compatible with code written for either kind.\n\n3. **Compatibility is preserved.**\n   - `TroubleshootUploadsMissingKey` inherits from `KeyError` so that existing `except KeyError` handlers still work. It also inherits from `AssertionError` so the same problem can be reported more clearly in debug.\n   - `SurpriseCharsetFault` follows this pattern for encoding: the type stays compatible with `UnicodeError`, and only the message and reporting improve.\n\n**Caveat on \"separation\":** the dual inheritance does not separate validation from encoding. It layers them on one type. The separation is at the module level, where the diagnostics layer wraps core failures. I'm inferring the exact intent from the class shape and its sibling classes, because the class has no usages to confirm it.",
+ "cost": 0.058642,
+ "turns": 3,
+ "duration_s": 11.323,
+ "tokens": {
+  "input": 4,
+  "cache_write": 9759,
+  "cache_read": 33740,
+  "output": 1285,
+  "total": 44788
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/diagnosticassistants.py\", \"limit\": 80}",
+  "Grep {\"pattern\": \"SurpriseCharsetFault|attach_diagnostic|diagnosticassistants\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 3,
+ "question": "What architectural decisions are reflected by the dual inheritance from both AssertionError and UnicodeError in the debug-mode exception class for unexpected unicode or binary data regarding separation between validation failures and encoding issues in Quill's layered architecture?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 76
+ }
+}

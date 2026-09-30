@@ -1,0 +1,35 @@
+{
+ "answer": "The cache lives in `AssertionRewritingHook` in `src/_pytest/assertion/rewrite.py`.\n\n**Declaration.** `__init__` (line 81) creates `self._marked_for_rewrite_cache: dict[str, bool] = {}`. It maps a dotted module name to the yes/no answer for \"is this module marked for rewrite?\".\n\n**Callers.** Two methods call `_is_marked_for_rewrite(name, state)`. Both run each time the import system reaches the hook, for example from `find_spec`:\n- `_early_skip_rewriting` (line 221) is the last check after the basename and `fnpats` filters. If the module is marked, it returns `False` (don't skip). Otherwise it traces \"early skip\" and returns `True`.\n- `_should_rewrite` (line 246) ends with `return self._is_marked_for_rewrite(name, state)`. It is reached after the conftest, initial-path and `fnpats` checks fail.\n\n**Data flow in `_is_marked_for_rewrite` (lines 248\u2013259).**\n1. **Cache hit.** The `try` returns `self._marked_for_rewrite_cache[name]` directly. This skips the linear scan over `self._must_rewrite`, the `state.trace` call, and the prefix comparison.\n2. **Cache miss.** A `KeyError` sends it into the `except` block. The block scans `self._must_rewrite` for `name == marked or name.startswith(marked + \".\")`. That test matches the module itself and any submodule of a marked package.\n3. **Store a positive result.** On a match, it traces \"matched marked file\", stores `True` under `name`, and returns `True`.\n4. **Store a negative result.** If nothing matches, it stores `False` under `name` and returns `False`. Negative results are cached too, so unmarked modules aren't rescanned.\n\nThe same module name can come through the hook several times. `_early_skip_rewriting` and `_should_rewrite` both ask about a module during one import, and the hook can be consulted again for the same name later. The scan therefore runs only once per name.\n\n**Invalidation.** `mark_rewrite` (lines 261\u2013277) updates `self._must_rewrite` and then calls `self._marked_for_rewrite_cache.clear()` (line 277). Without that, an earlier `False` could go stale once a plugin marks the module, for example through `pytest.register_assert_rewrite`.",
+ "cost": 0.044669600000000004,
+ "turns": 3,
+ "duration_s": 9.648,
+ "tokens": {
+  "input": 6,
+  "cache_write": 6067,
+  "cache_read": 48848,
+  "output": 1062,
+  "total": 55983
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_marked_for_rewrite_cache|_is_marked_for_rewrite\", \"path\": \"/home/sq/micode-bench/base/pytest/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/assertion/rewrite.py\", \"offset\": 195, \"limit\": 85}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 38,
+ "question": "Where does the `_marked_for_rewrite_cache` dictionary control the data flow through `_is_marked_for_rewrite` to prevent redundant module rewrite decisions across multiple import attempts?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 18,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "Template filters, tests and globals that a schematic registers reach the app's shared template environment through a deferred-callback mechanism that runs at enrollment.\n\n**1. Decorator and imperative forms both defer.**\n- The decorators `program_layout_sieve` (filters, L443-458), `program_layout_probe` (tests) and `program_layout_universal` (globals) each call an imperative counterpart. Those are `attach_program_layout_sieve` (L461), `attach_program_layout_probe` (L497) and `attach_program_layout_universal` (L535).\n- None of these touches the app directly. Each defines an inner `register_template(state)` and passes it to `self.note_once_only(...)`.\n\n**2. `register_template` writes into the app-wide environment.**\n- It uses `state.app.markup_engine_env`, which is the shared environment for the whole app.\n- Filters go into `.filters[name or f.__name__] = f` (L473).\n- Tests go into `.tests[...]` (L511).\n- Globals go into `.globals[...]` (L549).\n- The name is either the explicit `name` argument or the function's own name.\n\n**3. `note_once_only` (L233-244) records the callback and guards it.**\n- It wraps the function in a `wrapper` that calls it only when `state.first_registration` is true.\n- It then passes the wrapper to `self.record(...)`, which appends it to `deferred_functions`.\n- If the same schematic is enrolled a second time, the registration doesn't run again.\n\n**4. Enrollment replays the callbacks.**\n- `App.enroll_plan` (`app.py` L569-595) calls `schematic.enroll(app, options)`.\n- `Schematic.enroll` (L273-377) builds a `SchematicSetupStatus` (L34-116) and runs every deferred function with it. That state exposes `app`, `schematic`, `first_registration` and so on.\n- After enrollment, the filter, test or global is in `app.markup_engine_env`. Any template rendered through the app can use it, whichever schematic's template it is.\n\n**5. Rendering uses that same environment.**\n- `draw_layout` (`layouting.py` L138-150) gets the current app and calls `get_or_select_template`.\n- The template comes from `Ecosystem` (L39-49), the Jinja environment subclass that holds `self.app`. `RoutingTemplateFetcher` (L52-123) lets it search the app's and the schematics' template loaders.\n- `_stream` (L165-185) uses the same environment for streaming.\n- So the registered filters, tests and globals are available at render time.\n\n**6. Timing and ordering.**\n- Registration happens at enrollment, not when the decorator runs. In `tests/test_schematics.py`, `test_layout_universal` (L675-693) checks that the global is absent from `markup_engine_env.globals` before `enroll_plan` and present afterwards.\n- Because the work is deferred, it doesn't matter whether routes were defined before or after the decorator ran.\n- `_got_registered_once` is set at enroll time. Calling a `@preparationmethod` after that raises `AssertionError`, provided `preparationmethod` calls `_verify_configuration_completed`. I inferred that from the material and did not check it.\n\n**7. Scope.**\n- The `program_*` variants are app-wide, so they apply to every template, not only the schematic's own.\n- The app-level equivalents are `Quill.layout_sieve`, `layout_check` and `layout_universal`. `test_layouting.py` L123-130 and L311-321 show them writing directly into `markup_engine_env.filters` and `.globals`.\n\n**Not covered.**\n- Template context processors registered with `scope_enricher` (`skeleton.py` L541-556) work differently. They are appended to `template_context_processors[None]`.\n- I did not read how `_stream` and `draw_layout` apply them.",
+ "cost": 0.0582102,
+ "turns": 2,
+ "duration_s": 13.3,
+ "tokens": {
+  "input": 20406,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 20406
+ },
+ "pack_tokens": 3538,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 77
+ }
+}

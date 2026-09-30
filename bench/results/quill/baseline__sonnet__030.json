@@ -1,0 +1,43 @@
+{
+ "answer": "Repeating the registration across many schematics would cost startup time. There are two costs, and only one of them is significant.\n\n**How the mechanism works**\n\n- `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py:444`) is the decorator form. It calls `attach_program_layout_sieve` (line 461).\n- That method doesn't touch the app immediately. It defines a closure, `register_template(state)`, which does `state.app.markup_engine_env.filters[name or f.__name__] = f` (line 473). It presumably queues that closure through `record` (line 224), which appends to `self.deferred_functions`. I read the closure but not the lines after it.\n- The tests in `tests/test_schematics.py` (`test_layout_sieve` and the related `test_append_layout_sieve*` cases, lines 362\u2013492) call `app.enroll_plan(bp, ...)`. They then check `app.markup_engine_env.filters`.\n- `Schematic.enroll` (line 273) replays the queue with `for deferred in self.deferred_functions: deferred(state)` (lines 334\u2013335). It then recurses into nested schematics (lines 349\u2013377).\n\n**Why repeating it across many schematics slows startup**\n\n1. **The Jinja environment is built at startup.** `state.app.markup_engine_env` is a `cached_property` (`src/quill/sansio/app.py:469`). It calls `build_layout_ecosystem()` (`src/quill/app.py:385`) the first time it's read.\n   - That builds the `Ecosystem` with `jinja_options`, autoescape and `auto_reload`, and adds the globals and filters.\n   - Registering a filter from a schematic reads the property during `enroll`. The environment is therefore built eagerly at startup instead of lazily on the first template render.\n   - The cache means this happens once per app, not once per schematic. The first schematic that registers a filter pays for it, and later ones don't.\n2. **Each registration adds a fixed amount of work.** Every distinct schematic that registers filters adds its own closure to `deferred_functions`. `enroll` runs all of them, once per schematic, each time the schematic is registered, so the work grows with the number of schematics and filters. Each run is a property lookup plus a dict assignment.\n   - Registering the same schematic under several names re-runs its deferred functions each time, because `enroll` doesn't skip them.\n   - `note_once_only` (line 233) would avoid that with its `state.first_registration` guard. The filter registration uses plain `record`, so it isn't guarded.\n3. **Filters are global and last write wins.** The filters go into one shared `markup_engine_env.filters` dict. The name is the function name or an explicit `name`.\n   - If several schematics register the same name, each registration overwrites the previous one.\n   - That is wasted work, and the winner depends on registration order.\n4. **The environment may be rebuilt or invalidated.** Registering after the environment exists doesn't rebuild it. `jinja_options` changes after first access have no effect, as the docstring at `sansio/app.py:473` says.\n\n**How much it matters**\n\nI didn't measure any of this. The cost is small per filter (a dict insert). The one large cost is building the Jinja environment early, and that happens once. Repetition would only become noticeable with a very large number of schematics or filters. If you wanted to reduce it, you could guard the registration with `note_once_only` or register the filters once on the app.",
+ "cost": 0.10030539999999999,
+ "turns": 11,
+ "duration_s": 23.145,
+ "tokens": {
+  "input": 12,
+  "cache_write": 12779,
+  "cache_read": 116227,
+  "output": 2592,
+  "total": 131610
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"template_filter|add_template_filter|jinja_env\\\\.filters\", \"output_mode\": \"content\", \"head_limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 435, \"limit\": 40}",
+  "Grep {\"pattern\": \"template_filter|record_once|_got_registered_once\", \"path\": \"/home/sq/micode-bench/base/quill\", \"glob\": \"*.py\", \"output_mode\": \"content\", \"-i\": true",
+  "Grep {\"pattern\": \"layout_sieve\", \"path\": \"/home/sq/micode-bench/base/quill\", \"output_mode\": \"content\", \"head_limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 205, \"limit\": 125}",
+  "Grep {\"pattern\": \"def markup_engine_env|def create_markup_engine_env|def create_global_markup|cached_property\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill\",",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 329, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/app.py\", \"offset\": 465, \"limit\": 25}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/tests/test_schematics.py\", \"offset\": 360, \"limit\": 25}",
+  "Grep {\"pattern\": \"def build_layout_ecosystem\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"output_mode\": \"content\", \"-A\": 30}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 9,
+  "completeness": 9,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 12,
+  "total": 58
+ }
+}

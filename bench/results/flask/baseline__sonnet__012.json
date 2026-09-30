@@ -1,0 +1,31 @@
+{
+ "answer": "The wrapper is `_lazy_sha1` in `src/flask/sessions.py` (line 290). It moves the `hashlib.sha1` lookup from import time to call time.\n\n**The wrapper**\n```python\ndef _lazy_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, in which case the import and use as a default would fail before the\n    developer can configure something else.\n    \"\"\"\n    return hashlib.sha1(string)\n```\n- The `hashlib.sha1` attribute is looked up inside the function body. Defining the function, and importing `flask.sessions`, never touches `hashlib.sha1`.\n- On a FIPS-restricted Python build, `hashlib.sha1` may be missing or may raise when it is accessed. The failure therefore happens only if the function is actually called.\n- The signature `(string: bytes = b\"\")` matches what itsdangerous expects of a `digest_method` factory, so it can stand in for `hashlib.sha1` directly.\n\n**How it is wired in**\n\nIn `SecureCookieSessionInterface` (line 298), the class attribute is `digest_method = staticmethod(_lazy_sha1)` (line 307). Two details matter here:\n- Referencing the wrapper as a class default does not evaluate SHA-1 when the class body runs.\n- `staticmethod` stops Python from binding `self` when the attribute is accessed through an instance. `self.digest_method` is then the plain function.\n\nAt runtime, `get_signing_serializer(app)` (line 317) passes `self.digest_method` to `URLSafeTimedSerializer` inside `signer_kwargs`, along with `key_derivation`. `get_signing_serializer` runs only when a session is opened or saved, and only if `app.secret_key` is set. `open_session` and `save_session` are the callers. itsdangerous calls the wrapper when it signs or verifies a cookie, and that is the first point where SHA-1 availability is checked.\n\n**Why this helps**\n\nA restricted environment can still import Flask and create an app. A developer can then override `SecureCookieSessionInterface.digest_method` with something like a SHA-256 factory, or supply a different session interface, before any signing happens. If SHA-1 were referenced eagerly as `digest_method = hashlib.sha1`, the import would fail before the developer could configure anything else.",
+ "cost": 0.0259202,
+ "turns": 3,
+ "duration_s": 9.899,
+ "tokens": {
+  "input": 6,
+  "cache_write": 1220,
+  "cache_read": 52741,
+  "output": 1048,
+  "total": 55015
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 18,
+  "total": 87
+ }
+}

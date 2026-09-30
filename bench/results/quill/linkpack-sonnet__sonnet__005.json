@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "answer": "The material only partly settles this. It shows the deferral and shared-environment pattern, but not the code that actually installs a schematic's filter into the environment.\n\n**What the material shows**\n\n1. **Guarded registration.** `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py` L443-458) is wrapped by `@preparationmethod` (`src/quill/sansio/skeleton.py` L42-49). Before each call, the wrapper runs `self._verify_configuration_completed(f_name)`. Its body is at `Armature._verify_configuration_completed`, L220-221, which is not shown. The decorator body then calls `self.attach_program_layout_sieve(f, name=name)` and returns `f` unchanged, so the function stays usable.\n\n2. **Deferred application at enrollment.** The app-wide hook `preceding_program_inquiry` (L553-561) shows the pattern. It calls `self.note_once_only(lambda s: s.app.before_request_funcs.assumefallback(None, []).append(f))`. The lambda receives a `SchematicSetupStatus` (L34-116). That object is created per enrollment and passed to every deferred function. It exposes `app`, `schematic`, `options`, `first_registration`, `subdomain`, `url_prefix` and related fields. The `note_once_only` name and the `first_registration` flag suggest the deferred function runs once, even if the schematic is enrolled several times. The material doesn't confirm this. The function goes into the app's registry under key `None`, meaning app-wide rather than schematic-scoped (`AppOrBlueprintKey` in `typing.py` L49).\n\n3. **The shared environment is the app's.** `tests/test_layouting.py` L311-321 shows `@app.layout_universal()` putting `get_stuff` into `app.markup_engine_env.globals`. `draw_layout_text(\"{{ get_stuff() }}\")` then renders `\"42\"`. The docstring of `program_layout_sieve` says it is equivalent to `Quill.layout_sieve` and is \"available in any template rendered by the application\". Because the schematic's deferred function targets the app (`s.app`), registrations land in that same app-level environment.\n\n4. **Request-scope names at render time.** `_fallback_layout_scope_handler` (`src/quill/layouting.py` L24-36) supplies `g` when an app scope is bound, and `request` and `session` when a request scope is bound. `Armature.scope_enricher` (L541-556) adds custom context, as in `tests/test_layouting.py` L342-359 where `whiskey='Jameson'` is injected. Per your compiled Q&A, streaming helpers wrap the generator with `flow_with_environment` so `request` stays available during rendering.\n\n**What the material doesn't settle**\n\n- The body of `attach_program_layout_sieve`, which is the code that would write the filter into the Jinja environment's `filters`. Check `src/quill/sansio/schematics.py` for it, and for `note_once_only` and the enrollment code (`enroll_plan`, `build_registration_state`).\n- How `Quill` handles the enrollment call and whether the environment is created lazily. Look in `src/quill/app.py` around `markup_engine_env`.",
+ "cost": 0.040389999999999995,
+ "turns": 1,
+ "duration_s": 13.3,
+ "tokens": {
+  "input": 7835,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7835
+ },
+ "pack_tokens": 3652,
+ "score": {
+  "correctness": 12,
+  "completeness": 8,
+  "relevance": 13,
+  "clarity": 14,
+  "reasoning": 12,
+  "total": 59
+ }
+}

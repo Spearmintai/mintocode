@@ -1,0 +1,34 @@
+{
+ "answer": "`_got_registered_once` is a class-level boolean on `Schematic`. It defaults to `False` (`src/quill/sansio/schematics.py:172`). It stops you changing a schematic's setup after the schematic has been registered on an app. The alternative is that some registrations would pick up the change and others wouldn't.\n\n**How it works**\n- `Schematic.enroll` sets it to `True` at line 320. That happens right after `app.schematics[name] = self` and before `build_registration_state` runs. `App.enroll_plan` (in `src/quill/sansio/app.py`) calls `enroll`.\n- `Schematic._verify_configuration_completed(f_name)` (line 213) checks the flag. If it is set, the method raises an `AssertionError`. The message says the setup method `'<f_name>'` can no longer be called on schematic `'<name>'` because it has already been registered at least once, and that any changes \"will not be applied consistently\". It tells you to do all imports, decorators and functions before registering.\n- Schematic setup methods, such as the route, handler and record-style decorators, call `_verify_configuration_completed` first. That is why they fail once the flag is set. I only read the check itself, not each caller.\n\n**Why it exists**\n- `enroll` replays the schematic's `deferred_functions` onto the app when it registers. It also merges the schematic's handlers and processors into the app through `_combine_schematic_functions` and applies its static route.\n- A schematic can be registered more than once, for example under different names or prefixes, or nested inside other schematics. Anything added after the first registration would not be in the registrations that already happened, so the app's state would differ between registrations.\n- The error makes that mistake fail loudly instead of quietly producing that state.\n\n**First-registration handling**\n`enroll` computes `first_bp_registration` separately, as \"this schematic object is not yet in `app.schematics`\". It does not use `_got_registered_once`. The flag records whether any registration has ever happened, on any app. `first_bp_registration` is per app and is passed to `build_registration_state`.\n\nThe flag exists as an error, not just a warning, since 2.3.0. In 2.2.0 it only warned (per the compiled notes on `CHANGES.rst`, which I didn't open).",
+ "cost": 0.052936199999999996,
+ "turns": 2,
+ "duration_s": 8.688,
+ "tokens": {
+  "input": 4,
+  "cache_write": 9500,
+  "cache_read": 30541,
+  "output": 882,
+  "total": 40927
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_got_registered_once\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\", \"-C\": 6}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 77
+ }
+}

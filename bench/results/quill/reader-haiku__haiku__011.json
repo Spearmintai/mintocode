@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "haiku",
+ "answer": "# Hidden Coupling Between Decorator State Management and Response Lifecycle\n\nThe core issue involves **asymmetry between hook merging and deferred function execution**, especially in nested or multi-enrollment scenarios:\n\n## The Asymmetry\n\nFrom the compiled knowledge (src/quill/sansio/schematics.py):\n\n1. **Hook Dict Merging is Conditional** (L349-377 context): `_combine_schematic_functions` only merges hooks when `first_bp_registration` or `first_name_registration` is true.\n\n2. **Deferred Functions Always Run** (gotcha): Decorators using `note_once_only` (like `@program_faulthandler`, `@program_layout_sieve`) defer to enrollment but execute **every time** the schematic enrolls\u2014not just once.\n\nThis creates coupling where:\n- **State Registration**: Deferred functions that call `state.app.faulthandler(code)(f)` execute unconditionally on each enrollment\n- **Response Lifecycle Setup**: Hook merging (which determines request/response handler ordering) runs conditionally based on first registration\n- **Result**: Multiple enrollments of the same schematic cause deferred handlers to register multiple times, but the hook dict merging framework that controls handler ordering doesn't account for this\n\n## Where It Surfaces in Nested Schematics\n\nFrom the enroll flow (src/quill/sansio/schematics.py:L273-377):\n\n```\nparent.enroll(app, options)\n\u251c\u2500 Runs parent's deferred functions (hook merging conditional)\n\u251c\u2500 Wires CLI\n\u2514\u2500 Enrolls children:\n   \u2514\u2500 child.enroll(app, bp_options)\n      \u2514\u2500 Runs child's deferred functions (always, unconditionally)\n```\n\n**The coupling**: Nested schematics enroll *after* parent deferred functions and CLI wiring (L349-377 context). If a parent registers a fault handler via `@program_faulthandler`, then a child tries the same, both handlers execute, but:\n- Hook merging only happened at first registration\n- Request lifecycle ordering (before_request forward, after_request reverse) assumes hooks are known upfront\n- Second-level or conditionally-registered handlers break this assumption\n\n## Related Response Lifecycle Gotcha\n\nFrom test_elementary.py, \"After-hooks and teardown hooks run in reverse registration order while before-hooks run forward.\" This ordering **depends on all handlers being known and merged at first registration**. Deferred functions that register handlers outside the first-registration context violate this assumption.\n\n**To avoid this**: Use distinct `name=` options when enrolling the same schematic multiple times (src/quill/sansio/app.py:L587-591), or ensure all decorators apply only to the first enrollment.",
+ "cost": 0.023501,
+ "turns": 1,
+ "duration_s": 23.9,
+ "tokens": {
+  "input": 8304,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8304
+ },
+ "pack_tokens": 4627,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 12,
+  "reasoning": 8,
+  "total": 32
+ }
+}

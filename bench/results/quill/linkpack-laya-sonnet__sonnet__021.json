@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "answer": "The class is `_ProgramScopeShared` in `src/quill/ctx.py`, the default for `App.app_ctx_globals_class` (`src/quill/sansio/app.py:L185`). It backs `g`. All of its methods work on `self.__dict__`. The choice between raising and returning a default depends on whether the caller supplied a default.\n\n**Methods that raise when the attribute is missing**\n\n- `__getattr__` (L52-56) returns `self.__dict__[name]`. It catches `KeyError` and re-raises `AttributeError(name) from None`. This is the attribute protocol, so `getattr(g, \"x\", default)` and `hasattr` work as usual, and the internal `KeyError` is hidden.\n- `__delattr__` (L61-65) does `del self.__dict__[name]` and translates `KeyError` into `AttributeError(name) from None` in the same way.\n- `pop(name)` (L78-90) is the one exception to the `AttributeError` pattern. With no default it calls `self.__dict__.pop(name)`, so a missing name raises `KeyError`, as `dict.pop` does. The test at `tests/test_programscope.py:L148-149` asserts this with `pytest.raises(KeyError)`.\n\n**Methods that take a default**\n\n- `get(name, default=None)` (L67-76) returns `self.__dict__.get(name, default)` and never raises for a missing name. Tests at `test_programscope.py:L136-137` and `test_elementary.py:L1738-1743` show `None`, then the supplied default, then the stored value.\n- `pop(name, default)` (L87-90) uses a module-level `_sentinel` as the default marker, not `None`. That lets a caller pass `None` explicitly and get it back. If `default is _sentinel` it calls `dict.pop(name)` and raises. Otherwise it calls `dict.pop(name, default)`. The test at L150 checks `pop(\"bar\", \"more cake\") == \"more cake\"`.\n- `assumefallback(name, default=None)` (L92-102) is meant to be `setdefault`, returning the existing value or setting and returning the default.\n\n**Summary of the balance**\n\n| Operation | Missing attribute | Default available |\n|---|---|---|\n| `g.x` | `AttributeError` | Use `getattr` or `g.get` |\n| `del g.x` | `AttributeError` | No |\n| `g.get(x)` | Returns `None` | Yes |\n| `g.pop(x)` | `KeyError` | Yes, optional and sentinel-guarded |\n| `g.assumefallback(x, d)` | Intended to set and return `d` | Yes |\n\nAttribute-style access (`get`, `del`) follows Python's attribute semantics with `AttributeError`. Dict-style methods (`get`, `pop`) follow `dict` semantics, so `pop` raises `KeyError`. The `_sentinel` distinguishes \"no default given\" from \"default is `None`\".\n\n**Broken part**\n\n`assumefallback` does not work. Line 102 calls `self.__dict__.assumefallback(name, default)`, and a plain `dict` has no such method. It looks like a rename artifact of `setdefault`, and the docstring at L94 says \"Like `dict.assumefallback`\". Calling it raises `AttributeError`, so the default-providing path is unusable, even though `test_program_scope_shared_methods` (L142-145) expects it to keep the first value. The same bug breaks the schematic `bp.link_presets` example, which calls `values.assumefallback(...)`. Fixing it means calling `self.__dict__.setdefault(name, default)`. I did not see whether other code depends on the name `assumefallback`, so check that before renaming.",
+ "cost": 0.03016,
+ "turns": 1,
+ "duration_s": 16.9,
+ "tokens": {
+  "input": 5687,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5687
+ },
+ "pack_tokens": 2438,
+ "score": {
+  "correctness": 14,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 75
+ }
+}

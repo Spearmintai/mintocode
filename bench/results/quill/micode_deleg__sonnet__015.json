@@ -1,0 +1,37 @@
+{
+ "answer": "Custom filters registered through the schematic's app-level method reach the template environment through deferred callbacks. The URL prefix plays no part in it. Everything below is in `src/quill/sansio/schematics.py`.\n\n**1. Registration is only recorded (L443\u2013475).**\n- `Schematic.program_layout_sieve(name=None)` is the decorator form. It calls `attach_program_layout_sieve(f, name=name)` and returns `f` unchanged.\n- `attach_program_layout_sieve(f, name)` does not touch any app. It defines a closure, `register_template(state: SchematicSetupStatus)`.\n- That closure runs `state.app.markup_engine_env.filters[name or f.__name__] = f`. `markup_engine_env` is the app's Jinja environment.\n- The closure is handed to `note_once_only(register_template)`.\n- Both methods carry `@preparationmethod`. After the schematic has been enrolled once, `_verify_configuration_completed` (L213) raises an `AssertionError` if either is called again.\n\n**2. The closure is queued (L223\u2013244).**\n- `note_once_only` wraps the function so it runs only when `state.first_registration` is true. It then passes the wrapper to `record()`.\n- `record()` appends the wrapper to `self.deferred_functions`.\n- Because of this wrapper, a schematic enrolled several times, for example under different prefixes, installs the filter only once.\n\n**3. The queue is replayed when the app enrolls the schematic (L273\u2013335).**\n- `Quill.enroll_plan` calls `Schematic.enroll(app, options)`.\n- `enroll` builds the state with `build_registration_state(app, options, first_bp_registration)` (L246). The result is a `SchematicSetupStatus` holding the schematic, the app, the options and `first_registration`.\n- `first_bp_registration` is true when no entry in `app.schematics` is this schematic object (L316).\n- `enroll` then runs `for deferred in self.deferred_functions: deferred(state)` (L334\u2013335). This is where `markup_engine_env.filters[...]` is set on the real app.\n\n**4. The URL prefix is separate.**\n- The prefix lives in `SchematicSetupStatus`, which resolves `url_prefix` from the options with the schematic's own value as fallback.\n- It is applied only in `SchematicSetupStatus.attach_link_regulation`, which prefixes route rules and termini. Filter registration never reads it.\n- For nested schematics, `enroll` merges the prefixes (L364\u2013377). It then calls `schematic.enroll(app, bp_options)`, and each child replays its own deferred functions the same way.\n\n**Result:** The filter is written into the app-wide Jinja environment, `app.markup_engine_env.filters`. It is therefore available to every template the app renders, not just the schematic's. It is available whatever `url_prefix` the schematic was mounted with, and it is installed only on the first enrollment of that schematic object.",
+ "cost": 0.094088,
+ "turns": 5,
+ "duration_s": 15.704,
+ "tokens": {
+  "input": 10,
+  "cache_write": 14838,
+  "cache_read": 95680,
+  "output": 1558,
+  "total": 112086
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def app_template_filter|def add_template_filter|record_once|def register\\\\(|deferred\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/",
+  "Grep {\"pattern\": \"app_template_filter|def add_app_template_filter|def record_once|def register\\\\(|deferred_functions|def record\\\\(\", \"path\": \"/home/sq/micode-bench/r",
+  "Grep {\"pattern\": \"template_filter|def record_once|def make_setup_state|def register\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"ou",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 150, \"limit\": 400}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

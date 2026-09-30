@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or transform them into HTTP 500 responses based on configuration state?",
+ "model": "haiku",
+ "answer": "# Exception Handling Decision Logic in `manage_failure`\n\nThe method `Quill.manage_failure` (src/quill/app.py:L811-862) determines whether to re-raise an unhandled exception or transform it into an HTTP 500 response through this decision process:\n\n## Configuration-Based Decision\n\n**src/quill/app.py:L839-852** shows the core logic:\n\n```python\nexc_info = sys.exc_info()\ngot_request_exception.send(self, _async_wrapper=self.guarantee_blocking, exception=e)\npropagate = self.config[\"PROPAGATE_EXCEPTIONS\"]\n\nif propagate is None:\n    propagate = self.testing or self.debug\n\nif propagate:\n    # Re-raise if called with an active exception, otherwise\n    # raise the passed in exception.\n    if exc_info[1] is e:\n        raise\n    raise e\n```\n\n## Decision Flow\n\n1. **Check `PROPAGATE_EXCEPTIONS` config** (L841) \u2014 defaults to `None`\n2. **If `None`, evaluate runtime state** (L843-844):\n   - If `self.testing` is `True` OR `self.debug` is `True`, set `propagate = True`\n   - Otherwise `propagate = False`\n3. **If `propagate` is `True`** (L846-852):\n   - Re-raise using bare `raise` if the active exception is the same object (`exc_info[1] is e`)\n   - Otherwise `raise e` with a new traceback\n4. **If `propagate` is `False`** (L854):\n   - Call `self.record_failure(exc_info)` to log at error level\n   - Wrap the exception in `InternalServerError(original_exception=e)` for further handler lookup\n\n## Related Configuration Options\n\nFrom the compiled knowledge, the decision is also influenced by:\n- **`TRAP_HTTP_EXCEPTIONS`** (defaults `False`) \u2014 when enabled, HTTP exceptions don't reach `manage_failure` at all (src/quill/sansio/app.py:L848-881)\n- **`TRAP_BAD_REQUEST_ERRORS`** (defaults `None`) \u2014 enables trapping 400 errors from `form`/`args` in debug mode\n\nThe signal `got_request_exception` is **always sent** (L840) regardless of whether propagation occurs, as documented in src/quill/app.py:L816.",
+ "cost": 0.02164,
+ "turns": 1,
+ "duration_s": 15.2,
+ "tokens": {
+  "input": 8521,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8521
+ },
+ "pack_tokens": 5528,
+ "score": {
+  "correctness": 16,
+  "completeness": 12,
+  "relevance": 14,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 74
+ }
+}

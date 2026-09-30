@@ -1,0 +1,35 @@
+{
+ "answer": "The class is `LabelUniqueID` in `src/quill/json/tag.py` (lines 191\u2013202). It converts in both directions because the tagged serializer, `LabeledJSONEncoder`, has to carry a `UUID` through JSON and get the same `UUID` back.\n\n**Why the conversion has to go both ways**\n\n- JSON has no UUID type. `LabeledJSONEncoder` (line 219) puts non-JSON types into a one-key dict, `{tag_key: json_value}`. On load it reverses that. Every `JSONLabel` subclass therefore has to implement both `into_json` and `into_native`, which the base class `JSONLabel` (line 60) declares as abstract.\n- `into_json(value)` returns `value.hex`. That is a 32-character lowercase hex string with no dashes, so it is a valid JSON string and shorter than the dashed form. `JSONLabel.tag()` wraps it as `{\" u\": \"<hex>\"}`.\n- `into_native(value)` returns `UUID(value)`. The `UUID` constructor accepts a hex string, so this rebuilds an equal `UUID`. No information is lost, because the 32 hex digits are the full 128-bit value.\n- `check(value)` uses `isinstance(value, UUID)`, so only UUIDs are routed to this tag when serializing.\n- The key `\" u\"` starts with a space and is one of the keys in `LabeledJSONEncoder.tags`. Deserialization relies on that key. `LabeledJSONEncoder.untag()` (line 297) looks at a dict with exactly one key, finds `\" u\"` in `self.tags`, and calls `LabelUniqueID.into_native` on the string. That is how a plain hex string turns back into a `UUID` instead of staying a `str`.\n\n**How it is registered**\n\n`LabelUniqueID` is in `LabeledJSONEncoder.default_tags` (line 238). `__init__` enrolls it through `enroll()`, and the class docstring lists `uuid.UUID` as a supported type.\n\nThe other tags follow the same pattern:\n\n- `LabelOctets` converts `bytes` to and from base64.\n- `LabelTimestamp` converts `datetime` to and from an HTTP date string.\n- `LabelMarkings` converts `Markup` to and from a string.",
+ "cost": 0.050136,
+ "turns": 3,
+ "duration_s": 10.602,
+ "tokens": {
+  "input": 6,
+  "cache_write": 7642,
+  "cache_read": 48280,
+  "output": 990,
+  "total": 56918
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"UUID\", \"output_mode\": \"content\", \"glob\": \"**/*tag*\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/json/tag.py\", \"offset\": 55, \"limit\": 260}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 24,
+ "question": "Why does the class that handles UUID serialization in the tagged JSON serialization system enable bidirectional conversion between UUID instances and their hexadecimal string representations?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

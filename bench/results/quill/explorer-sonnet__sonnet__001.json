@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "The flag is `Schematic._got_registered_once`. It stops the schematic from being changed after it has been registered on an app, so that every app it is registered on gets the same configuration.\n\n- **Definition:** it is a class-level attribute, `_got_registered_once = False`, at `src/quill/sansio/schematics.py:172`.\n- **Where it is set:** `Schematic.enroll` sets it to `True` at line 320. That happens before the deferred setup functions are replayed onto the app.\n- **Where it is checked:** `Schematic._verify_configuration_completed` (lines 213-221) reads it. If it is `True`, it raises an `AssertionError`.\n- **What the error says:** the setup method `'<f_name>'` can no longer be called on the schematic `'<name>'`. The schematic has already been registered at least once, so any changes would not be applied consistently. Finish all imports, decorators and functions before registering.\n- **Which methods it covers:** every method decorated with `@preparationmethod` calls that check. That includes `record`, `note_once_only`, `route`, and the hook decorators.\n\n**Why it exists:** a schematic works by recording deferred functions in `deferred_functions`. Each registration replays them onto an app. If you added a route or hook after a registration, the app that was already registered would not get it. Apps registered later would. The flag turns that silent inconsistency into an immediate error.\n\n`App._verify_configuration_completed` in `src/quill/sansio/app.py` (lines 413-423) does the same job for apps. It uses `_got_first_request` as its flag.",
+ "cost": 0.028931600000000002,
+ "turns": 3,
+ "duration_s": 9.8,
+ "tokens": {
+  "input": 14209,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14209
+ },
+ "pack_tokens": 1827,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 83
+ }
+}

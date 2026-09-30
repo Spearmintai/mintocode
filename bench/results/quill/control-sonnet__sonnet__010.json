@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "answer": "The class that fits is `TestFlowing` in `tests/test_aids.py` (line 236). The repo is a Flask-style fork named \"quill\", and \"flowing\" is its word for streaming. I inferred that mapping from the names and did not check it against the library source.\n\n**Pattern:** `TestFlowing` is a plain pytest test class with no base class or `setUp`. Each test gets the `app` and `client` fixtures injected. Within each test, three parts are kept separate:\n\n1. **The generator.** A local `generate()` or `gen()` function yields the streamed body. It yields `\"Hello \"`, then `quill.request.args[\"name\"]`, then `\"!\"`. This is the streaming response logic.\n2. **The context wrapper.** `quill.flow_with_environment(...)` wraps the generator. It keeps the request context alive while the response is consumed, which is why the generator can read `quill.request` and `quill.session` after the view function has returned. It works as a function call, `flow_with_environment(generate())`, and as a decorator, `@quill.flow_with_environment`.\n3. **The client call.** A test-client request such as `client.get(\"/?name=World\")` drives the response, and the test asserts on `rv.data`.\n\nThe tests cover these cases:\n- `test_flowing_with_scope` wraps a generator by calling the wrapper directly and expects `b\"Hello World!\"`.\n- `test_flowing_with_scope_as_wrapper` uses the decorator form on a generator that takes an argument.\n- `test_flowing_with_scope_and_bespoke_shutdown` wraps a custom iterator class. Its `close()` appends 42 to a list, and the test asserts `called == [42]`. This shows the wrapper forwards `close()` to the wrapped iterator.\n- `test_flow_retains_visit` sets `session[\"test\"]` in the view, then reads it inside the generator. It shows the session survives into the stream.\n\nThe pattern is a decorator/wrapper around the generator, exercised through fixture-driven black-box tests.\n\n`tests/test_trialing.py` (around lines 385\u2013393) also has assertions about a context held by the streamed response and released when it closes. I did not read that file closely, so I can't say how it relates to `TestFlowing`.",
+ "cost": 0.0322932,
+ "turns": 4,
+ "duration_s": 14.4,
+ "tokens": {
+  "input": 20494,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 20494
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 11,
+  "completeness": 9,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 11,
+  "total": 62
+ }
+}

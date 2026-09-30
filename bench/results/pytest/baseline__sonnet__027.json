@@ -1,0 +1,40 @@
+{
+ "answer": "**Short answer:** `test_rewrite_ast` (`testing/test_assertion.py:328`, in `TestImportHookInstallation`) registers `pkg.helper` explicitly because conftest-based rewriting only covers conftest files, plugins that pytest knows about, and test files. It doesn't cover a helper module that is merely imported. The test shows that these are separate, layered mechanisms.\n\nI read the test and `rewrite.py`. I did not run the test.\n\n**What the test sets up**\n- `pkg/__init__.py` calls `pytest.register_assert_rewrite('pkg.helper')`.\n- `pkg/helper.py` has `tool()`, which asserts `a == b`.\n- `pkg/plugin.py` is loaded through `pytest_plugins = ['pkg.plugin']` in `conftest.py`. It imports `pkg.helper` and exposes it as a fixture.\n- `pkg/other.py` is a control module with an assert, and `test_pkg.py` imports it directly.\n- It runs `pytester.runpytest_subprocess(\"--assert=rewrite\")`. A subprocess is used so the import hook and `sys.modules` state are clean.\n- The expected output has a rewritten introspection message for `helper` (`E*assert 2 == 3*`). For `other` it expects a bare `E*AssertionError` with no introspection, so `other` is not rewritten.\n\n**How the rewriting decision works** (`AssertionRewritingHook` in `src/_pytest/assertion/rewrite.py`)\n- `_should_rewrite` (line 227) rewrites a module in only four cases:\n  1. It is a `conftest.py`.\n  2. It was given on the command line (`session.isinitpath`).\n  3. Its filename matches the `python_files` patterns (`fnpats`).\n  4. It was marked with `_is_marked_for_rewrite`, which checks `_must_rewrite` by exact name or `name.` prefix.\n- `_early_rewrite_bailout` (line 188) skips everything else early, for speed.\n- `pkg/helper.py` matches none of the first three cases. Its name isn't `test_*.py` or `*_test.py`, and it isn't a conftest or an initial path. Only the marking path can pick it up.\n\n**Why conftest isn't enough**\n- The conftest is rewritten because it is a conftest.\n- `pytest_plugins` entries are marked for rewrite by `PytestPluginManager.import_plugin` (`src/_pytest/config/__init__.py:852`, calling `rewrite_hook.mark_rewrite(importspec)`). Setuptools entry-point plugins are marked by `_mark_plugins_for_rewrite` (line 1293).\n- That marking covers `pkg.plugin` only. `pkg.helper` is a plain dependency of the plugin, so it needs its own registration. The marking is also by name and prefix, and it doesn't follow imports.\n- `pkg.other` is never registered, which is why it works as a negative control.\n\n**Why it goes in `pkg/__init__.py`**\n- Python runs a package's `__init__.py` before any of its submodules are imported. So `register_assert_rewrite('pkg.helper')` runs before `import pkg.helper` in `plugin.py`, and the hook is told before the import happens.\n- This matches what `mark_rewrite` (line 261) enforces. If a named module is already in `sys.modules` and wasn't loaded by the hook, it calls `_warn_already_imported` and emits `PytestAssertRewriteWarning`, and the module can no longer be rewritten. Rewriting happens at import time, not afterwards.\n- This is also the documented pattern for plugin authors: register helper modules from the package's `__init__.py`.\n- The public API `pytest.register_assert_rewrite` (`src/_pytest/assertion/__init__.py:~93`) fetches the installed hook and calls `mark_rewrite`.\n\n**What this shows about the design**\n- Rewriting is an import-time `sys.meta_path` hook (`find_spec` and `exec_module`) that can't rewrite retroactively. That makes registration order-sensitive.\n- Rewriting is opt-in by default, because rewriting rewrites bytecode and costs startup time. Only test-like files, conftests and known plugins are rewritten automatically. Anything else needs an explicit registration.\n- The implicit rules (conftest, `python_files` patterns, `pytest_plugins` and entry-point plugins) are convenience layers over one explicit primitive, `mark_rewrite` and `_must_rewrite`. The public API exposes that primitive for cases the implicit rules can't reach.\n- The test is an integration test of these rules. Its positive case (`helper`) and negative case (`other`) show that the rewriting scope is exactly what was registered.",
+ "cost": 0.09141280000000002,
+ "turns": 8,
+ "duration_s": 29.649,
+ "tokens": {
+  "input": 14,
+  "cache_write": 9460,
+  "cache_read": 129624,
+  "output": 2762,
+  "total": 141860
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"register_assert_rewrite\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/test_assertrewrite.py\", \"output_mode\": \"content\", \"-B\": 8, \"-A\": 12}",
+  "Grep {\"pattern\": \"def test_rewrite_ast|register_assert_rewrite\\\\(\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/test_assertrewrite.py\", \"output_mode\": \"conten",
+  "Grep {\"pattern\": \"test_rewrite_ast|register_assert_rewrite\", \"path\": \"/home/sq/micode-bench/base/pytest/testing\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/test_assertion.py\", \"offset\": 320, \"limit\": 55}",
+  "Grep {\"pattern\": \"def mark_rewrite|def _early_rewrite_bailout|def _should_rewrite|def _is_marked_for_rewrite|def find_spec|_mark_plugins_for_rewrite|_rewritten_names",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/assertion/rewrite.py\", \"offset\": 186, \"limit\": 95}",
+  "Grep {\"pattern\": \"mark_rewrite|_mark_plugins_for_rewrite\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest\", \"output_mode\": \"content\", \"-n\": true}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 27,
+ "question": "Why does test_rewrite_ast employ pytest.register_assert_rewrite() in the package's __init__.py rather than relying solely on the automatic conftest-based rewriting mechanism, and what does this reveal about the design architecture?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 82
+ }
+}

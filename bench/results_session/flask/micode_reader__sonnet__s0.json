@@ -1,0 +1,227 @@
+{
+ "arm": "micode_reader",
+ "repo": "flask",
+ "session": 0,
+ "model": "sonnet",
+ "steps": [
+  {
+   "answer": "`ensure_ascii` on Flask's `DefaultJSONProvider` decides whether non-ASCII characters in JSON output are written as `\\uXXXX` escapes or as literal Unicode characters. I answered from the precompiled repo notes and did not re-open the source.\n\n**Where it lives**\n- `src/flask/json/provider.py`, class `DefaultJSONProvider`.\n- `ensure_ascii` is a class attribute that defaults to `True` (around L144-155).\n- You can change it per app with `app.json.ensure_ascii = False`.\n- You can also subclass `DefaultJSONProvider` with a different default. Then either set `Flask.json_provider_class` or assign `app.json = MyProvider(app)`.\n\n**How it is applied**\n- `DefaultJSONProvider.dumps()` (around L166-179) calls `kwargs.setdefault(\"ensure_ascii\", self.ensure_ascii)`.\n- It then calls the standard library's `json.dumps(obj, **kwargs)`.\n- Because it uses `setdefault`, an `ensure_ascii` passed by the caller overrides the provider's setting.\n- The escaping itself is done by the standard `json` module. Flask only supplies the default.\n\n**Effect on output**\n- With `ensure_ascii=True` (the default), non-ASCII characters are escaped, so a snowman `\u2603` becomes `\"\\u2603\"`. The output is pure ASCII.\n- With `ensure_ascii=False`, characters are emitted literally, so `\u2603` stays `\"\u2603\"`. The output then contains non-ASCII text, and the response needs to be encoded as UTF-8.\n\n`test_json_as_unicode` in `tests/test_json.py` (around L48-54) checks both cases.",
+   "cost": 0.0319114,
+   "turns": 1,
+   "tokens": {
+    "input": 2,
+    "cache_write": 5842,
+    "cache_read": 13447,
+    "output": 585,
+    "total": 19876
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [],
+   "k": 0,
+   "score": {
+    "correctness": 17,
+    "completeness": 17,
+    "relevance": 16,
+    "clarity": 17,
+    "reasoning": 17,
+    "total": 84
+   }
+  },
+  {
+   "answer": "`Blueprint._got_registered_once` stops you from changing a blueprint after it has been registered on an app. Once it is set, any setup call raises an error instead of applying to only some registrations. I answered from the precompiled repo notes and did not re-open the source.\n\n**Where it lives**\n- The flag is a class attribute on `Blueprint` in `src/flask/sansio/blueprints.py` (around L119). It starts as `False`.\n- `Blueprint._check_setup_finished` (around L213-221) reads it.\n- `Blueprint.register` (around L319-320) sets it to `True`. This happens on every registration, before the deferred functions run.\n\n**How the guard works**\n- Setup methods are decorated with `@setupmethod`, defined in `src/flask/sansio/scaffold.py` (around L42-49). The decorator calls `self._check_setup_finished(f_name)` before running the method.\n- If the flag is `True`, `_check_setup_finished` raises an `AssertionError`. The message says the setup method \"can no longer be called on the blueprint '<name>'\" because it \"has already been registered at least once, any changes will not be applied consistently.\"\n- The decorated methods include `route`, `before_request`, `after_request`, `teardown_request`, `errorhandler`, `url_defaults`, `url_value_preprocessor`, `context_processor`, `record` and `register_blueprint`.\n\n**Why it exists**\n- `Blueprint.register` replays the deferred functions recorded by `record` and the route and hook decorators. It replays them onto each app it is registered with.\n- A setup call made after a registration would be missed by the app that already ran the replay. Only later registrations would pick it up.\n- Failing loudly keeps every registration of the same blueprint identical.",
+   "cost": 0.06979679999999999,
+   "turns": 1,
+   "tokens": {
+    "input": 4,
+    "cache_write": 13190,
+    "cache_read": 26894,
+    "output": 1165,
+    "total": 41253
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [],
+   "k": 1,
+   "score": {
+    "correctness": 14,
+    "completeness": 14,
+    "relevance": 16,
+    "clarity": 16,
+    "reasoning": 15,
+    "total": 75
+   }
+  },
+  {
+   "answer": "Flask has no separate \"static component\". Static serving is a feature of the shared `Scaffold` base class, and `Flask` and `Blueprint` each inherit it. The two classes each define their own `send_static_file` and `get_send_file_max_age`, and both read the same config value, which is what keeps caching consistent.\n\n**Class hierarchy**\n- `src/flask/sansio/scaffold.py::Scaffold` (L52) is the common base. It holds `static_folder` and `static_url_path`, and the `has_static_folder` property (L241) returns `static_folder is not None`.\n- `src/flask/sansio/app.py::App(Scaffold)` (L59) is the base of `src/flask/app.py::Flask`.\n- `src/flask/sansio/blueprints.py::Blueprint(Scaffold)` (L119) is the base of `src/flask/blueprints.py::Blueprint(SansioBlueprint)` (L18).\n- The sans-IO layer holds only configuration and routing state. The concrete classes add the code that reads files and builds a `Response`.\n\n**Static serving on each component**\n- `Flask.send_static_file` (`src/flask/app.py` L308) raises `RuntimeError` if no static folder is set. It computes `max_age = self.get_send_file_max_age(filename)` and calls `send_from_directory`.\n- `Blueprint.send_static_file` (`src/flask/blueprints.py` L82) does the same with `self.static_folder`. It raises `RuntimeError` if `has_static_folder` is false.\n- Both methods carry a comment (`app.py` L323, `blueprints.py` L97) explaining why they compute `max_age` themselves. `send_file` only knows to call `get_send_file_max_age` on the app, so each component passes its own value in explicitly.\n\n**Consistent caching**\n- `Flask.get_send_file_max_age` (`app.py` L281) and `Blueprint.get_send_file_max_age` (`blueprints.py` L55) both read `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`. The blueprint version uses `current_app`, not the blueprint itself.\n- Both apply the same conversion: `None` stays `None`, a `timedelta` becomes `int(total_seconds())`, and any other value is returned as is. The `filename` argument is ignored in both.\n- A blueprint's static files therefore get the same cache lifetime as the app's, unless a subclass overrides the method.\n- `helpers._prepare_send_file_kwargs` (`src/flask/helpers.py` L387-389) is a separate path. It sets `max_age = current_app.get_send_file_max_age` for `send_file` and `send_from_directory` when the caller doesn't pass one. Those helpers use the app's method, and the two `send_static_file` methods compute their own value and pass it in.\n\n**Route registration**\n- I didn't trace where the `/static/<path:filename>` rule is added. That happens when the app or blueprint is set up or registered, not in the methods above.",
+   "cost": 0.131681,
+   "turns": 2,
+   "tokens": {
+    "input": 8,
+    "cache_write": 23566,
+    "cache_read": 62655,
+    "output": 2487,
+    "total": 88716
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [
+    "Grep {\"pattern\": \"get_send_file_max_age|def send_static_file|def has_static_folder|add_url_rule\\\\(\\\\s*f?\\\"?\\\\{?.*static|_prep"
+   ],
+   "k": 2,
+   "score": {
+    "correctness": 15,
+    "completeness": 14,
+    "relevance": 15,
+    "clarity": 17,
+    "reasoning": 15,
+    "total": 76
+   }
+  },
+  {
+   "answer": "`UnexpectedUnicodeError` is defined in `src/flask/debughelpers.py` (L17-20), and the dual inheritance there doesn't separate validation failures from encoding issues. It does the opposite: the class is both at once, so it can be caught as either kind of error. Nothing in the repo raises it, so it doesn't reflect a wider layered design.\n\n**What the class is**\n- It is `class UnexpectedUnicodeError(AssertionError, UnicodeError)` with only a docstring: \"Raised in places where we want some better error reporting for unexpected unicode or binary data.\"\n- A search of the repo, excluding `.micode/`, finds no other reference to it. No code in the repo raises or catches it, and nothing exports it. It looks like a leftover from older Flask, where request data was decoded as text. I can't confirm that history from the source alone.\n\n**What the two bases signal**\n- `UnicodeError` is the domain category: the problem is text encoding or decoding. Code that does `except UnicodeError` would still catch it.\n- `AssertionError` marks it as a debug diagnostic, not a normal runtime error. Every exception in this module subclasses `AssertionError`. That includes `DebugFilesKeyError(KeyError, AssertionError)` at L23 and `FormDataRoutingRedirect(AssertionError)` at L50. They are \"this only happens in debug mode\" errors.\n- `DebugFilesKeyError` uses the same combination. It stays a `KeyError`, so existing handlers still work. It also carries a better message: its `__str__` returns `self.msg` instead of `KeyError`'s repr-quoted text.\n\n**Design consequences**\n- The exception can be handled by its domain type or by its debug-marker type. Flask adds diagnostics without changing what existing handlers catch.\n- `debughelpers.py` is a leaf module with debug-only helpers. It is imported lazily from debug paths in `app.py`, `wrappers.py` and `templating.py`.\n- `Request._load_form_data` in `src/flask/wrappers.py` calls `attach_enctype_error_multidict` only when the app is in debug mode. That function swaps the class on the `request.files` instance, so production behaviour is untouched.\n- There is no separate validation layer versus encoding layer here. The classes only mix a debug marker with the standard exception that describes the fault.",
+   "cost": 0.17428879999999997,
+   "turns": 3,
+   "tokens": {
+    "input": 12,
+    "cache_write": 29073,
+    "cache_read": 112364,
+    "output": 3550,
+    "total": 144999
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [
+    "Grep {\"pattern\": \"UnexpectedUnicodeError\", \"path\": \"/home/sq/micode-bench/repos/flask\", \"output_mode\": \"content\", \"glob\": \"!.",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/debughelpers.py\", \"limit\": 50}"
+   ],
+   "k": 3,
+   "score": {
+    "correctness": 14,
+    "completeness": 12,
+    "relevance": 16,
+    "clarity": 16,
+    "reasoning": 15,
+    "total": 73
+   }
+  },
+  {
+   "answer": "The question doesn't name a test, and two tests in the repo fit it. The closest match is `test_subdomain` in `tests/test_testing.py` (L302-318). The other candidate is `test_proper_test_request_context` in `tests/test_reqctx.py` (L63-104). I read both tests, but I didn't re-read the Flask source they exercise, so the source-side steps come from the compiled notes.\n\n**`tests/test_testing.py::test_subdomain`**\n\nEach step depends on the one before it:\n\n1. **Construction.** `flask.Flask(__name__, subdomain_matching=True)` turns on subdomain matching. Without it, Flask would not match on the host's subdomain part.\n2. **Configuration.** `app.config[\"SERVER_NAME\"] = \"example.com\"` gives the app a root domain. That is the base for building and matching subdomain hosts.\n3. **Client.** `app.test_client()` is created before the routes exist, but it is only used at the end.\n4. **Route registration.**\n   - `@app.route(\"/\", subdomain=\"<company_id>\")` goes through `Scaffold.route`, which calls `App.add_url_rule`.\n   - That adds a werkzeug `Rule` with the subdomain to `app.url_map` and stores the view in `app.view_functions`.\n   - It depends on step 1 because the rule is only matched by subdomain when matching is on, and on step 2 because the rule is resolved against `SERVER_NAME`.\n5. **Request context creation.** `app.test_request_context()` builds an environ from `SERVER_NAME` through `flask.testing.EnvironBuilder` and pushes a request context. `url_for` needs that context.\n6. **URL building.** `flask.url_for(\"view\", company_id=\"xxx\")` looks up the rule in `url_map` and fills in the subdomain. The result is a full URL, `xxx.example.com`. It depends on steps 4 and 5.\n7. **Dispatch.** `client.get(url)` sends that URL through the WSGI stack. The subdomain is matched against the rule, `company_id=\"xxx\"` is passed to `view`, and the test asserts status 200 and body `b\"xxx\"`.\n\nThe full chain is: `subdomain_matching` and `SERVER_NAME`, then `add_url_rule` into `url_map`, then `test_request_context`, then `url_for`, then `client.get`.\n\n**`tests/test_reqctx.py::test_proper_test_request_context`**\n\n- It sets `SERVER_NAME=\"localhost.localdomain:5000\"` and registers `@app.route(\"/\")` and `@app.route(\"/\", subdomain=\"foo\")`.\n- Inside `app.test_request_context(\"/\")`, `url_for(\"sub\", _external=True)` must equal `\"http://foo.localhost.localdomain:5000/\"`.\n- The rest of the test only checks that requests are accepted when `SERVER_NAME` and the environ overrides differ or match.\n- It skips the client dispatch step, so it covers only configuration, registration, context creation and URL building.\n\n**A similar test outside these two**\n\n`tests/test_basic.py::test_subdomain_basic_support` (L1754) skips `url_for` and requests each host directly with `client.get(\"/\", \"http://test.localhost.localdomain/\")`.",
+   "cost": 0.25100419999999996,
+   "turns": 5,
+   "tokens": {
+    "input": 18,
+    "cache_write": 39246,
+    "cache_read": 204721,
+    "output": 5304,
+    "total": 249289
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [
+    "Grep {\"pattern\": \"def test_\\\\w*subdomain\\\\w*\", \"path\": \"/home/sq/micode-bench/repos/flask/tests\", \"output_mode\": \"content\"}",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_testing.py\", \"offset\": 298, \"limit\": 40}",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_reqctx.py\", \"offset\": 60, \"limit\": 48}",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_basic.py\", \"offset\": 1752, \"limit\": 24}"
+   ],
+   "k": 4,
+   "score": {
+    "correctness": 8,
+    "completeness": 7,
+    "relevance": 11,
+    "clarity": 15,
+    "reasoning": 12,
+    "total": 53
+   }
+  },
+  {
+   "answer": "Blueprint template filters, tests and globals are copied into the app's one shared Jinja environment when the blueprint is registered. `render_template` later renders through that same environment, so the functions are found at render time. I checked the registration code with a grep. The rendering and context-processor parts come from the compiled notes, and I didn't re-read them.\n\n**1. One shared environment**\n- `App.jinja_env` (`src/flask/sansio/app.py` L469-477) is a `cached_property`. It calls `create_jinja_environment()` on the first access and returns the same object every time after that.\n- Every template lookup and render on the app goes through this one object.\n\n**2. Registration adds the functions to that environment**\n- Blueprint methods `app_template_filter`, `app_template_test` and `app_template_global` (`src/flask/sansio/blueprints.py` L444-551) are decorators. They call `add_app_template_filter`, `add_app_template_test` or `add_app_template_global`.\n- Each `add_app_template_*` method defines a `register_template(state)` closure. The closure writes `state.app.jinja_env.filters[name or f.__name__] = f`, or the `.tests` or `.globals` equivalent (L473, L511, L549).\n- The closure is queued with `Blueprint.record_once` (L233), so it does not run when the decorator is applied.\n- `Blueprint.register` replays the queued closures when the blueprint is registered on an app. `record_once` makes a closure run only on the first registration of that blueprint on a given app.\n- Because `state.app` is the actual app, the function lands in the same environment that renders later. The test at `tests/test_blueprints.py` L675-693 shows the global missing before registration and present in `jinja_env.globals` afterwards.\n- The app-level counterparts write straight into the same dicts: `App.add_template_filter` (`sansio/app.py` L695), `add_template_test` (L738) and `add_template_global` (L776).\n\n**3. Rendering uses the same environment**\n- `render_template` in `src/flask/templating.py` gets the app from `current_app` and calls `app.jinja_env.get_or_select_template(...)`.\n- Filters, tests and globals are looked up on that environment, so the blueprint's registered functions are visible.\n\n**4. Context processors work differently**\n- Context processors are not added to the Jinja environment. They are stored in the app's `template_context_processors` registry, keyed by blueprint name or `None` for app-wide ones. `Blueprint.app_context_processor` puts its function under `None`.\n- `Flask.update_template_context` (`src/flask/app.py` L506) runs from the `_render` helper in `templating.py`. It merges the app-wide processors with those of the current request's blueprint, so blueprint-local processors only apply on that blueprint's requests. `tests/test_blueprints.py` L634-672 covers both kinds.\n\n**Timing**\n- A blueprint's `app_template_*` functions only take effect after `app.register_blueprint(bp)`.\n- The `jinja_env` is created once and cached, so changes to `jinja_options` made after its first access have no effect.",
+   "cost": 0.29398799999999997,
+   "turns": 2,
+   "tokens": {
+    "input": 22,
+    "cache_write": 42773,
+    "cache_read": 286060,
+    "output": 6564,
+    "total": 335419
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [
+    "Grep {\"pattern\": \"jinja_env\\\\.(filters|tests|globals)|def app_template_|def add_app_template_|record_once|def update_template"
+   ],
+   "k": 5,
+   "score": {
+    "correctness": 16,
+    "completeness": 16,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 16,
+    "total": 79
+   }
+  },
+  {
+   "answer": "`FakePath.__fspath__` returns `self.path`, which is whatever value was passed to the constructor. `os.fspath()` hands that value back unchanged.\n\n**The class**\n- `FakePath` is defined in `tests/test_helpers.py` (L11-22). Its docstring says it represents a `pathlib.Path` object, referring to PEP 519.\n- `FakePath.__init__(self, path)` (L18-19) stores the argument as `self.path`.\n- `FakePath.__fspath__(self)` (L21-22) is `return self.path`. This method is what makes the class an `os.PathLike`.\n\n**What `os.fspath()` gets back**\n- `os.fspath(FakePath(\"index.html\"))` calls `__fspath__()` and returns the stored string, `\"index.html\"`.\n- `__fspath__` does no conversion. `os.fspath()` accepts a `str` or `bytes` result and would raise `TypeError` for any other type. The tests only ever pass a `str`.\n\n**Where it is used**\n- The only use is `TestSendfile.test_static_file` in `tests/test_helpers.py`, at L71 in the grep output: `app.send_static_file(FakePath(\"index.html\"))`.\n- It checks that `send_static_file` accepts a path-like object and still applies the configured `SEND_FILE_MAX_AGE_DEFAULT` cache lifetime of 3600.",
+   "cost": 0.34029499999999996,
+   "turns": 3,
+   "tokens": {
+    "input": 26,
+    "cache_write": 48270,
+    "cache_read": 373815,
+    "output": 7240,
+    "total": 429351
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_helpers.py\", \"limit\": 30}",
+    "Grep {\"pattern\": \"FakePath\", \"path\": \"/home/sq/micode-bench/repos/flask/tests\", \"output_mode\": \"content\"}"
+   ],
+   "k": 6,
+   "score": {
+    "correctness": 18,
+    "completeness": 16,
+    "relevance": 17,
+    "clarity": 18,
+    "reasoning": 16,
+    "total": 85
+   }
+  },
+  {
+   "answer": "The parametrization and the exception handling are two halves of one contract. `test_locate_app_raises` in `tests/test_cli.py` (L199-219) feeds `locate_app` eight `(iname, aname)` pairs. Each pair triggers a different failure path, and every path ends in `NoAppException`. The source is `src/flask/cli.py`. I did not run the tests, but I read the test and the source.\n\n**The test**\n- It is parametrized on `\"iname,aname\"` and does `with pytest.raises(NoAppException): locate_app(iname, aname)`.\n- `iname` is the import name (`module_name`) and `aname` is the app name (`app_name`). Because they are parametrized together, each case reaches a different branch of `locate_app` and its helpers.\n- Every case expects the same exception type, whichever branch fails.\n\n**Which case hits which branch**\n\n| `(iname, aname)` | Branch | Result |\n|---|---|---|\n| `(\"notanapp.py\", None)` | `locate_app` (`cli.py` L241-264): `__import__` raises `ImportError` with no deeper traceback and `raise_if_not_found=True` | `NoAppException(\"Could not import ...\")` (L255) |\n| `(\"cliapp/app\", None)` | Same branch; the name with a slash is not importable | same |\n| `(\"cliapp.message.txt\", None)` | Same branch; the import fails at the top level | same |\n| `(\"cliapp.importerrorapp\", None)` | `ImportError` raised inside the module, so `tb_next` is set | `NoAppException(\"While importing ... an ImportError was raised\")` (L249-253) |\n| `(\"cliapp.app\", \"notanapp\")` | `find_app_by_string`: `getattr(module, name)` raises `AttributeError` | `NoAppException(\"Failed to find attribute ...\")` (L167-172) |\n| `(\"cliapp.factory\", \"create_app(\")` | `find_app_by_string`: `ast.parse` raises `SyntaxError` | `NoAppException(\"Failed to parse ...\")` (L128-133) |\n| `(\"cliapp.factory\", 'create_app2(\"foo\")')` | `find_app_by_string` calls the factory, which raises `TypeError` because the arguments don't match | `_called_with_wrong_args` returns `True`, so `NoAppException` (L183-187) |\n| `(\"cliapp.factory\", \"no_app\")` | `find_app_by_string`: the attribute isn't a `Flask` instance | `NoAppException(\"A valid Flask application was not obtained ...\")` (L194-197) |\n\n**Why the failure is consistent**\n- `locate_app` picks the lookup by `app_name`. With `None` it calls `find_best_app`, and otherwise it calls `find_app_by_string`.\n- `test_locate_app_raises` only exercises `find_app_by_string`, which handles all the string cases. The `find_best_app` failure paths are not covered by this test.\n- Each parse, lookup and call failure in those functions is caught and re-raised as `NoAppException`, so callers handle one type.\n- The `TypeError` handling in `find_best_app` (L76-85) and `find_app_by_string` (L179-187) relies on `_called_with_wrong_args` (L94-117). It walks the traceback and compares each frame's `f_code` with `f.__code__`.\n  - If a frame matches, the factory was entered and the `TypeError` came from inside it, so it returns `False` and the error is re-raised unchanged.\n  - If no frame matches, the call itself failed on arguments, so it returns `True` and `NoAppException` is raised. The `create_app2(\"foo\")` case is this one.\n\n**Import errors**\n- `locate_app` treats a missing module differently from an error inside an existing module. `sys.exc_info()[2].tb_next` is set only when the `ImportError` was raised inside the imported module. In that case `NoAppException` is raised even with `raise_if_not_found=False`.\n- `test_locate_app_suppress_raise` (L222-228) checks this: `notanapp.py` returns `None`, while `cliapp.importerrorapp` still raises.",
+   "cost": 0.4342715999999999,
+   "turns": 5,
+   "tokens": {
+    "input": 34,
+    "cache_write": 56646,
+    "cache_read": 577098,
+    "output": 9220,
+    "total": 642998
+   },
+   "session_id": "c5b6161b-cb5a-467e-83ce-c5902247da12",
+   "calls": [
+    "Grep {\"pattern\": \"def test_prepare_import|def test_locate_app|parametrize\\\\(\\\\s*\\\\(?\\\"?(iname|app_name)|def locate_app|def te",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_cli.py\", \"offset\": 198, \"limit\": 36}",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"offset\": 228, \"limit\": 75}",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"offset\": 40, \"limit\": 188}"
+   ],
+   "k": 7,
+   "score": {
+    "correctness": 16,
+    "completeness": 17,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 16,
+    "total": 80
+   }
+  }
+ ],
+ "reader_tokens": 59910,
+ "reader_cost": 0.1204545,
+ "tokens": 2011811,
+ "cost": 1.8476912999999997,
+ "turns": 22,
+ "score": [
+  84,
+  75,
+  76,
+  73,
+  53,
+  79,
+  85,
+  80
+ ]
+}

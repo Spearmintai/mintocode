@@ -1,0 +1,31 @@
+{
+ "answer": "`SecureCookieSessionInterface.get_signing_serializer` in `src/flask/sessions.py` (L317-335) builds a new serializer on every call and caches nothing. Under high concurrency, that work is repeated for every request.\n\n**What each call does**\n- It checks `app.secret_key`.\n- It builds a fresh `keys` list from `app.config[\"SECRET_KEY_FALLBACKS\"]` plus `app.secret_key`.\n- It constructs a new `URLSafeTimedSerializer`. That takes the `salt`, the `serializer` (the `TaggedJSONSerializer` instance `session_json_serializer`), and a `signer_kwargs` dict with `key_derivation` and `digest_method` (`_lazy_sha1`).\n\n**Where it is called**\n- `open_session` (L338) calls it at the start of every request that has a session.\n- `save_session` (L387) calls it again inline as `self.get_signing_serializer(app).dumps(dict(session))`. This happens whenever a cookie is set, which is every request that modifies the session, or every permanent-session request when `SESSION_REFRESH_EACH_REQUEST` is on.\n- A single request can therefore build two serializers, and nothing is shared between requests or threads.\n\n**Why it hurts under load**\n- **Repeated allocation:** each call allocates the key list, the `signer_kwargs` dict and a `URLSafeTimedSerializer`. At thousands of requests per second this adds up to per-request CPU cost and garbage-collection pressure. It runs while the worker thread holds the GIL, so it cuts throughput in threaded servers.\n- **Repeated key derivation:** the serializer is stateless between requests, but `dumps` and `loads` create signers. With `key_derivation=\"hmac\"`, each signer derives its key from the secret and salt again, once per key. With `SECRET_KEY_FALLBACKS` set, `loads` may derive and try several keys. None of the derived keys persist, so every request pays for them again.\n- **Re-read config:** `app.config` is read on every call, even though the secret key, fallbacks, salt and serializer rarely change.\n\nI read `sessions.py` but did not run a benchmark, so the bottleneck rests on how the code is structured, not on measured numbers. Caching the serializer per app, keyed on the secret key and fallbacks, would avoid it. The code deliberately rebuilds it each time so that runtime changes to `SECRET_KEY` or `SECRET_KEY_FALLBACKS` take effect immediately.",
+ "cost": 0.0585948,
+ "turns": 2,
+ "duration_s": 10.426,
+ "tokens": {
+  "input": 4,
+  "cache_write": 10584,
+  "cache_read": 32854,
+  "output": 968,
+  "total": 44410
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 32,
+ "question": "Why does repeated invocation of the method that instantiates cryptographic serializers within the session persistence handler create a performance bottleneck under high-concurrency conditions?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 81
+ }
+}

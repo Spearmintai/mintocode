@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "answer": "The material does not state a reason for the restriction, so I can only describe what the code does and what its docstrings imply.\n\n**What the code does**\n\n`Quill.launch_asset` (`src/quill/app.py:L330-361`) opens `os.path.join(self.root_path, resource)`. It checks the mode first (L353-354):\n\n```python\nif mode not in {\"r\", \"rt\", \"rb\"}:\n    raise ValueError(\"Resources can only be opened for reading.\")\n```\n\nOnly `\"r\"`, `\"rt\"` and `\"rb\"` are accepted. Anything else, including `\"w\"`, `\"x\"`, `\"a\"` and `\"r+\"`, raises `ValueError`. `tests/test_aids.py:L346-351` (`test_read_asset_failures`) checks exactly those four modes.\n\n**What the docs imply about intent**\n\n- The docstring (L333) describes the method as opening \"a resource file relative to :attr:`root_path` for reading\". Its `mode` parameter says \"Only reading is supported\".\n- `launch_deployment_asset` (L363-383) has a docstring saying: \"Unlike :meth:`launch_asset`, files in the instance folder can be opened for writing.\" It opens files relative to `instance_path` in any mode.\n- The two methods therefore split the job. Files next to the app's code (`root_path`) are read-only resources, such as `schema.sql`. The instance folder (`instance_path`) holds files that may be written to.\n- The example in `examples/walkthrough/flaskr/db.py:L33-38` fits this. `setup_datastore` only reads `schema.sql` via `current_app.launch_asset`.\n\n**What the material does not settle**\n\nNo comment, docstring or test says why writing to `root_path` is disallowed. Reasons such as keeping shipped package files immutable or separating code from mutable data are plausible, but they are inference, not something stated here. To find the actual rationale, check the project's git history or commit message for the `launch_asset` mode check, or its changelog and docs.",
+ "cost": 0.01573,
+ "turns": 1,
+ "duration_s": 8.0,
+ "tokens": {
+  "input": 2951,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 2951
+ },
+ "pack_tokens": 1090,
+ "score": {
+  "correctness": 16,
+  "completeness": 12,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 76
+ }
+}

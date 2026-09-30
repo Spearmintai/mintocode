@@ -1,0 +1,42 @@
+{
+ "answer": "Template filters, tests and globals registered on a schematic reach the shared Jinja environment through a deferred-callback pattern plus one lazily built, cached environment on the app.\n\n**1. Deferral on the schematic** (`src/quill/sansio/schematics.py`)\n- `program_layout_sieve` (filter), `program_layout_probe` (test) and `program_layout_universal` (global) are decorators. Each delegates to `attach_program_layout_sieve`, `attach_program_layout_probe` or `attach_program_layout_universal`.\n- Each `attach_*` method defines an inner `register_template(state: SchematicSetupStatus)`. That function writes the callable into the app's environment:\n  - `state.app.markup_engine_env.filters[name or f.__name__] = f`\n  - `state.app.markup_engine_env.tests[name or f.__name__] = f`\n  - `state.app.markup_engine_env.globals[name or f.__name__] = f`\n- The `attach_*` methods pass `register_template` to `note_once_only`, which wraps it and calls `record`. `record` appends it to `self.deferred_functions`. The wrapper only runs the function when `state.first_registration` is true. A schematic registered twice therefore doesn't re-register its filters.\n- The `@preparationmethod` decorator guards these methods. I didn't open its definition. Its name suggests it stops setup calls after the schematic has been registered.\n\n**2. Replay at registration** (`Schematic.enroll`, schematics.py, around lines 273\u2013335)\n- `Quill.enroll_plan` calls `enroll`, which builds a `SchematicSetupStatus` through `build_registration_state(app, options, first_bp_registration)`. Its `first_registration` flag is computed from `app.schematics`.\n- `enroll` then runs `for deferred in self.deferred_functions: deferred(state)`. This is where the filters, tests and globals are copied onto the app's environment.\n\n**3. One shared, lazily created environment** (`src/quill/sansio/app.py`)\n- `markup_engine_env` is a `cached_property` that calls `build_layout_ecosystem()`. Every caller gets the same instance, including `register_template`.\n- The first access builds the environment through `Quill.build_layout_ecosystem` in `src/quill/app.py` (around line 385). That method creates `self.jinja_environment(self, **options)`, where `jinja_environment = Ecosystem`. It then adds the app-level globals: `build_link_to`, `obtain_briefly_shown_notes`, `config`, `request`, `session`, `g`. It also sets `json.dumps_function`.\n- `Ecosystem` (`src/quill/layouting.py`, line 39) extends the Jinja environment. It uses `app.build_universal_layout_fetcher()` as its loader, which is backed by `RoutingTemplateFetcher`. It stores `self.app`.\n- App-level registration, such as `Quill.layout_sieve` and its siblings in `sansio/app.py` (lines 695, 738, 776), writes into the same `self.markup_engine_env.filters/tests/globals` dicts.\n\n**4. Rendering uses the same object** (`src/quill/layouting.py`, lines 149\u2013218)\n- The render functions call `app.markup_engine_env.get_or_select_template(...)` and `app.markup_engine_env.from_string(...)`. `helpers.py:308` calls `current_app.markup_engine_env.get_template(...)`.\n- Filters and globals registered on any schematic are visible to all templates. The registration is app-wide, not scoped to the schematic's own templates.\n\n**Tests:** `tests/test_schematics.py` (around lines 371\u2013411) asserts that `app.markup_engine_env.filters[\"my_reverse\"]` and `[\"strrev\"]` hold the registered function after schematic registration.",
+ "cost": 0.10730220000000001,
+ "turns": 10,
+ "duration_s": 21.663,
+ "tokens": {
+  "input": 12,
+  "cache_write": 14384,
+  "cache_read": 121261,
+  "output": 2549,
+  "total": 138206
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"jinja|template_filter|add_template_filter|filters\\\\[|jinja_env|jinja_options\", \"path\": \"/home/sq/micode-bench/base/quill\", \"output_mode\": \"content\"",
+  "Grep {\"pattern\": \"markup_engine_env|app_template_filter|template_filter|_template_filters|def add_template\", \"path\": \"/home/sq/micode-bench/base/quill/src\", \"output_",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 435, \"limit\": 120}",
+  "Grep {\"pattern\": \"def record\\\\b|def record_once|_record|deferred_functions|def register\\\\(|def _merge|first_registration|def make_setup_state|class SchematicSetupSta",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/app.py\", \"offset\": 462, \"limit\": 20}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 222, \"limit\": 125}",
+  "Grep {\"pattern\": \"def build_layout_ecosystem|class .*Ecosystem|def _get_layout_ecosystem|def .*app_ctx|jinja_env|def register_schematic\", \"path\": \"/home/sq/micode-be",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"offset\": 383, \"limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/layouting.py\", \"offset\": 36, \"limit\": 40}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 18,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 83
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "answer": "Two places decide this: rule registration (where the flag is computed) and request dispatch (where it is used).\n\n## 1. Registration: `App.attach_link_regulation` (`src/quill/sansio/app.py:L604-661`)\n\nDecorated with `@preparationmethod`. `Armature.route` (`sansio/skeleton.py:L335-365`) calls it, and so does a direct call.\n\n1. **Methods (L616-628).** `methods` comes from `options[\"methods\"]`, else `view_func.methods`, else `(\"GET\",)`. A plain string raises `TypeError`. The methods are then uppercased into a set.\n2. **Required methods (L631).** `required_methods = set(getattr(view_func, \"required_methods\", ()))`.\n3. **Flag resolution (L635-645):**\n   - **Branch A (L635-638).** If the `provide_automatic_options` argument is `None`, it falls back to `getattr(view_func, \"provide_automatic_options\", None)`. So an explicit argument wins, then the view attribute. For class-based views, `Page.provide_automatic_options` is a ClassVar defaulting to `None` (`views.py:L56`).\n   - **Branch B (L640-645).** If it is still `None`, the app config is consulted:\n     - If `\"OPTIONS\" not in methods` and `self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy, the flag becomes `True` and `\"OPTIONS\"` is added to `required_methods`.\n     - Otherwise the flag is `False`. This covers both the case where the user listed OPTIONS themselves and the case where the config is off.\n   - If the flag was set explicitly (argument or attribute), Branch B is skipped and the config is never read. An explicit `True` does not add OPTIONS to `required_methods` here.\n4. **Rule creation (L648-651).** `methods |= required_methods`, then `url_rule_class(rule, methods=methods, **options)` is built and `rule_obj.provide_automatic_options = provide_automatic_options` is set.\n\nExplicit `False` means OPTIONS is not added, so an OPTIONS request gets 405. `test_supply_implicit_choices_property` and `test_supply_implicit_choices_keyword` in `tests/test_elementary.py` show this. An explicit `True` with `methods=[\"OPTIONS\"]` yields `allow == [\"OPTIONS\"]`.\n\n## 2. Dispatch: `Quill.route_inquiry` (`src/quill/app.py:L879-902`)\n\n1. **L890-891.** If `req.routing_exception` is set, it calls `throw_dispatch_fault(req)`. This raises the exception, or `FormPayloadPathForwarding` in the debug redirect case (L494-504).\n2. **L895-899.** If `getattr(rule, \"provide_automatic_options\", False)` is truthy **and** `req.method == \"OPTIONS\"`, it returns `build_fallback_options_reply()`.\n3. **L900-902.** Otherwise it dispatches to `view_functions[rule.terminus](**view_args)` via `guarantee_blocking`.\n\n`build_fallback_options_reply` (`app.py:L953-964`) builds an empty `response_class()` and updates `rv.allow` from `request_ctx.url_adapter.allowed_methods()`.\n\n## Summary of the decision\n\n| Situation | Flag | OPTIONS in rule methods | OPTIONS request |\n|---|---|---|---|\n| Explicit arg/attribute `False` | False | only if user listed it | user's view runs if listed, else 405 |\n| Explicit arg/attribute `True` | True | only if user listed it | automatic reply (L895-899) |\n| Unset, OPTIONS not in methods, `PROVIDE_AUTOMATIC_OPTIONS` truthy | True | added | automatic reply |\n| Unset, OPTIONS in methods, or config falsy | False | as listed | user's view runs if listed, else 405 |\n\nNote that a view that lists OPTIONS itself with the flag unset gets `False`, so it handles OPTIONS itself.\n\nThe material doesn't show where `PROVIDE_AUTOMATIC_OPTIONS` gets its default value (likely the default config dict). Check the app's `default_config` if you need that.",
+ "cost": 0.049007999999999996,
+ "turns": 1,
+ "duration_s": 10.8,
+ "tokens": {
+  "input": 10087,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10087
+ },
+ "pack_tokens": 5092,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 18,
+  "total": 83
+ }
+}

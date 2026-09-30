@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "haiku",
+ "answer": "# Performance Degradation with Repeated Filter Registration Across Distinct Schematics\n\nBased on the compiled knowledge, the performance degradation would occur because of how `note_once_only` and the registration mechanism work:\n\n## Key Mechanism\n\nFrom `src/quill/sansio/schematics.py:L460-475`, the `attach_program_layout_sieve` method:\n- Creates a deferred callback that registers the filter when the schematic is enrolled\n- Wraps it with `note_once_only`, which ensures the registration happens only when `state.first_registration is True` **for that specific schematic object**\n\nFrom `src/quill/sansio/schematics.py:L232-244`, `note_once_only`:\n> \"Wraps func so it runs only when state.first_registration is True (update_wrapper preserves metadata), then record()s it.\"\n\n## The Performance Issue\n\nThe critical phrase in the compiled knowledge states:\n> \"The item is registered only on the first registration of **that schematic object**\"\n\nThis means:\n- If you create **N distinct schematic objects**, each with their own `@schematic.program_layout_sieve()` registrations\n- Each schematic's first enrollment will **execute its registration callbacks**\n- Every enrollment adds callback execution overhead:\n  - The wrapper function call that checks `first_registration`\n  - The conditional evaluation itself\n  - Dictionary write to `state.app.markup_engine_env.filters[name]`\n  - Potential Jinja2 environment bookkeeping\n\nWith multiple distinct schematics (as seen in test fixtures like `test_layout_sieve_with_label` at `L388-398`), you'd be multiplying these operations. For example, enrolling 10 distinct schematics each with 3 filters means 30 callback checks and dictionary writes instead of 3 centralized registrations.\n\n**The degradation compounds**: each distinct schematic enrollment adds callback execution overhead that wouldn't be necessary if all filters were registered once at app initialization time, outside the schematic enrollment loop.",
+ "cost": 0.026883999999999998,
+ "turns": 1,
+ "duration_s": 27.9,
+ "tokens": {
+  "input": 8734,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8734
+ },
+ "pack_tokens": 4180,
+ "score": {
+  "correctness": 12,
+  "completeness": 10,
+  "relevance": 15,
+  "clarity": 15,
+  "reasoning": 12,
+  "total": 64
+ }
+}

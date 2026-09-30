@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py:L155-193`. It works in two stages: it copies the scope when the function is decorated, and it pushes that copy when the function is called.\n\n**At decoration time (L179-187)**\n- It reads the current scope with `_cv_request.get(None)`.\n- If there is none, it raises `RuntimeError`. The message says it only works while a request context is active, such as in a view function.\n- Otherwise it calls `ctx.copy()`. The copy is made immediately, in the original greenlet or context, before any spawn happens.\n\n**What `InquiryScope.copy` does (`ctx.py:L337-355`)**\n- It builds a new instance of the same class with:\n  - `self.app`,\n  - `environ=self.request.environ`,\n  - `request=self.request` (the same request object, not a rebuilt one),\n  - `session=self.session` (the current session object).\n- The docstring says the current session is used instead of reloading the original data. This is a 1.1 change, and it keeps `quill.session` from pointing at an out-of-date object.\n- The docstring also says that sharing the request object means the copy is safe for greenlets but not for threads, unless access to the request is locked.\n\n**At call time (L189-193)**\n- `wrapper` runs `with ctx:`, which pushes the copied scope, and then calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- `update_wrapper(wrapper, f)` preserves the function's metadata.\n\n**How isolation works**\n- `InquiryScope.push` (`ctx.py:L367-394`) stores the scope in the `_cv_request` context variable with `_cv_request.set(self)`. It keeps the reset token in `_cv_tokens`.\n- `request` and `session` in `globals.py:L46-51` are `LocalProxy` objects over `_cv_request`. Inside the `with ctx:` block they resolve to the copy. Outside it they are unbound.\n- If the app context is missing or belongs to a different app, `push` also pushes a fresh program scope (L370-376).\n- `pop` (`ctx.py:L396-431`) resets the variable with the token. On the outermost pop it runs `perform_dismantle_inquiry` and closes the request. It also pops the implicit program scope. It raises `AssertionError` if the wrong context is popped.\n\n**How session data is preserved**\n- The copy already carries `session`. In `push`, the session is only opened if `self.session is None` (L384-389). The comment there says this avoids losing the session on re-push. So the copied session is reused rather than reloaded from the cookie.\n- The test `TestMicrothreadScopeDuplicating.test_microthread_scope_duplicating` (`tests/test_callscope.py:L150-177`) confirms this behavior. The view sets `session['fizz']='buzz'` and copies the scope. Inside the greenlet:\n  - Outside `with reqctx`, `quill.request` and `quill.current_app` are falsy.\n  - Inside it, the request path is `/`, `args['foo']` is `bar`, `current_app == app`, and `session.get('fizz') == 'buzz'`.\n  - After the block, `quill.request` is falsy again.\n- That test uses `request_ctx.copy()` directly rather than the decorator. It exercises the same `copy` and push mechanism that the decorator relies on.\n\n**Not settled by the material**\n- I can't say what `guarantee_blocking` does. It is on the app, and the excerpts don't show its implementation.\n- Because the session object is shared, not deep-copied, changes made in the greenlet appear to affect the same object. The excerpts don't show whether they get saved to the response.",
+ "cost": 0.037604,
+ "turns": 1,
+ "duration_s": 17.7,
+ "tokens": {
+  "input": 7539,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7539
+ },
+ "pack_tokens": 3803,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "haiku",
+ "answer": "# Certificate Parameter Conversion Fallback Chain\n\nThe certificate option conversion is implemented in **`CertificateOptionKind.transform()`** at `src/quill/cli.py:L791-825` using a **try-except fallback chain** with three ordered attempts:\n\n## Fallback Chain Structure\n\n**1. File Path (Primary)** \u2014 Line 803-804:\n```python\ntry:\n    return self.path_type(value, param, ctx)\nexcept click.BadParameter:\n    # fallback to next option\n```\nFirst attempts to validate the value as an existing file path using Click's path validator.\n\n**2. \"adhoc\" String (Secondary)** \u2014 Line 805-818:\nOn `BadParameter` from the path check, the method lowercases the value (L806) and checks if it equals `\"adhoc\"` (L808). If so:\n- Verifies the `cryptography` package is installed (L809-816)\n- Returns the string `\"adhoc\"` (L818)\n- Raises `BadParameter` if cryptography is missing (L812-816)\n\n**3. SSLContext Import (Tertiary)** \u2014 Line 820-823:\nIf not \"adhoc\", attempts to import the value as a module/object string:\n```python\nobj = import_string(value, silent=True)\n\nif isinstance(obj, ssl.SSLContext):\n    return obj\n```\nUses `import_string()` with `silent=True` to resolve the value as a module attribute path, then validates the result is an `ssl.SSLContext` instance.\n\n## Pre-requisite Check\n\nBefore attempting any fallback (L794-801), the method first verifies SSL support is available:\n```python\ntry:\n    import ssl\nexcept ImportError:\n    raise click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')\n```\n\n## Error Handling\n\n- Non-importable strings (L820, silent=True) fail silently, causing line 825's bare `raise` to re-raise the original `BadParameter`\n- Module imports that don't resolve to `ssl.SSLContext` also trigger the re-raise (L825)\n\nThis design allows users to specify certificates three ways: `--cert /path/to/cert.pem`, `--cert adhoc`, or `--cert module.path:SSLContextObject`.",
+ "cost": 0.015887,
+ "turns": 1,
+ "duration_s": 14.2,
+ "tokens": {
+  "input": 5991,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5991
+ },
+ "pack_tokens": 3495,
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 79
+ }
+}

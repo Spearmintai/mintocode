@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "haiku",
+ "answer": "# ForwardMapping Avoids Tagging Keys Due to JSON's String-Only Key Requirement\n\nThe `ForwardMapping` class (the pass-through dictionary tag class) only recursively tags dictionary **values** while leaving **keys** untouched. The reason is stated directly in its code comment:\n\n**From `src/quill/json/tag.py:L125-128`:**\n```python\ndef into_json(self, value: t.Any) -> t.Any:\n    # JSON objects may only have string keys, so don't bother tagging the\n    # key here.\n    return {k: self.serializer.tag(v) for k, v in value.items()}\n```\n\n**Explanation:**\n\n1. **JSON's Fundamental Constraint**: JSON specification requires that object keys must always be strings. This is an immutable requirement of the JSON format itself.\n\n2. **Why Keys Cannot Be Tagged**: A tagged value is represented as a single-entry dictionary (e.g., `{' t': (1, 2)}`). This tagged structure cannot be used as a JSON object key because:\n   - JSON keys must be strings\n   - A dict cannot be serialized as a key\n\n3. **Why Keys Don't Need Tagging**: Dictionary keys in Python are already strings when serialized to JSON, so they do not require the type-preservation mechanism that tagging provides. The type information that needs preserving is only in the **values**, not the keys.\n\nThe code thus applies `self.serializer.tag(v)` only to values (`v`), while keys (`k`) pass through unchanged: `{k: self.serializer.tag(v) for k, v in value.items()}`.",
+ "cost": 0.015327,
+ "turns": 1,
+ "duration_s": 10.1,
+ "tokens": {
+  "input": 6434,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6434
+ },
+ "pack_tokens": 4245,
+ "score": {
+  "correctness": 15,
+  "completeness": 12,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 76
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "The class is `TestStreaming` in `tests/test_helpers.py` (L236-307). It is a plain pytest **test-class-as-namespace with fixture injection**, not a `unittest.TestCase`. It has no `__init__`, `setUp` or `tearDown`, and no inheritance.\n\n**How it separates the two concerns**\n\n- **Context lifecycle comes from fixtures.** The `app` and `client` fixtures (from `tests/conftest.py`) are passed into each test method as arguments. `client.get(...)` pushes the request context, and the test never pushes or pops one itself.\n- **Streaming logic sits in nested generators.** Each test defines a route inside the method, and the route defines its own `generate()` or `gen()` generator. That generator is the streaming logic under test.\n- **`flask.stream_with_context` connects the two.** It is the seam between them, wrapping the generator so it keeps the request context alive while the response body is iterated. The test only asserts on the outcome, for example `rv.data == b\"Hello World!\"`.\n\n**The four tests**\n\n- `test_streaming_with_context` wraps a generator with `Response(stream_with_context(generate()))`. The generator reads `flask.request.args[\"name\"]` after the view has returned.\n- `test_streaming_with_context_as_decorator` uses `@flask.stream_with_context` on a generator function that takes arguments.\n- `test_streaming_with_context_and_custom_close` uses a `Wrapper` iterator with its own `close()`. It asserts that `close()` is called exactly once (`called == [42]`), which checks that cleanup is forwarded.\n- `test_stream_keeps_session` sets `flask.session[\"test\"]` in the view and reads it back inside the generator.\n\n**Related test outside this class:** `test_client_pop_all_preserved` in `tests/test_testing.py` (L382-396) tests context stacking. It uses `req_ctx`, `with client:` and `stream_with_context(\"hello\")`, then calls `rv.close()`. It checks that `_cv_request.get(None) is req_ctx`, so the streamed response releases its context on close.",
+ "cost": 0.0848734,
+ "turns": 4,
+ "duration_s": 11.445,
+ "tokens": {
+  "input": 8,
+  "cache_write": 14452,
+  "cache_read": 76547,
+  "output": 1174,
+  "total": 92181
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class Test.*Stream|class .*Stream.*Test|stream_with_context\", \"path\": \"tests\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_helpers.py\", \"offset\": 230, \"limit\": 100}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_testing.py\", \"offset\": 365, \"limit\": 45}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 12,
+  "completeness": 9,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 13,
+  "total": 66
+ }
+}

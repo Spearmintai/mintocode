@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "micode"
+version = "0.1.0"
+description = "Compile a repository once; send Claude Code only the minimal linked paragraphs it needs."
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+dependencies = []
+
+[project.optional-dependencies]
+judge = ["laya", "torch"]
+
+[project.scripts]
+micode = "micode.cli:main"
+
+[tool.setuptools]
+packages = ["micode"]

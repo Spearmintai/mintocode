@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "sonnet",
+ "answer": "`CertificateOptionKind.transform` (`src/quill/cli.py`, L791-825) tries each interpretation of the value in turn: file path, then `'adhoc'`, then an import string for an `ssl.SSLContext`. The class is a `click.ParamType` for `--cert`. Its `__init__` (L788-789) builds `self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)`.\n\n**Step 0: SSL guard (L794-801).** `transform` first tries `import ssl`. If that fails, it raises `BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`. There is no fallback after this error.\n\n**Step 1: file path (L803-804).** Inside a `try`, it returns `self.path_type(value, param, ctx)`. If the value is an existing file, the result is the resolved absolute path and the chain stops. Any other value makes `click.Path` raise `click.BadParameter`, which the `except click.BadParameter:` clause at L805 catches.\n\n**Step 2: `'adhoc'` (L806-818).** In the `except` block, the value is normalised with `click.STRING(value, param, ctx).lower()`. If it equals `\"adhoc\"`, the code tries `import cryptography`.\n- If the import fails, it raises a new `BadParameter`: \"Using ad-hoc certificates requires the cryptography library.\" This is raised `from None`.\n- Otherwise it returns the string `\"adhoc\"`.\n\n**Step 3: SSLContext import string (L820-823).** Any other value goes to `import_string(value, silent=True)`. `silent=True` returns `None` instead of raising when the import fails. If the result is an `ssl.SSLContext` instance, it is returned.\n\n**Step 4: final failure (L825).** If none of the steps matched, a bare `raise` re-raises the original `click.BadParameter` from the path check. The user sees the \"file does not exist\" style error. This happens when the import fails and also when the imported object is not an `SSLContext`.\n\n**Follow-up in `_check_token` (L828-864).** This is the callback for `--key`. It reads the converted `cert` and treats `\"adhoc\"` and `SSLContext` values as complete on their own.\n- Passing `--key` with either of those is an error.\n- Passing `--key` without `--cert` raises `'\"--cert\" must also be specified.'`.\n- A file path without `--key` raises `'Required when using \"--cert\".'`.\n- A valid file plus key is replaced by the tuple `(cert, key)` in `ctx.params[\"cert\"]`.\n\n**Tests.** `tests/test_terminal_tool.py`:\n- `test_launch_certificate_improvised` (L602-616) covers `adhoc`.\n- `test_launch_certificate_loading` (L619-638) covers the import-string cases: `not_here` and `quill` raise `BadParameter`.",
+ "cost": 0.029862800000000002,
+ "turns": 2,
+ "duration_s": 11.1,
+ "tokens": {
+  "input": 13772,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 13772
+ },
+ "pack_tokens": 1500,
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 76
+ }
+}

@@ -1,0 +1,38 @@
+{
+ "answer": "The `os.sep` conditions (for example `\"hasattr(os, 'sep')\"`) are evaluated inside pytest's own code, so a test method needs very little from its environment.\n\n**How it works**\n- The tests are in `testing/test_skipping.py`, class `TestEvaluation`. Examples are `test_marked_one_arg` (line 48) and `test_marked_one_arg_with_reason` (line 61).\n- Each test builds a real collected item with the `pytester` fixture, using `Pytester.getitem()` or `getitems()` from `_pytest.pytester`. The item's source is written to a temporary test module and collected.\n- `evaluate_condition(item, mark, condition)` in `src/_pytest/skipping.py:88` evaluates the string condition. `evaluate_skip_marks` and `evaluate_xfail_marks` call it, and the plugin reads the skip result in `pytest_runtest_setup`.\n\n**What a string condition can see**\nThe condition is compiled and run with `eval()` against a globals dict built at `skipping.py:99-114`, in this order:\n1. **Built-in names.** `os`, `sys`, `platform` and `config` (`item.config`) are always injected by `skipping.py`. This is why `os.sep` works even if the test module never imports `os`. The tests rely on this, and the test file itself doesn't reference `os.sep` (a grep for it found nothing).\n2. **Hook namespaces.** Each dict returned by the `pytest_markeval_namespace` hook, called through `item.ihook` (`skipping.py:105-112`), is merged in. Each entry must be a `Mapping`, otherwise a `ValueError` is raised. `test_skipif_markeval_namespace` at line 161 covers this.\n3. **Module globals.** If the item has an `obj`, its `__globals__` are merged in last (`skipping.py:113-114`). This is the globals of the collected test module or function, so names imported there override the built-ins.\n\n**What the item must provide**\n- `item.config` must exist, which requires a real `Config` and plugin manager. `pytester` supplies both.\n- `item.ihook` must exist so the hook call works.\n- The condition must be a valid Python expression. Otherwise `fail()` is raised with \"Error evaluating 'skipif' condition\", either a syntax-error message or the formatted exception.\n- If no `reason=` is given, the reason is `\"condition: \" + condition`. `test_marked_one_arg` asserts `\"condition: hasattr(os, 'sep')\"`.\n- Boolean conditions skip the `eval()` entirely, but they need an explicit `reason=`.\n\n**Summary**\nThe dependencies are the `pytester` fixture, the `os`/`sys`/`platform`/`config` names injected by `evaluate_condition`, the `pytest_markeval_namespace` hook, and the collected item's module `__globals__`.",
+ "cost": 0.057688,
+ "turns": 6,
+ "duration_s": 14.957,
+ "tokens": {
+  "input": 8,
+  "cache_write": 6738,
+  "cache_read": 68100,
+  "output": 1710,
+  "total": 76556
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"os\\\\.sep\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/test_skipping.py\", \"output_mode\": \"content\", \"-B\": 8, \"-A\": 8}",
+  "Grep {\"pattern\": \"def _getglobals|def _istrue|class MarkEvaluator|def evaluate_condition\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest\", \"output_mode\": \"c",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/skipping.py\", \"offset\": 85, \"limit\": 70}",
+  "Grep {\"pattern\": \"class TestEvaluation|os\\\\.|import os|sys\\\\.\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/test_skipping.py\", \"output_mode\": \"content\", \"head",
+  "Grep {\"pattern\": \"sep|pytester|getitem\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/test_skipping.py\", \"output_mode\": \"content\", \"head_limit\": 25}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 8,
+ "question": "What external dependencies and context must be available for TestEvaluation test methods to correctly evaluate skipif conditions that reference module attributes like os.sep?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 78
+ }
+}

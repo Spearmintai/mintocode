@@ -1,0 +1,38 @@
+{
+ "answer": "The coupling is between `following_current_inquiry` and the request scope that `treat_reply` reads. I read the code in `ctx.py` and `app.py` but didn't run anything.\n\n## The mechanism\n\n- **Registration:** `following_current_inquiry` (`src/quill/ctx.py:117-149`) doesn't register the function on the app or a schematic. It looks up the active request scope with `_cv_request.get(None)` and appends the function to `ctx._after_request_functions`. That list is created in `InquiryScope.__init__` (`ctx.py:331`).\n- **Consumption:** `Quill.treat_reply` (`src/quill/app.py:1298-1324`) does the reading. It gets the scope with `request_ctx._get_current_object()`. It runs everything in `ctx._after_request_functions` first, in registration order. It then runs the app-wide and schematic `after_request_funcs`, in reverse order. Last, it stores the session.\n\nBoth ends work on the same `InquiryScope` object. The scope's lifetime and the ContextVar that finds it set when and whether a callback runs, and nothing in the decorator's API shows that.\n\n## Where it breaks\n\n1. **It only works while a request is active.**\n   - Nothing is registered ahead of time. If no request context is active, it raises `RuntimeError` (`ctx.py:142-146`).\n   - Calling it at import time, in a schematic's setup, in `before_first_request`-style code, or in a background thread fails. Only code running inside a request can use it.\n   - This is different from `Armature.following_inquiry` (`src/quill/sansio/skeleton.py:486-505`). That one is guarded by `@preparationmethod` and appends to `after_request_funcs[None]`, which is fixed at setup time.\n   - The two decorators have similar names and the same callback signature. Their state lives in different places, and one is guarded against use after setup while the other is unguarded.\n\n2. **Conditional registration changes the hook list per request.**\n   - A view that calls `following_current_inquiry` only on some branches registers the hook only on those branches.\n   - Nested use, such as a view calling a helper that calls another, has the same effect. The callbacks stack up in call order on that one request's list.\n   - Callbacks from `following_current_inquiry` run before every `following_inquiry` callback, whichever schematic they came from. They also run in registration order, while the static ones run in reverse. The order therefore depends on which branches ran.\n\n3. **The list is tied to one scope, and copies don't share it.**\n   - `_after_request_functions` belongs to a single `InquiryScope`.\n   - `InquiryScope.copy` (`ctx.py:337-355`) builds a new scope through `__init__`, so the copy starts with an empty list. It shares only the app, environ, request and session.\n   - Code run through `duplicate_active_inquiry_scope` (`ctx.py:155-193`), such as a thread or greenlet, runs inside the copy. A hook registered there goes onto the copy's list, which `treat_reply` never reads. It is silently dropped. The reverse also holds: hooks on the original are invisible to the copy.\n\n4. **It can't be scoped to a schematic, and error paths still run it.**\n   - `treat_reply` iterates `request.schematics` only for the static registry. Per-request hooks have no schematic scoping.\n   - The final response, including a 500 built by the error handler, still goes through `treat_reply` (see `tests/test_elementary.py:905-923`). A hook registered mid-view therefore runs on error responses too, even if the view failed after registering it.\n   - If any callback raises, the rest are skipped, as `following_inquiry`'s docstring warns. Cleanup that must always run belongs in `dismantle_query`.\n\n5. **A related bug in the registry decorators.** `Armature.following_inquiry` and the other registration methods call `self.after_request_funcs.assumefallback(None, [])`. `assumefallback` isn't a method on `dict` or `defaultdict`. It looks like a leftover rename of `setdefault`. `_ProgramScopeShared.assumefallback` in `ctx.py` (L92-102) has the same problem. I didn't run these lines, so I haven't confirmed the failure.\n\nTests that show the intended use: `tests/test_elementary.py:740-752` (`test_post_query_handling`, a hook registered inside a view) and `tests/test_elementary.py:688-710` (`test_call_handling`, ordering).",
+ "cost": 0.1077292,
+ "turns": 6,
+ "duration_s": 20.907,
+ "tokens": {
+  "input": 8,
+  "cache_write": 17315,
+  "cache_read": 81966,
+  "output": 2206,
+  "total": 101495
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"following_current_inquiry|_following_request_functions|def after_this_request\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 110, \"limit\": 45}",
+  "Grep {\"pattern\": \"_after_request_functions\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 1285, \"limit\": 45}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/skeleton.py\", \"offset\": 486, \"limit\": 20}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

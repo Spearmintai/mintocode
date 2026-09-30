@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "The flag is `Schematic._got_registered_once`. It is a class attribute that defaults to `False` (schematics.py L172). Its purpose is to freeze a schematic's configuration once it has been enrolled on an app.\n\n**How it works**\n\n- **Where it is set:** `Schematic.enroll` sets `self._got_registered_once = True` (L320). This happens right after `app.schematics[name] = self` (L319) and before the deferred functions are replayed onto the app.\n- **Where it is checked:** Every setup method is wrapped by `preparationmethod` (skeleton.py L42-49). The wrapper calls `self._verify_configuration_completed(f.__name__)` before running the method. `Schematic._verify_configuration_completed` (L213-221) raises an `AssertionError` if the flag is `True`.\n- **Which methods are affected:** This covers `route`, `record`, the hook decorators, and any other `@preparationmethod` method.\n- **The error message:** \"The setup method '<f>' can no longer be called on the schematic '<name>'. It has already been registered at least once, any changes will not be applied consistently. Make sure all imports, decorators, functions, etc. needed to set up the schematic are done before registering it.\"\n\n**Why it exists**\n\nA schematic only records its setup calls as deferred callables. `enroll` replays those callables onto the app. If you added a route or hook after enrollment, that change would not reach apps that had already replayed the schematic. Only apps that enrolled it later would see it. The flag makes this an error at definition time instead of letting apps end up with different configurations.\n\nThis is the schematic counterpart of `App._got_first_request` (app.py L413-423). That flag blocks setup calls on the application once it has handled a request.\n\n**Caveat:** The flag is per schematic object, not per app. Once the schematic has been enrolled on any app, it is locked for all of them. Finish defining it before calling `app.enroll_plan`.",
+ "cost": 0.047450000000000006,
+ "turns": 1,
+ "duration_s": 6.8,
+ "tokens": {
+  "input": 10902,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10902
+ },
+ "pack_tokens": 4771,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 82
+ }
+}

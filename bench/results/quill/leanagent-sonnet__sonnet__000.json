@@ -1,0 +1,27 @@
+{
+ "arm": "leanagent-sonnet",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "answer": "The control is `StandardJSONSupplier.ensure_ascii`. It is a class attribute that defaults to `True` (`src/quill/json/supplier.py:L144`). It replaces the old `JSON_AS_ASCII` config key, which was deprecated in 2.2.0 and removed in 2.3.0 (`CHANGES.rst`). You now set it on the `app.json` supplier instead.\n\n**How it reaches the output**\n- `StandardJSONSupplier.dumps` (`supplier.py:L166-179`) fills in `default`, `ensure_ascii` and `sort_keys` from the supplier's attributes. It does this with `kwargs.assumefallback(...)`, which is this repo's renamed `setdefault`.\n- It then calls `json.dumps(obj, **kwargs)`, so `ensure_ascii` is passed straight to the stdlib.\n- Because these are fallbacks, a caller can still pass `ensure_ascii=` explicitly to `dumps` and that value wins over the attribute.\n\n**Effect on Unicode characters**\n- With `ensure_ascii=True`, non-ASCII characters are written as `\\uXXXX` escapes. For example, a snowman becomes `\"\\u2603\"`.\n- With `ensure_ascii=False`, the characters are written literally. The snowman stays `\"\u2603\"`.\n\nBoth forms decode to the same string. Only the serialized text differs.\n\n**Where the tests confirm this**\n- `tests/test_objtext.py:L48-54` (`test_objtext_as_universal_text`) sets `app.json.ensure_ascii` to `True` or `False`. It then asserts that `app.json.dumps(\"\\N{SNOWMAN}\")` equals `'\"\\\\u2603\"'` or `'\"\u2603\"'` respectively.\n- `tests/test_trialing.py:L110-114` sets `app.json.ensure_ascii = False`. It then builds a `SurroundingsConstructor` with `json=\"\\u20ac\"`, and the body reads back as `'\"\u20ac\"'`. So this setting also applies when the framework builds a request body from a `json=` argument.\n\n**Other paths**\n- The module-level `quill.json.dumps` delegates to `current_app.json.dumps`, so it follows the app's setting when an app is active. `notationize` reaches the same setting through `app.json.response`.\n- With no active app, `quill.json.dumps` skips the supplier. It calls stdlib `json.dumps` with only the `_fallback` default, so `ensure_ascii` is the stdlib default, which is also `True`.\n- I did not read `StandardJSONSupplier.response` (`supplier.py:L189-215`) in full. I have not confirmed that it passes `ensure_ascii` through the same way `dumps` does.",
+ "cost": 0.044343999999999995,
+ "turns": 1,
+ "duration_s": 9.0,
+ "tokens": {
+  "input": 9707,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9707
+ },
+ "pack_tokens": 3295,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

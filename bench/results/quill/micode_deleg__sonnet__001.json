@@ -1,0 +1,34 @@
+{
+ "answer": "`_got_registered_once` is a class-level boolean on `Schematic`. It stops you from changing a schematic after it has been registered on an app, because those changes would not be applied consistently.\n\n**Where it lives**\n- The flag is declared as `_got_registered_once = False` at `src/quill/sansio/schematics.py:172`, on the `Schematic` class.\n- `Schematic.register` sets it to `True` at line 320. That happens right after `app.schematics[name] = self`, and before `build_registration_state` creates the `SchematicSetupStatus`.\n\n**How it is enforced**\n- `Schematic._verify_configuration_completed(f_name)` (line 213) raises an `AssertionError` if the flag is set. The message says the setup method `'<f_name>'` can no longer be called on schematic `'<name>'`. It says the schematic has already been registered at least once, so changes would not be applied consistently.\n- The `@preparationmethod` decorator (`src/quill/sansio/skeleton.py:42`) wraps the setup methods, such as route, hook and error-handler registration. Before each call it runs `self._verify_configuration_completed(f.__name__)`.\n- After the first registration, any decorated setup method on that schematic fails immediately.\n\n**Why it exists**\n- When a schematic is registered, `register` builds a `SchematicSetupStatus` and replays the schematic's stored deferred functions onto the app. It copies routes, handlers and other setup into the app at that moment.\n- A setup call made afterwards would not reach apps that had already copied the schematic. It would only reach apps that registered it later. Different apps, or the same schematic registered twice under different names, would then end up configured differently.\n- The flag turns that silent inconsistency into an immediate error. Schematic setup therefore has to be finished before registration.\n\nThe flag is never reset. It means \"registered at least once\", and it stays set even if the schematic is registered again, for example nested or under another name.",
+ "cost": 0.0488678,
+ "turns": 2,
+ "duration_s": 9.743,
+ "tokens": {
+  "input": 4,
+  "cache_write": 8440,
+  "cache_read": 33499,
+  "output": 840,
+  "total": 42783
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_got_registered_once|class SchematicSetupStatus|def preparationmethod|_check_setup_finished\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

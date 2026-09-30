@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "`_got_registered_once` is a class-level flag on `Schematic`, defaulting to `False`. It is defined at `src/quill/sansio/schematics.py:172`. It stops anyone changing a schematic's setup once the schematic has been registered on an app. Registration copies the schematic's setup onto the app. A change made afterwards would apply to some registrations but not others, which is inconsistent.\n\n- **Where it is set:** `enroll()` sets it to `True` at line 320, so the first registration flips it.\n- **Where it is checked:** `_verify_configuration_completed(f_name)` (lines 213\u2013221) raises an `AssertionError` if the flag is set. The message says the setup method `'<f_name>'` can no longer be called on the schematic `'<name>'`. It adds that the schematic has already been registered at least once and that any changes \"will not be applied consistently\". It also tells you to do all imports, decorators and functions before registering.\n- **Which methods it guards:** the methods decorated with `@preparationmethod`, which call `_verify_configuration_completed`. Examples in this file are `record`, `note_once_only` and `enroll_plan`. The decorator is defined in `src/quill/sansio/skeleton.py` (around lines 42\u201349).\n\n`App` has the same kind of guard, using `_got_first_request`.\n\nThe comment at lines 58\u201361 of the same file says a schematic can be registered on an application several times, and not every setup step should run each time. That is why `first_registration` is passed to `SchematicSetupStatus`. It is also why `note_once_only` skips its function on later registrations.\n\nI did not read the code around line 320 or the tests that check this behaviour.",
+ "cost": 0.030405,
+ "turns": 4,
+ "duration_s": 10.3,
+ "tokens": {
+  "input": 15983,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 15983
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 15,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 71
+ }
+}

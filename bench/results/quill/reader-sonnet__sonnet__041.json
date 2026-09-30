@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 41,
+ "question": "Where is the test class that validates URL generation with anchors, schemes, and HTTP methods defined?",
+ "model": "sonnet",
+ "answer": "The test class is `TestAddressBuilding` in `tests/test_aids.py`, at lines 102-169. Its docstring-level summary is \"Tests for `build_link_to`\", the URL-building method on the `Quill` app (`src/quill/app.py`, L1003-1127).\n\nWhat the material shows about its tests:\n\n- **Anchors:** `test_link_for_with_fragment` (L103-108) registers `/` as `index` and asserts `quill.build_link_to(\"index\", _anchor=\"x y\") == \"/#x%20y\"`. The anchor is percent-quoted, and `app.py` L1124 sets the safe characters to `\"%!#$&'()*+,/:;=?@\"`.\n- **Schemes:** `test_link_for_with_protocol` (L110-118) uses `_external=True, _scheme=\"https\"` and expects `\"https://localhost/\"`. `test_link_for_with_swapping_protocols` (L131-141) builds an external link (`http://localhost/`), then one with `_scheme=\"https\"` (`https://localhost/`), then another external link (`http://localhost/` again). This checks that no scheme state leaks between calls.\n- **HTTP methods:** The summary notes that `test_link_with_verb` registers the same terminus under several rules distinguished by `_method`. I don't have its exact line span or body, so read it within L102-169 of `tests/test_aids.py`.\n\nRelevant behavior in `Quill.build_link_to`: `_anchor`, `_method`, `_scheme` and `_external` are keyword-only. Per the summary of the tail (L1102-1127), it raises `ValueError` if `_scheme` is given without `_external`. It then calls `url_adapter.build(terminus, values, method=_method, url_scheme=_scheme, force_external=_external)`.\n\nThe tests use the `app` and `qry_scope` fixtures, so they run inside a query (request) scope. Scope-related behavior, such as `RuntimeError` outside a scope or without `SERVER_NAME`, is tested separately in `tests/test_programscope.py`.",
+ "cost": 0.033872,
+ "turns": 1,
+ "duration_s": 7.0,
+ "tokens": {
+  "input": 7440,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7440
+ },
+ "pack_tokens": 3777,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 75
+ }
+}

@@ -1,0 +1,31 @@
+{
+ "answer": "The test is `test_dotted_name_not_allowed` in `tests/test_blueprints.py:254-256`. It calls `flask.Blueprint(\"app.ui\", __name__)` inside `pytest.raises(ValueError)`. The \"modular route component\" is a Flask `Blueprint`.\n\n**Why it raises:** the check is in `Blueprint.__init__` in `src/flask/sansio/blueprints.py:195-199`. `src/flask/blueprints.py::Blueprint` inherits that constructor. After `Scaffold.__init__` runs, it does this:\n\n```python\nif not name:\n    raise ValueError(\"'name' may not be empty.\")\nif \".\" in name:\n    raise ValueError(\"'name' may not contain a dot '.' character.\")\n```\n\n`\"app.ui\"` contains a dot, so the constructor raises `ValueError` before the object is built. The test only confirms that the exception type is raised.\n\n**Why dots are banned:** Flask uses the dot as the separator for namespacing, so a dot inside a name would make those keys ambiguous.\n- `BlueprintSetupState.add_url_rule` (`sansio/blueprints.py:87-116`) builds endpoints as `f\"{name_prefix}.{name}.{endpoint}\"`. For example, `bp.index` becomes `bp.index` in `url_for(\"bp.index\")`.\n- `Blueprint.register` (L273-377) builds nested names as `f\"{name_prefix}.{name}\"`, so `parent.child` means a nested blueprint. A blueprint literally named `app.ui` would look like blueprint `ui` nested inside `app`.\n- `_merge_blueprint_funcs` (L379-410) keys error handlers, request hooks and similar per-blueprint data as `f\"{name}.{key}\"`. Dotted names would make these keys collide or be misparsed.\n- `url_for` uses a leading dot (`.name`) to mean \"the current blueprint's endpoint\" and relies on the same convention.\n\nThe sibling test `test_empty_name_not_allowed` (L259-261) covers the empty-name branch. `test_route_decorator_custom_endpoint_with_dots` (L327-342) covers the same rule for endpoints and view function names, enforced in `Blueprint.add_url_rule` (L412-441).",
+ "cost": 0.057128399999999996,
+ "turns": 3,
+ "duration_s": 8.002,
+ "tokens": {
+  "input": 4,
+  "cache_write": 10058,
+  "cache_read": 32942,
+  "output": 1030,
+  "total": 44034
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 31,
+ "question": "Why does the test that validates blueprint names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

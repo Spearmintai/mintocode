@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "answer": "**Short version:** the filter is stored on the schematic as a deferred callback. When the schematic is enrolled, the callback writes it into the app-wide template environment. The URL prefix plays no part in that.\n\n**1. Decoration time (`src/quill/sansio/schematics.py`)**\n- `Schematic.program_layout_sieve(name=None)` (L443-458) is a decorator factory. Its `decorator` calls `self.attach_program_layout_sieve(f, name=name)` and returns `f` unchanged.\n- `attach_program_layout_sieve` (L460-475) defines an inner `register_template(state)`. That function does `state.app.markup_engine_env.filters[name or f.__name__] = f` (L472-473).\n- It then calls `self.note_once_only(register_template)` (L475). Nothing is written to the app yet, because the callback is only recorded on the schematic.\n- The compiled notes say `note_once_only` runs the callback only on the first registration of that schematic object. The source for `note_once_only` is not in the excerpts, so I can't show how it checks that. It presumably uses `state.first_registration`, but that is not confirmed here.\n\n**2. Enrollment time**\n- `App.enroll_plan(schematic, **options)` (`src/quill/sansio/app.py` L569-595) calls `schematic.enroll(self, options)`. In the test, `options` is `url_prefix=\"/py\"`.\n- `Schematic.enroll` (L273-377) builds the dotted name and stores the schematic in `app.schematics`. It then creates the `SchematicSetupStatus` through `build_registration_state`. According to the notes, it later calls every function in `deferred_functions` with that state.\n- `SchematicSetupStatus` (L34-116) holds `app`, `schematic`, `options` and `first_registration`, and it resolves `subdomain` and `url_prefix`. The callback reaches the app through `state.app`. At that point `markup_engine_env.filters[...]` is set on the application's shared environment.\n\n**3. Why the prefix doesn't matter**\n- `url_prefix` is used only by `SchematicSetupStatus` for routing. The filter callback never reads it.\n- The filter goes into `state.app.markup_engine_env`, which is app-wide. The docstring says it is \"available in any template rendered by the application.\"\n- So it is visible whatever prefix, or none, the schematic is mounted with.\n\n**4. Test evidence (`tests/test_schematics.py` L414-428)**\n- `test_layout_sieve_with_layout` registers `super_reverse` via `@bp.program_layout_sieve()`.\n- It then calls `app.enroll_plan(bp, url_prefix=\"/py\")`, and the route `/` is defined on `app`, outside the schematic.\n- `draw_layout(\"layout_sieve.html\", value=\"abcd\")` returns `b\"dcba\"`. This shows the filter is usable even though the schematic is mounted at `/py`.\n\n**Not settled by the material:**\n- The body of `note_once_only`, and the exact point in `enroll` where `first_bp_registration` is computed. The excerpt is truncated at L312, and the rest, L313-377, is not shown.\n- The template fixture `layout_sieve.html`, which is assumed to use `super_reverse`.",
+ "cost": 0.027808,
+ "turns": 1,
+ "duration_s": 9.8,
+ "tokens": {
+  "input": 5309,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5309
+ },
+ "pack_tokens": 2465,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

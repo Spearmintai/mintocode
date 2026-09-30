@@ -1,0 +1,39 @@
+{
+ "answer": "`Pytester.runpytest_subprocess` delegates to `Pytester.run`, which delegates to `Pytester.popen` and then `subprocess.Popen`. All three are in `src/_pytest/pytester.py`. That file has no exception handling for collection. `SystemExit` during collection is handled in `src/_pytest/runner.py` and `src/_pytest/main.py`, inside the child pytest process.\n\n## Delegation chain (`src/_pytest/pytester.py`)\n\n1. **`Pytester.runpytest_subprocess`** (line 1476)\n   - It creates a numbered `runpytest-*` directory with `make_numbered_dir` and prepends `--basetemp=<dir>` to the arguments.\n   - It prepends `-p <name>` for each entry in `self.plugins`. Plugin objects raise `ValueError`, because only plugin names work in subprocess mode.\n   - It prepends `self._getpytestargs()`, which returns `(sys.executable, \"-mpytest\")`.\n   - It then returns `self.run(*args, timeout=timeout)`.\n2. **`Pytester.run`** (line 1373)\n   - It converts the arguments to `str` and redirects the child's stdout and stderr to the files `stdout` and `stderr` under `self.path`.\n   - It calls `self.popen(...)` and waits with `popen.wait()`. If a timeout is set, it calls `popen.wait(timeout)`. On `subprocess.TimeoutExpired`, `handle_timeout` kills the child, waits for it, and raises `Pytester.TimeoutExpired`.\n   - It reads the output files back, echoes them with `_dump_lines`, and converts the return code with `ExitCode(ret)`. If the code isn't a valid `ExitCode`, the `ValueError` is suppressed and the raw integer is kept.\n   - It returns `RunResult(ret, out, err, duration)`.\n3. **`Pytester.popen`** (line 1335)\n   - This is the layer that calls `subprocess.Popen(cmdargs, stdout=..., stderr=..., **kw)`.\n   - It copies `os.environ` and puts `os.getcwd()` at the front of `PYTHONPATH`.\n   - It handles stdin: the default `CLOSE_STDIN` opens a pipe and closes it at once, and `bytes` are written to the pipe.\n\n## System exceptions during collection\n\nThe subprocess is a normal `python -m pytest` run. The parent sees no exception object from the child, only its exit code and output in `RunResult`. The handling happens in the child:\n\n- **Collection (`_pytest/runner.py`, `pytest_make_collect_report`, line 371).** The collector runs inside `CallInfo.from_call(collect, \"collect\", reraise=(KeyboardInterrupt, SystemExit))`. `KeyboardInterrupt` and `SystemExit` are not caught and turned into a failed `CollectReport`. Other exceptions become a \"failed\" report (or \"skipped\" for `Skipped` and `unittest.SkipTest`). So a `SystemExit` raised while a module is imported or collected escapes the collection layer.\n- **Session wrapper (`_pytest/main.py`, `wrap_session`, line 276).** `pytest_cmdline_main` calls `wrap_session(config, _main)`.\n  - `KeyboardInterrupt` and `exit.Exception` are caught first. They fire `pytest_keyboard_interrupt` and give exit code `INTERRUPTED` (2), or the `returncode` carried by `exit.Exception` if it has one.\n  - A `SystemExit` is not in that clause, so it lands in the `except BaseException` block (line 305). That block sets `ExitCode.INTERNAL_ERROR` (3) and calls `config.notify_exception`. If the exception is a `SystemExit`, it writes `mainloop: caught unexpected SystemExit!` to stderr (line 316).\n  - The `finally` block still runs `pytest_sessionfinish` and `_ensure_unconfigure`.\n- **In the parent.** `Pytester.run` reads that exit code (3) and the stderr message into a `RunResult`. The test can assert on `result.ret` and `result.stderr`.\n\nFor comparison, `Pytester.runpytest_inprocess` (line 1153) has to catch `SystemExit` itself, because it runs in the same process. It maps `e.args[0]` to an `ExitCode`, and any other `Exception` becomes `ExitCode(3)`.",
+ "cost": 0.0955936,
+ "turns": 7,
+ "duration_s": 23.979,
+ "tokens": {
+  "input": 10,
+  "cache_write": 12969,
+  "cache_read": 96038,
+  "output": 2449,
+  "total": 111466
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def runpytest_subprocess|def run\\\\(|def popen|def runpytest_inprocess|def inline_run|def runpytest\\\\(\", \"path\": \"/home/sq/micode-bench/base/pytest/",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 1335, \"limit\": 185}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 1075, \"limit\": 125}",
+  "Grep {\"pattern\": \"SystemExit|KeyboardInterrupt|unittest.SkipTest|OutcomeException|def pytest_make_collect_report|def collect_one_node|def wrap_session|def _main|def ",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/runner.py\", \"offset\": 368, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/main.py\", \"offset\": 276, \"limit\": 62}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 46,
+ "question": "Where is the subprocess execution mechanism that `pytester.runpytest_subprocess` delegates to, and how does it handle system exception propagation during test collection?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

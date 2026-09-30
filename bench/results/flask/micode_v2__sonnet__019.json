@@ -1,0 +1,35 @@
+{
+ "answer": "The short answer is that Flask does not reconcile session state across concurrent requests. Each request gets its own private session object, and the signed cookie is the only shared state. The callback tracking only decides whether to write that cookie back. The code is in `src/flask/sessions.py`.\n\n**The tracking mechanism: `SecureCookieSession` (L52-94)**\n- `SecureCookieSession` inherits from werkzeug's `CallbackDict` and from `SessionMixin`.\n- `__init__` (L74-82) defines a closure `on_update(self)` that sets `self.modified = True` and `self.accessed = True`. It passes the closure to `CallbackDict.__init__(initial, on_update)`.\n- `CallbackDict` calls `on_update` on every mutation of the top-level dict, such as `__setitem__`, `__delitem__`, `update`, `pop`, `clear` and `setdefault` when it inserts.\n- The class-level defaults are `modified = False` and `accessed = False` (L66 and L72). A freshly loaded session therefore starts out \"clean\".\n- Reads go through the overrides `__getitem__`, `get` and `setdefault` (L84-94). These set only `accessed = True`. That flag drives the `Vary: Cookie` header.\n\n**Loading: `SecureCookieSessionInterface.open_session` (L337-349)**\n- It runs at the start of each request. It reads the cookie from `request.cookies`, verifies it with `URLSafeTimedSerializer.loads(val, max_age=...)`, and builds a new `session_class(data)`.\n- A missing cookie or a `BadSignature` gives an empty session. If there is no secret key, it returns `None`, and the request context falls back to `NullSession`.\n- `NullSession` (L97-111) raises `RuntimeError` on any mutation.\n- Each request therefore gets its own `SecureCookieSession` instance, deserialized from the cookie that request sent.\n- Nothing is shared in memory between concurrent requests, so there are no locks and no cross-request synchronization.\n\n**Persisting: `save_session` (L351-399) and `should_set_cookie` (L247-261)**\n- `save_session` runs at the end of the request, after the response is built and before the request context is popped.\n- If `session.accessed` is true, it adds `Vary: Cookie` (L363-364). This stops caching proxies from serving one user's page to another.\n- If the session is empty (L368-381):\n  - When `session.modified` is true, it deletes the cookie with the same attributes.\n  - Otherwise it does nothing.\n  - It returns in both cases.\n- Otherwise it calls `should_set_cookie`, which returns `session.modified or (session.permanent and SESSION_REFRESH_EACH_REQUEST)`. If that is false, no `Set-Cookie` header is sent and the browser keeps its existing cookie.\n- If it is true, the cookie is written with `dumps(dict(session))`, the expiry from `get_expiration_time`, and the other cookie attributes.\n\n**What this does and doesn't guarantee for concurrency**\n- The `modified` flag keeps the in-memory session and the cookie in sync. If the code changed the session dict, the cookie is rewritten with a snapshot of it. If it did not, the cookie is left alone. This also avoids overwriting the client's cookie with an unchanged copy.\n- Concurrent requests are isolated, not merged. The cookie is the whole state, and the last response the browser processes wins. If two simultaneous requests from the same client both modify the session, the later `Set-Cookie` replaces the earlier one, and the earlier change can be lost.\n- Only top-level mutations are detected. In-place changes to nested values, such as `session['k'].append(x)`, do not fire `on_update`. You must set `session.modified = True` yourself, or the change won't be persisted.",
+ "cost": 0.0720342,
+ "turns": 3,
+ "duration_s": 12.035,
+ "tokens": {
+  "input": 4,
+  "cache_write": 12504,
+  "cache_read": 32851,
+  "output": 1544,
+  "total": 46903
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sessions.py\", \"offset\": 50, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sessions.py\", \"offset\": 245, \"limit\": 160}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 19,
+ "question": "How does the callback-based modification tracking in the session class that inherits from CallbackDict ensure consistency between in-memory session state and persisted cookie data across concurrent requests?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

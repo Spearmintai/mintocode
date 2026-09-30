@@ -1,0 +1,39 @@
+{
+ "answer": "The separation is between **discovery**, which is lenient and never raises, and **validation**, which is deferred to request time. A single exception type, `FixtureLookupError`, carries the failure. I read the code in `src/_pytest/fixtures.py` and `nodes.py` but did not run anything.\n\n**1. Discovery (`FixtureManager`)**\n- `FixtureManager.getfixturedefs(argname, node)` returns three distinct results:\n  - `None` if no fixture with that name exists anywhere.\n  - An empty tuple if fixtures with that name exist but none apply to the node.\n  - A tuple of applicable `FixtureDef`s otherwise.\n- `_matchfactories` does the scoping filter. It keeps a `FixtureDef` only when its `baseid` is in the node's parent nodeids.\n- `getfixtureclosure(parentnode, initialnames, ignore_args)` builds the transitive closure of fixture names and returns `arg2fixturedefs`. It silently skips names that have no fixturedefs (`if fixturedefs:`), so collection never fails on a missing fixture.\n- `FixtureManager.pytest_generate_tests` also skips such names. Its comment says: \"Will raise FixtureLookupError at setup time if not parametrized somewhere else\". A missing name may still be supplied later by `@pytest.mark.parametrize`, and this is why the check can't happen at discovery.\n\n**2. Validation (`FixtureRequest` at setup and run time)**\n- `TopRequest._fillfixtures` and `FixtureRequest.getfixturevalue` call `_get_active_fixturedef(argname)`. This is where the checks happen, and each failure raises `FixtureLookupError(argname, self)`:\n  - `fixturedefs is None`, meaning there is no fixture with that name.\n  - `not fixturedefs`, meaning the fixture exists but does not apply to this node.\n  - `-index > len(fixturedefs)`, meaning an overriding fixture's chain of requests for its own name has run out of levels. This is the recursive-dependency case.\n- For a dynamic `getfixturevalue`, it retries discovery through `getfixturedefs` and caches the result in `_arg2fixturedefs`.\n- `FixtureRequest.raiseerror(msg)` raises `FixtureLookupError(None, self, msg)`. `_check_scope` uses it for scope-mismatch errors.\n\n**3. Error reporting**\n- `FixtureLookupError` captures `argname`, `request`, `fixturestack` (via `request._get_fixturestack()`) and an optional `msg`.\n- `formatrepr()` builds the report:\n  - If `msg` is `None`, it re-scans `fm._arg2fixturedefs` with `_matchfactories` to compute the available fixtures. If `argname` is among them, it reports \"recursive dependency involving fixture '\u2026' detected\". Otherwise it reports \"fixture '\u2026' not found\" plus the list of available fixtures.\n  - If `msg` is set (from `raiseerror`), it is used as-is, and the last fixture is dropped from the displayed stack so the error points at the requesting side.\n- `FixtureLookupErrorRepr` (a `TerminalRepr`) renders the result.\n- In `nodes.py`, `Node._repr_failure_py` (around line 413) checks `isinstance(excinfo.value, FixtureLookupError)` and calls `formatrepr()`. This yields a clean \"fixture not found\" report instead of a full traceback.\n- Any other exception, such as an error raised inside a fixture function, is not a `FixtureLookupError`. It takes the normal traceback path, which is how missing fixtures are told apart from internal failures.",
+ "cost": 0.0791532,
+ "turns": 7,
+ "duration_s": 16.046,
+ "tokens": {
+  "input": 6,
+  "cache_write": 12066,
+  "cache_read": 46886,
+  "output": 2150,
+  "total": 61108
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"FixtureLookupError|def getfixturedefs|def _get_direct_parametrize_args|def getfixtureclosure|def _getautousenames|def _matchfactories|def _fillfixt",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 560, \"limit\": 60}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 816, \"limit\": 70}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 1625, \"limit\": 70}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 1850, \"limit\": 40}",
+  "Grep {\"pattern\": \"FixtureLookupError|fixture_request_error|def _show_fixtures_per_test|def showfixtures|def _pretty_fixture_path\", \"path\": \"/home/sq/micode-bench/bas"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 2,
+ "question": "What is the architectural separation in the pytest fixture resolution system that decouples fixture discovery and validation to enable the error reporting mechanism that distinguishes between missing fixtures and internal failures?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

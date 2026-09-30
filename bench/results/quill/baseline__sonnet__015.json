@@ -1,0 +1,40 @@
+{
+ "answer": "Custom filters registered with the schematic's app-level method reach the template environment through deferred registration. The URL prefix plays no part in it. All the code is in `src/quill/sansio/schematics.py`.\n\n**Registering the filter (nothing touches the app yet)**\n- `program_layout_sieve(name=None)` (line ~444) is the decorator form. It calls `attach_program_layout_sieve(f, name=name)` and returns `f` unchanged.\n- `attach_program_layout_sieve(f, name=None)` (line ~461) defines an inner closure, `register_template(state)`. That closure does `state.app.markup_engine_env.filters[name or f.__name__] = f`.\n- It then passes the closure to `note_once_only(register_template)` (line 475). Nothing is written to the environment at this point.\n\n**Deferring it**\n- `note_once_only` (line ~233) wraps the closure in a function that runs it only when `state.first_registration` is true. It then hands the wrapper to `record`.\n- `record` (line ~224) appends the wrapper to `self.deferred_functions`.\n- `record`, `note_once_only` and the two filter methods are all decorated `@preparationmethod`. That decorator's check (lines ~215-221) raises an `AssertionError` if they're called after the schematic has been registered once, so no filter can be added after the schematic is registered on an app.\n\n**Running it when the schematic is mounted**\n- `register(app, options)` (line ~300) is called when the schematic is mounted. It builds `state = self.build_registration_state(app, options, first_bp_registration)`.\n- That state is a `SchematicSetupStatus`. Its `url_prefix` comes from `options[\"url_prefix\"]`, falling back to `schematic.url_prefix` (lines ~72-77), and it holds `state.app`.\n- `register` then loops `for deferred in self.deferred_functions: deferred(state)` (lines 334-335). This is where the filter is finally written into the app's `markup_engine_env.filters` dict.\n\n**Why the prefix doesn't matter**\n- The prefix is only used in `SchematicSetupStatus.attach_link_regulation` (lines ~98-102), which joins it onto URL rules. The filter closure never reads `state.url_prefix`.\n- It writes to the app-wide `state.app.markup_engine_env`, not to a schematic-specific environment. So the filter is available to every template the app renders, whatever prefix the schematic is mounted under.\n- The `first_registration` guard means mounting the same schematic several times, for example under different prefixes or names, sets the filter once.\n- Nested schematics get the same treatment. The loop over `self._blueprints` (line ~349 onward) registers each child with a combined prefix, and each child runs its own deferred functions.",
+ "cost": 0.0678574,
+ "turns": 8,
+ "duration_s": 18.432,
+ "tokens": {
+  "input": 10,
+  "cache_write": 8082,
+  "cache_read": 88797,
+  "output": 1775,
+  "total": 98664
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"app_template_filter|record_once|def record|deferred_functions\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"template_filter|def register\\\\b|def make_setup_state|class SchematicSetupState|url_prefix\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill/san",
+  "Grep {\"pattern\": \"def add_template_filter|def template_filter\", \"path\": \"/home/sq/micode-bench/base/quill/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 215, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 300, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 425, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/sansio/schematics.py\", \"offset\": 474, \"limit\": 6}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

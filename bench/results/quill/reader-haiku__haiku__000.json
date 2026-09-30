@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "haiku",
+ "answer": "# ASCII-Only Encoding and Unicode Character Representation in Quill\n\nThe relationship between ASCII-only encoding control and Unicode representation is direct and fundamental:\n\n## The Control Parameter\n\n**`ensure_ascii`** is a class attribute on `StandardJSONSupplier` (src/quill/json/supplier.py:L144) that defaults to `True`. This attribute controls whether Unicode characters are escaped or preserved as literal characters.\n\n## How It Works\n\nIn `StandardJSONSupplier.dumps()` (src/quill/json/supplier.py:L166-179), the `ensure_ascii` attribute is passed as a default kwarg to Python's `json.dumps()`:\n\n```python\nkwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)\nreturn json.dumps(obj, **kwargs)\n```\n\nThis means the attribute feeds directly into the standard library's JSON serialization behavior.\n\n## Unicode Representation Outcomes\n\nThe test `test_objtext_as_universal_text` (tests/test_objtext.py:L48-54) demonstrates the concrete effect:\n\n| `ensure_ascii` Setting | Input | Output |\n|---|---|---|\n| `True` (default) | `\"\\N{SNOWMAN}\"` (\u2603) | `\"\\\\u2603\"` (escaped) |\n| `False` | `\"\\N{SNOWMAN}\"` (\u2603) | `\"\u2603\"` (literal) |\n\nSimilarly, `test_ambientassembler_objtext_serializes` (tests/test_trialing.py:L110-114) shows that with `ensure_ascii = False`, the Euro symbol outputs as the literal character `\"\u20ac\"`.\n\n## Customization\n\nYou can modify this behavior by setting the attribute on the app's JSON supplier before serialization:\n```python\napp.json.ensure_ascii = False  # Preserve Unicode characters literally\n```\n\nThis replaces the deprecated Flask config keys (`JSON_AS_ASCII`), which were removed in version 2.3.0 per CHANGES.rst:L153, L285-288.",
+ "cost": 0.013793,
+ "turns": 1,
+ "duration_s": 10.2,
+ "tokens": {
+  "input": 5562,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5562
+ },
+ "pack_tokens": 3295,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 18,
+  "reasoning": 16,
+  "total": 81
+ }
+}

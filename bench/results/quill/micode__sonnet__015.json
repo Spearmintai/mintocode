@@ -1,0 +1,37 @@
+{
+ "answer": "Filters registered through the schematic's app-level method end up on the app's shared template environment. This happens when the schematic is enrolled, and the URL prefix plays no part in it.\n\n**Recording the filter**\n- `Schematic.program_layout_sieve(name=None)` is the decorator form. It calls `attach_program_layout_sieve(f, name=name)` and returns `f` (`src/quill/sansio/schematics.py:443-458`).\n- `Schematic.attach_program_layout_sieve(f, name=None)` is the imperative form. It defines a closure `register_template(state)` that does `state.app.markup_engine_env.filters[name or f.__name__] = f` (L460-473). It then passes the closure to `self.note_once_only(...)` (L475).\n- No app exists yet at decoration time, so nothing touches an environment then. The closure is only recorded.\n\n**Deferral**\n- `note_once_only` (L232-244) wraps the closure in a `wrapper(state)` that runs it only if `state.first_registration` is true. It then calls `self.record(wrapper)`.\n- `record` (L223-230) appends the wrapper to `self.deferred_functions`.\n- Both methods are decorated with `@preparationmethod`. As I understand it, that decorator blocks new setup calls once the schematic has been registered. I didn't read its implementation.\n\n**Replay at registration**\n- `App.enroll_plan(schematic, **options)` in `src/quill/sansio/app.py` (around L569-595) calls `schematic.enroll(app, options)`.\n- `Schematic.enroll` (L273-377) builds a `SchematicSetupStatus` through `build_registration_state`. The status carries the `app`, the resolved `url_prefix`, `subdomain`, `name_prefix` and `link_presets`, plus `first_registration`. `enroll` then runs every function in `deferred_functions` with that state.\n- The recorded wrapper therefore executes and writes the filter into `state.app.markup_engine_env.filters`.\n\n**Why the URL prefix doesn't matter**\n- The prefix is applied only in `SchematicSetupStatus.attach_link_regulation` (L87-116). That method joins `url_prefix` onto route rules and prefixes the endpoint name.\n- The filter closure uses `state.app` directly and never goes through that method. It writes to the app-wide Jinja environment, not a per-schematic one. The filter is therefore available to every template the app renders, not only templates for the schematic's prefixed routes.\n- Registering the same schematic again, for example under a different prefix, doesn't re-add the filter, because `first_registration` is false. That is harmless, since the filter is already in the shared environment.\n\nThe sibling methods for tests and globals follow the same pattern (L511 and L549). They write to `markup_engine_env.tests` and `markup_engine_env.globals`.",
+ "cost": 0.0661434,
+ "turns": 5,
+ "duration_s": 11.492,
+ "tokens": {
+  "input": 6,
+  "cache_write": 10053,
+  "cache_read": 55197,
+  "output": 1488,
+  "total": 66744
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 80, \"limit\": 80}",
+  "Grep {\"pattern\": \"def (note_once_only|record_once|record|program_layout_sieve|attach_program_layout_sieve)\\\\b|markup_engine_env\", \"path\": \"/home/sq/micode-bench/repo",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 222, \"limit\": 22}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 440, \"limit\": 36}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 85
+ }
+}

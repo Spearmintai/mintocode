@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "sonnet",
+ "answer": "The provided material does not show any real performance degradation from this mechanism, so I can't identify a cause. What the code shows is that the cost is small and happens once, at startup.\n\n**What each registration does**\n- `Schematic.attach_program_layout_sieve` (`src/quill/sansio/schematics.py:L460-475`) defines a small closure, `register_template`. It hands the closure to `note_once_only`.\n- `note_once_only` (L232-244) wraps the closure so it runs only when `state.first_registration` is `True`. It then calls `record()` to store it.\n- When the schematic is enrolled, the closure does one dict assignment: `state.app.markup_engine_env.filters[name or f.__name__] = f` (L473).\n\n**Cost across many distinct schematics**\n- Each distinct schematic object has its own first registration. Each one therefore runs its own callback once, and the cost grows linearly with the number of filters. It is a constant-time dict write plus one closure per filter. Nothing in the excerpts suggests it is slow.\n- Enrolling the same schematic again skips the callback, so repeats add no work.\n- The `SchematicSetupStatus` object (L34-116) is created per enrollment. The excerpt shows only assignments and a couple of option lookups, so it is also cheap.\n\n**The one place a cost could appear**\n- `App.markup_engine_env` (`src/quill/sansio/app.py:L469-477`) is a `cached_property`. The first callback to touch it triggers `build_layout_ecosystem()`, which builds the whole Jinja environment. That build happens once, not per schematic. Later callbacks reuse the cached object.\n- The docstring says that changing `jinja_options` after this point has no effect. That is a correctness issue, not a performance one.\n\n**Related behaviour that is not performance**\n- Filters share one global namespace on the environment. Two distinct schematics registering the same filter name will silently overwrite each other, and the last one enrolled wins.\n- `tests/test_schematics.py:L994-1008` (`test_distinct_schematic_titles`) is about schematic names raising `ValueError` on duplicates. It does not exercise filter registration or timing.\n\n**What the material does not settle**\nI can't see the actual filter callables, `build_layout_ecosystem()`, or any benchmarks. If you measured a slowdown, look at those, and at what the filter functions themselves do at call time. The rendering cost of the filters is a separate matter from registering them.",
+ "cost": 0.019160000000000003,
+ "turns": 1,
+ "duration_s": 8.5,
+ "tokens": {
+  "input": 3567,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 3567
+ },
+ "pack_tokens": 1484,
+ "score": {
+  "correctness": 12,
+  "completeness": 10,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 65
+ }
+}

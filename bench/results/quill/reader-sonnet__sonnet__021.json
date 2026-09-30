@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "answer": "The class is `_ProgramScopeShared` in `src/quill/ctx.py:L29-114`, exposed as `g` (default from `App.app_ctx_globals_class`, `src/quill/sansio/app.py:L185`). Its methods split into two groups: strict ones that raise, and lenient ones that accept a default.\n\n**Strict: raise `AttributeError` on a missing name**\n- `__getattr__` (L52-56) looks up `self.__dict__[name]`. On `KeyError` it raises `AttributeError(name) from None`. Converting `KeyError` to `AttributeError` keeps normal attribute semantics, so `getattr(g, \"x\", default)` and `hasattr` work. `from None` hides the internal `KeyError`.\n- `__delattr__` (L61-65) does `del self.__dict__[name]` and converts `KeyError` to `AttributeError(name) from None` in the same way.\n\nNeither takes a default. A missing attribute is an error.\n\n**Lenient: defaults**\n- `get(name, default=None)` returns the default when the name is absent. The test at `tests/test_programscope.py:L136-137` confirms `g.get(\"foo\")` is `None` and `g.get(\"foo\", \"bar\")` is `\"bar\"`. The `get` source isn't in the excerpts, so this comes from the test and the summary.\n- `pop(name[, default])` (L78-90) uses the module-level `_sentinel = object()` (L26) to tell \"no default given\" apart from \"default is `None`\". With no default and a missing attribute it raises `KeyError`, not `AttributeError`. With a default, it returns that default. The tests confirm this at L147-150: `pop(\"bar\")` raises `KeyError` once the attribute is gone, and `pop(\"bar\", \"more cake\")` returns `\"more cake\"`.\n- `assumefallback` (L92-102) is meant to be `setdefault`: get the attribute if present, otherwise set and return the default.\n\n**How the balance works**\n- Access and deletion use `AttributeError`, matching Python's attribute protocol.\n- `pop` deliberately mirrors `dict.pop`, so it raises `KeyError` unless a default is supplied. The sentinel is what allows `None` to be a legitimate default.\n- `get` covers the case where you want a default with no exception.\n\n**Broken: `assumefallback`**\nL102 is `return self.__dict__.assumefallback(name, default)`. `dict` has no such method (it looks like a rename artifact of `setdefault`), so calling it raises `AttributeError`. That is ironic given the strategy above: the intended default-providing method fails with the very error the other methods use for missing attributes. The test at `tests/test_programscope.py:L143-145` expects the first value to be kept, so it would fail as the code stands. The fix is to call `self.__dict__.setdefault(name, default)`. The docstring (L94) has the same rename artifact (\"Like :meth:`dict.assumefallback`\").",
+ "cost": 0.037756,
+ "turns": 1,
+ "duration_s": 9.7,
+ "tokens": {
+  "input": 7964,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7964
+ },
+ "pack_tokens": 3957,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 79
+ }
+}

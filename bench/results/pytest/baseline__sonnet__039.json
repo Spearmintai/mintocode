@@ -1,0 +1,35 @@
+{
+ "answer": "All of this is in `src/_pytest/assertion/rewrite.py`, in the class `AssertionRewritingHook`.\n\n## The flow\n\n**1. State initialisation (`__init__`, line 80)**\n`self._basenames_to_check_rewrite = {\"conftest\"}`. This is the seed set. `set_session()` (line 84) resets `_session_paths_checked = False`, so the set is repopulated for each new session.\n\n**2. The mutation (`_early_rewrite_bailout`, lines 196\u2013203)**\n- The mutation is guarded by `self.session is not None and not self._session_paths_checked`. It runs once per session.\n- For each `initial_path` in `self.session._initialpaths`, the method takes the last path component, strips its extension, and calls `self._basenames_to_check_rewrite.add(...)`.\n- Command-line files such as `foo.py` therefore add `\"foo\"`. Modules that are named on the command line but don't match `python_files` are still not bailed out on.\n\n**3. The decision using that state (lines 206\u2013225)**\nThe method returns `True` (bail out) or `False` (continue). It checks these in order:\n- `parts[-1] in self._basenames_to_check_rewrite` returns `False`. This covers `conftest` and the initial-path basenames.\n- Any `python_files` pattern (`self.fnpats`) that contains a directory component returns `False`, because the full path is needed.\n- A `fnmatch_ex(pat, path)` match on the module name treated as a filename returns `False`.\n- `_is_marked_for_rewrite(name, state)` returns `False`. It uses `_must_rewrite`, populated by `mark_rewrite()`, and caches results in `_marked_for_rewrite_cache`. `mark_rewrite()` clears that cache at line 277.\n- Otherwise it traces \"early skip\" and returns `True`.\n\n**4. The consumer (`find_spec`, lines 97\u2013105)**\n```python\nif self._early_rewrite_bailout(name, state):\n    return None                       # cheap exit\n...\nspec = self._find_spec(name, path)    # PathFinder.find_spec: expensive\n```\n- `_find_spec` is `importlib.machinery.PathFinder.find_spec` (line 89). It scans `sys.path` and the filesystem, and the docstring at line 191 names it as the major slowdown.\n- If a fallback is needed, `importlib.util.spec_from_file_location` (line 112) runs next.\n- After that, `os.path.exists(spec.origin)` (line 125) does a stat.\n- `_should_rewrite` (line 227) then calls `session.isinitpath(absolutepath(fn))`.\n\n## Answer\nA `True` return from `_early_rewrite_bailout` makes `find_spec` return `None` before any of those filesystem calls. The determinants are:\n- membership of the last dotted name component in `_basenames_to_check_rewrite`, which is seeded with `\"conftest\"` and extended once per session with the initial-path stems;\n- the `fnpats` checks;\n- `_is_marked_for_rewrite`.\n\nIf any of them says \"maybe\", `find_spec` goes on to the expensive `PathFinder.find_spec` call.",
+ "cost": 0.05587,
+ "turns": 3,
+ "duration_s": 11.334,
+ "tokens": {
+  "input": 6,
+  "cache_write": 8107,
+  "cache_read": 48850,
+  "output": 1366,
+  "total": 58329
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"_early_rewrite_bailout|_basenames_to_check_rewrite|_is_marked_for_rewrite|_must_rewrite\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/as",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/assertion/rewrite.py\", \"offset\": 70, \"limit\": 210}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 39,
+ "question": "Where does the data flow from `_early_rewrite_bailout` through `_basenames_to_check_rewrite` state mutation determine whether `find_spec` will invoke expensive filesystem operations?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 81
+ }
+}

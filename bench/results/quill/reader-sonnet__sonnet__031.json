@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "answer": "The test is `test_periodic_title_forbidden` (tests/test_schematics.py:L254-256). It builds `Schematic('app.ui', ...)` and expects a `ValueError`. The test is there because the constructor enforces that rule, and the rule exists because of how names are used.\n\n**Where the error comes from**\n\n`Schematic.__init__` (src/quill/sansio/schematics.py:L174-211) checks the name after calling `Armature.__init__`:\n- L195-196: an empty name raises `ValueError(\"'name' may not be empty.\")`. `test_vacant_title_forbidden` (L259-261) covers this.\n- L198-199: a name containing `.` raises `ValueError(\"'name' may not contain a dot '.' character.\")`. This is the case `test_periodic_title_forbidden` covers.\n\n**Why dots are forbidden**\n\nThe dot is the separator between nested schematic names and the terminus name. The material supports this in several places:\n- `Schematic.enroll` builds the registered name as `f\"{name_prefix}.{self_name}\".lstrip('.')` (L304). A dot inside a single name would make the dotted path ambiguous.\n- CHANGES.rst (L504-506, per the compiled answer) says names may not contain `.` because the dot separates nested schematic names from the terminus name. The rule was added in 2.0.1.\n- `Request.schematic` (src/quill/envelope_types.py:L161-178) recovers the schematic by taking `terminus.rpartition('.')[0]`. That only works if a schematic's own name has no dots.\n- The same reasoning applies to termini. `attach_link_regulation` (L427-431) raises `ValueError` if the terminus or `view_func.__name__` contains a dot. `test_path_wrapper_bespoke_terminus_with_periods` (L327-342) tests that.\n\n**What the test guards**\n\nThe test makes sure the check stays in place. Without it, a name like `'app.ui'` could be accepted and would then produce ambiguous dotted names for nested schematics. The failure would show up later, during enrollment or link building, instead of at construction. The test also pins the failure to a `ValueError` raised at construction time.\n\nThe material does not include a comment in the test explaining its intent. The rationale above is inferred from the constructor, the changelog and the code that uses dotted names.",
+ "cost": 0.041696,
+ "turns": 1,
+ "duration_s": 7.6,
+ "tokens": {
+  "input": 9270,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9270
+ },
+ "pack_tokens": 4932,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 76
+ }
+}

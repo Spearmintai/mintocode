@@ -1,0 +1,27 @@
+{
+ "arm": "control-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "`_postponed_sha1` in `src/quill/sittings.py` (lines 290\u2013295) does this by looking up `hashlib.sha1` only when the function is called, not when the module is imported.\n\n- **The wrapper:** `_postponed_sha1(string: bytes = b\"\") -> t.Any` has a single line of logic, `return hashlib.sha1(string)`. The `hashlib.sha1` attribute is resolved inside the function body. Importing `quill.sittings` therefore never touches SHA-1.\n- **Why it exists:** the docstring says FIPS builds may not include SHA-1. If the default were `digest_method = hashlib.sha1`, evaluating that class attribute at import would fail in such an environment. The developer would then have no chance to configure a different digest.\n- **Where it's used:** `ProtectedBiscuitSessionAdapter` (line 298) sets `digest_method = staticmethod(_postponed_sha1)` at line 307. The `staticmethod` wrapper keeps Python from binding the function as an instance method. That lets itsdangerous call `digest_method(string)` as a plain callable.\n- **When it can fail:** the availability check happens when the signer first calls the digest, which is during cookie signing or session use. An app can override `digest_method` with another algorithm before that point and avoid the failure.\n- **Change log:** `CHANGES.rst` (around line 62) records that the default `hashlib.sha1` may not be available in FIPS builds.\n\nI didn't look for tests covering this behaviour.",
+ "cost": 0.0175082,
+ "turns": 3,
+ "duration_s": 10.3,
+ "tokens": {
+  "input": 12499,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 12499
+ },
+ "pack_tokens": 16,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 79
+ }
+}

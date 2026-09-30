@@ -1,0 +1,35 @@
+{
+ "answer": "`ensure_ascii` is a class attribute on `StandardJSONSupplier` in `src/quill/json/supplier.py` (line 144). It defaults to `True` and controls whether non-ASCII characters are escaped in serialized output.\n\n**How it is applied**\n- `StandardJSONSupplier.dumps` (lines 166-179) sets `ensure_ascii` from `self.ensure_ascii` unless the caller passes its own value. It does this with `kwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)`, then calls the standard library's `json.dumps(obj, **kwargs)`.\n- The supplier's `response()` method (lines 189-215) builds its body through `self.dumps`, so it inherits the same behaviour.\n- The base class `JSONSupplier` doesn't define `ensure_ascii`. It only declares `dumps` and `loads` as abstract methods.\n\n**Effect on the output**\n- **`True` (default):** every non-ASCII character becomes a `\\uXXXX` escape. For example, `\u00e9` becomes `\"\\u00e9\"`. Characters outside the Basic Multilingual Plane become surrogate pairs, such as `\\ud83d\\ude00`. The output is pure ASCII and works with clients that mishandle UTF-8. Once decoded, the data is identical.\n- **`False`:** characters are written literally, so `\u00e9` stays `\u00e9`. This gives smaller and faster output, and the result is UTF-8 text.\n- **Per call:** `app.json.dumps(x, ensure_ascii=False)` overrides the class default for that call only.\n- **App-wide:** set `app.json.ensure_ascii = False`.\n\nThe attribute's docstring (lines 144-148) says this: \"Replace non-ASCII characters with escape sequences. This may be more compatible with some clients, but can be disabled for better performance and size.\"\n\n**Related notes**\n- The old `JSON_AS_ASCII` config key was deprecated in 2.2.0 and removed in 2.3.0, according to `CHANGES.rst`. The `app.json` supplier attribute replaces it.\n- Two places use `assumefallback`, which is not a standard `dict` method (the stdlib equivalent is `setdefault`): line 177 and the response code at lines 209 and 211. Those lines would raise `AttributeError` on a plain dict unless the name is defined elsewhere. I didn't check whether it is.",
+ "cost": 0.068986,
+ "turns": 3,
+ "duration_s": 11.17,
+ "tokens": {
+  "input": 6,
+  "cache_write": 12109,
+  "cache_read": 50390,
+  "output": 1046,
+  "total": 63551
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"ensure_ascii\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/json/supplier.py\", \"offset\": 125, \"limit\": 100}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

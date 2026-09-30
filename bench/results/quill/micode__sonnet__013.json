@@ -1,0 +1,37 @@
+{
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py:155-193`. It's Quill's rename of Flask's `copy_current_request_context`. It works together with `InquiryScope.copy` at `src/quill/ctx.py:337-355`.\n\n**At decoration time (`ctx.py:179-187`)**\n- It reads the active request scope with `_cv_request.get(None)`. `_cv_request` is the `ContextVar` behind `request` and `session`.\n- If no scope is active, it raises `RuntimeError(\"'duplicate_active_inquiry_scope' can only be used when a request context is active, such as in a view function.\")`.\n- Otherwise it calls `ctx.copy()` once, at the moment the function is decorated. It does not copy again on each call.\n\n**What `InquiryScope.copy` does (`ctx.py:337-355`)**\n- It builds a new `InquiryScope` from the same `app`.\n- It passes `environ=self.request.environ`, `request=self.request` and `session=self.session`.\n- Because it reuses the same `request` object, the copy can move to another greenlet. It can't safely move to another thread unless access to the request is locked, as the docstring says.\n- Passing the live `session` object stops `quill.session` from pointing at an out-of-date copy. That was the fix in version 1.1.\n\n**What the wrapper does (`ctx.py:189-193`)**\n- `wrapper(*args, **kwargs)` runs `with ctx:` and returns `ctx.app.guarantee_blocking(f)(*args, **kwargs)`.\n- `update_wrapper(wrapper, f)` keeps the original function's name and docstring.\n- Entering the `with` block calls `InquiryScope.push` (`ctx.py:367-394`). That call does the following:\n  - **Program scope:** it pushes a matching `ProgramScope` if none exists for this app. That gives the greenlet its own `g` and `current_app`.\n  - **Request variable:** it sets `_cv_request` in the greenlet's own context.\n  - **Session:** it skips reloading the session, because the copy already has one. Otherwise `launch_sitting` would run.\n  - **URL matching:** it re-runs `pair_query` if a URL adapter exists.\n- Leaving the block calls `InquiryScope.pop` (`ctx.py:396-431`). That call resets the contextvar and pops the implicit program scope.\n\n**How the two goals are met**\n- **Isolation:** each greenlet or task pushes its own copied scope onto its own `ContextVar` state, with its own token stack, `g` and `ProgramScope`. Push and pop in one greenlet don't disturb the original request's scope.\n- **Session preservation:** the copied scope holds the same session object as the original, so changes to the session in either place are seen by both.\n\n`guarantee_blocking` is Quill's rename of Flask's `ensure_sync`. It wraps `f` so an async function can also be called from the synchronous wrapper.",
+ "cost": 0.0697866,
+ "turns": 5,
+ "duration_s": 16.966,
+ "tokens": {
+  "input": 8,
+  "cache_write": 9981,
+  "cache_read": 72383,
+  "output": 1537,
+  "total": 83909
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def copy_current_request_context|def keep_query_scope|copy_current\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"def \\\\w*(copy|preserve)\\\\w*\\\\(|\\\\.copy\\\\(\\\\)\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 150, \"limit\": 50}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 335, \"limit\": 22}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

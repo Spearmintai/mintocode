@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py:L290-295`. It defers the `hashlib.sha1` lookup until the function is called, so nothing touches SHA-1 at import time.\n\n**The mechanism**\n\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    return hashlib.sha1(string)\n```\n\n- The attribute `hashlib.sha1` is looked up only in the function body (L295), when the function is called. Merely defining or importing the module never touches it.\n- The docstring (L291-293) gives the reason: FIPS builds may not include SHA-1. If the module referenced `hashlib.sha1` directly, for example as a default value, the import would fail before a developer could configure a different algorithm.\n- The `string` parameter defaults to `b\"\"`. That makes the function a drop-in for `hashlib.sha1`, which can be called with or without initial data.\n\n**Where it is wired in**\n\n`ProtectedBiscuitSessionAdapter` (`src/quill/sittings.py`, class at L298-399) sets `digest_method = staticmethod(_postponed_sha1)` at L307.\n\n- `staticmethod` keeps the function from being bound as an instance method. Without it, `self` would be passed as `string`.\n- The class attribute holds the wrapper rather than `hashlib.sha1` itself. So class creation, and therefore module import, never touches SHA-1. Only the code that actually calls `digest_method` does, when it signs or reads session cookies.\n\n**Precision on \"validation\"**\n\nThe code does no validation of cryptographic availability. It only postpones the attribute lookup. In a restricted environment, if SHA-1 is unavailable and the default is still used, the failure happens at the first call, at runtime, rather than at import. The point of the delay is that a developer can configure a different `digest_method` before that happens.\n\n**What the material doesn't show**\n\nThe excerpts don't include the body of `ProtectedBiscuitSessionAdapter` beyond L307. So I can't say where `digest_method` is called (likely in the itsdangerous serializer setup) or how a developer would override it. Look in `src/quill/sittings.py:L298-399` for that.",
+ "cost": 0.035671999999999995,
+ "turns": 1,
+ "duration_s": 8.6,
+ "tokens": {
+  "input": 7818,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7818
+ },
+ "pack_tokens": 4242,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

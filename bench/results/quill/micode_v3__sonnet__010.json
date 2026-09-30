@@ -1,0 +1,37 @@
+{
+ "answer": "The best match is **`TestFlowing`** in `tests/test_aids.py:236-307`. It's a plain pytest **test-class-as-grouped-fixture-suite**, and I found no other test class that fits the question better. It has no base class and no `setUp` or `tearDown`. It uses the shared `app` and `client` fixtures. Each method registers its own route on that `app` and drives it through `client.get(...)`.\n\n**How it separates the two concerns**\n\n- **Streaming generation** is a small inline generator (`generate()` or `gen()`) defined inside each view. It yields `\"Hello \"`, then `quill.request.args[\"name\"]` or `quill.session[\"test\"]`, then `\"!\"`.\n- **Request-context lifecycle** is left to `quill.flow_with_environment` (`src/quill/helpers.py:62-136`, Quill's rename of Flask's `stream_with_context`). The generator never pushes or pops a context itself. The wrapper keeps the request context alive while the response streams. The test only asserts on the final bytes.\n\n**The four tests, one wrapper form each**\n\n- `test_flowing_with_scope` (L237): wraps an existing generator object, `Response(flow_with_environment(generate()))`. It checks that `request.args` is readable mid-stream and that the body is `b\"Hello World!\"`.\n- `test_flowing_with_scope_as_wrapper` (L250): uses `@flow_with_environment` as a decorator on a generator function that takes arguments.\n- `test_flowing_with_scope_and_bespoke_shutdown` (L264): passes a custom iterator, `Wrapper`, that defines `__iter__`, `__next__` and `close`. It asserts `called == [42]`, so the wrapper propagates `close()` to the wrapped iterator.\n- `test_flow_retains_visit` (L295): sets `session[\"test\"]` in the view and reads it inside the generator. It checks the session survives into the stream.\n\n**Related context tests**\n\nContext lifecycle is tested separately in `tests/test_callscope.py`, which has `TestMicrothreadScopeDuplication` (L149) and tests using `test_call_scope`. There, `TestMicrothreadScopeDuplication` covers copying the request context into greenlets via `request_ctx.copy()` and `duplicate_active_inquiry_scope`. That class doesn't involve streaming.",
+ "cost": 0.09424160000000001,
+ "turns": 5,
+ "duration_s": 14.054,
+ "tokens": {
+  "input": 8,
+  "cache_write": 15953,
+  "cache_read": 83368,
+  "output": 1374,
+  "total": 100703
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"^class Test|^class .*Test\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"flow_with_environment|stream_with_context\", \"path\": \"/home/sq/micode-bench/repos/quill/tests\", \"output_mode\": \"count\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_aids.py\", \"offset\": 230, \"limit\": 85}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_callscope.py\", \"offset\": 140, \"limit\": 80}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 13,
+  "completeness": 10,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 66
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "answer": "`Flask.open_resource` (`src/flask/app.py:330-361`) accepts only the modes `\"r\"`, `\"rt\"` and `\"rb\"`. It raises `ValueError(\"Resources can only be opened for reading.\")` for anything else. `Blueprint.open_resource` in `src/flask/blueprints.py:104-128` applies the same check.\n\nThe code doesn't state the reason outright. The docstring only says \"Only reading is supported\". The reason below is my inference from the code and docstrings:\n\n- **The root path holds the application's code.** It is the directory of the module or package passed to `Flask(__name__)`, and the method opens paths relative to it with `os.path.join(self.root_path, resource)`. That directory holds bundled, read-only assets such as a `schema.sql` next to `app.py`. Its docstring describes it as opening a file \"for reading\".\n- **Writing there is unsafe.** The package directory may be read-only, for example when it is installed in site-packages, a zip or a container image. Writes would also change the application's own files. Refusing write modes up front stops resource access from becoming a way to modify code or shared installed files.\n- **Writable storage has its own method.** `Flask.open_instance_resource` (`src/flask/app.py:363-383`) opens paths relative to `instance_path` and allows any mode. Its docstring says \"Unlike `open_resource`, files in the instance folder can be opened for writing.\" That folder is where runtime data and local files belong. Because the two methods differ only in where they resolve paths, the read-only rule lives only in `open_resource`.\n\n**Implementation details**\n- The check is `if mode not in {\"r\", \"rt\", \"rb\"}`, so modes like `\"w\"`, `\"a\"`, `\"r+\"` and `\"x\"` are rejected before any file is touched.\n- `\"rb\"` is opened without an encoding.\n- Text mode passes `encoding`. It defaults to `None` on `Flask.open_resource`. On `Blueprint.open_resource`, the encoding defaults to `\"utf-8\"`.",
+ "cost": 0.046098,
+ "turns": 2,
+ "duration_s": 7.223,
+ "tokens": {
+  "input": 4,
+  "cache_write": 7908,
+  "cache_read": 32840,
+  "output": 789,
+  "total": 41541
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/app.py\", \"offset\": 328, \"limit\": 56}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 82
+ }
+}

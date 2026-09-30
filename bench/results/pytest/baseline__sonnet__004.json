@@ -1,0 +1,37 @@
+{
+ "answer": "The chain runs from the test class down to the scope-checking properties on `FixtureRequest`. I read `testing/python/fixtures.py` and `src/_pytest/fixtures.py`. I did not run the tests or trace `Pytester` internals (`inline_run`, `makepyfile`). Those are described from their use in the tests.\n\n**1. `TestRequestScopeAccess` (`testing/python/fixtures.py:3430`)**\n- It is the outermost layer. A class-level `pytestmark = pytest.mark.parametrize((\"scope\", \"ok\", \"error\"), [...])` gives it four cases:\n  - `session`: nothing is accessible except `session` and `config`.\n  - `module`: `module` and `path` are accessible; `cls` and `function` are not.\n  - `class`: `module`, `path` and `cls` are accessible; `function` is not.\n  - `function`: everything is accessible.\n- Both test methods, `test_setup` (line 3441) and `test_funcarg` (line 3461), receive `scope`, `ok` and `error` from that mark, plus the `pytester` fixture.\n\n**2. Parametrization mechanism**\n- The mark is turned into per-test `callspec` values when the outer pytest session collects these tests, through `Metafunc.parametrize` in `src/_pytest/python.py`. That is the `_pyfuncitem.callspec` machinery.\n- This layer only feeds strings into the inner test source. It does not touch the request-scoping logic itself.\n\n**3. `Pytester` fixture**\n- `Pytester` is a fixture provided by `src/_pytest/pytester.py`.\n- Each test uses `pytester.makepyfile(f\"\"\"...\"\"\")` to write a temporary module. The parametrized `scope`, `ok` and `error` values are interpolated into that source.\n- It then calls `pytester.inline_run(...)` to run a nested pytest session in-process, followed by `reprec.assertoutcome(passed=1)`.\n- The generated module contains a fixture with `scope=<scope>`:\n  - In `test_setup` it is an `autouse=True` fixture named `myscoped`.\n  - In `test_funcarg` it is a fixture named `arg`, requested by `test_func(arg)`.\n- The fixture takes `request` and does three things:\n  - It asserts `hasattr(request, x)` for each name in `ok`.\n  - It asserts `pytest.raises(AttributeError, lambda: getattr(request, x))` for each name in `error`.\n  - It asserts that `request.session` and `request.config` are always available.\n\n**4. Fixture system in the nested run**\n- The `request` argument is a `SubRequest` (`src/_pytest/fixtures.py:727`), a subclass of `FixtureRequest`.\n- `SubRequest.__init__` is created with the fixture's `scope` and copies `_pyfuncitem`, `_fixture_defs` and `_arg2fixturedefs` from the parent request.\n- `SubRequest._scope` returns that fixture's scope.\n\n**5. Attribute resolution on `FixtureRequest`**\n- These properties in `src/_pytest/fixtures.py` gate access on `self.scope`. `scope` is derived from `_scope`, which `SubRequest` supplies from the fixture's declared scope:\n  - `function` (line 451) raises `AttributeError` unless the scope is `\"function\"`.\n  - `cls` (line 460) raises unless the scope is `\"class\"` or `\"function\"`.\n  - `module` (line 476) raises unless the scope is `\"function\"`, `\"class\"` or `\"module\"`.\n  - `path` (line 485) raises unless the scope is `\"function\"`, `\"class\"`, `\"module\"` or `\"package\"`.\n  - `instance` (line 469) returns `None` unless the scope is `\"function\"`.\n  - `config` (line 446) and `session` (line 498) are unconditional, reading from `_pyfuncitem`.\n- `hasattr` and `getattr` in the generated test observe these `AttributeError`s, which is why `ok` and `error` are lists of attribute names.\n\n**6. Related scope machinery, not exercised by this class**\n- `SubRequest.node` (line 763) resolves the node for the current scope using `get_scope_node` and `get_scope_package`.\n- `SubRequest._check_scope` (line 780) fails with `ScopeMismatch` when a fixture requests a narrower-scoped one. That check is a different mechanism from the attribute gating tested here.\n\n**Summary of the chain:**\n`TestRequestScopeAccess` \u2192 `pytestmark` parametrization (`Metafunc.parametrize`) \u2192 `Pytester.makepyfile` and `inline_run` \u2192 nested session's fixture setup, which creates a `SubRequest` \u2192 `FixtureRequest` scope-gated properties (`function`, `cls`, `module`, `path`, `instance`) \u2192 `AttributeError` or a value \u2192 the assertions in the generated fixture \u2192 `reprec.assertoutcome(passed=1)` in the outer test.",
+ "cost": 0.069166,
+ "turns": 5,
+ "duration_s": 16.331,
+ "tokens": {
+  "input": 6,
+  "cache_write": 9186,
+  "cache_read": 50800,
+  "output": 2225,
+  "total": 62217
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class TestRequestScopeAccess\", \"path\": \"/home/sq/micode-bench/base/pytest\", \"output_mode\": \"content\", \"-A\": 50}",
+  "Grep {\"pattern\": \"_check_scope|def _getscopeitem|_scope_to_node|def node\\\\(|def _check_scope|_pyfuncitem\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fix",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 436, \"limit\": 70}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/fixtures.py\", \"offset\": 725, \"limit\": 90}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 4,
+ "question": "What is the dependency chain between the TestRequestScopeAccess class, the pytest fixture system, the parametrization mechanism, the Pytester fixture, and the internal request attribute resolution logic that validates request object attributes are correctly scoped?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 78
+ }
+}

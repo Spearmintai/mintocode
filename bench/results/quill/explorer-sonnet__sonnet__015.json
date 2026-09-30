@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "sonnet",
+ "answer": "Two pieces work together here: the deferred callback, and `enroll`, which replays it. The URL prefix plays no part in either.\n\n**1. Registration is deferred.** `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py` L443-458) is a decorator factory. It calls `attach_program_layout_sieve(f, name=name)` (L460-475). That method doesn't touch any app, because a schematic has no app yet. It defines a closure:\n\n```python\ndef register_template(state: SchematicSetupStatus) -> None:\n    state.app.markup_engine_env.filters[name or f.__name__] = f\nself.note_once_only(register_template)\n```\n\n`note_once_only` stores the closure in `self.deferred_functions`. It is only wrapped so that it runs once. I didn't read `note_once_only` itself, so I'm relying on the map for that. The `probe` (tests) and `universal` (globals) variants at L477-551 work the same way. They write to `.tests` and `.globals` respectively.\n\n**2. Enrollment replays the callbacks.** `Schematic.enroll(app, options)` (L273-377) does the following:\n- It builds a `SchematicSetupStatus` through `build_registration_state(app, options, first_bp_registration)` (L321). The state carries `app`, the options (including `url_prefix`) and `first_registration`.\n- It runs `for deferred in self.deferred_functions: deferred(state)` (L334-335). At that point `register_template` writes the filter into `state.app.markup_engine_env.filters`.\n\n**3. The URL prefix doesn't affect the filter.** The filter goes into the application-wide Jinja environment, `app.markup_engine_env`, and not into anything scoped to the schematic. The `url_prefix` and `subdomain` options are only used for routing. `link_regulation` state uses them for the URL rules, and `enroll` merges them for nested schematics at L349-377. So a schematic mounted at `/prefix` still has its filters in the shared environment. Every template rendered by the app can use them, including templates rendered by views outside the schematic. The docstring says \"available in any template rendered by the application.\"\n\n**Caveats**\n- The filter only exists once `enroll_plan` has run and called `enroll`. The tests show that declaration order doesn't matter (`test_layout_sieve_with_layout`, `tests/test_schematics.py` L414-428), as long as enrollment happens before rendering.\n- `@preparationmethod` blocks registering after the schematic has been enrolled.\n- The callback goes through `note_once_only`, so it is only meant to run on the schematic's first registration. Enrolling the same schematic again under another name or prefix doesn't re-register the filter, and it isn't needed because the environment is app-wide.",
+ "cost": 0.0417934,
+ "turns": 3,
+ "duration_s": 11.7,
+ "tokens": {
+  "input": 16875,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 16875
+ },
+ "pack_tokens": 1720,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

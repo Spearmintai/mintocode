@@ -1,0 +1,36 @@
+{
+ "answer": "`DataclassWithOneItem` is defined in `testing/io/test_pprint.py` at **lines 23\u201325**. Line 23 is the `@dataclass` decorator, line 24 is `class DataclassWithOneItem:`, and line 25 is its only field, `foo: str`.\n\n```python\n@dataclass\nclass DataclassWithOneItem:\n    foo: str\n```\n\n**Relation to the module structure**\n\n- **Test-only fixture.** The class is a plain `dataclasses.dataclass` helper that lives in the test tree, not in the shipped `src/_pytest` package. It sits at module level with two sibling helpers: `EmptyDataclass` (lines 18\u201320) and `DataclassWithTwoItems` (lines 28\u201331).\n- **Mirrors the source layout.** `testing/io/` holds tests for `src/_pytest/_io/`. The file `testing/io/test_pprint.py` covers `src/_pytest/_io/pprint.py`. The test file imports `PrettyPrinter` from `_pytest._io.pprint` at line 14.\n- **How it is used.** It appears only in the parametrized test whose parameters start at line 34. The `pytest.param(DataclassWithOneItem(foo=\"bar\"), ...)` case at lines 42\u201350 has the id `dataclass-one-item`. It checks that `PrettyPrinter` renders a one-field dataclass in multi-line form:\n  ```\n  DataclassWithOneItem(\n      foo='bar',\n  )\n  ```\n  The empty and two-field dataclasses are covered by the neighbouring cases.\n- **Not used elsewhere.** A repo-wide grep finds no other references to the class.",
+ "cost": 0.038959999999999995,
+ "turns": 4,
+ "duration_s": 8.395,
+ "tokens": {
+  "input": 6,
+  "cache_write": 5184,
+  "cache_read": 48510,
+  "output": 851,
+  "total": 54551
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"DataclassWithOneItem\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/io/test_pprint.py\", \"limit\": 60}",
+  "Bash {\"command\": \"cd /home/sq/micode-bench/base/pytest; ls testing/io src/_pytest/_io; grep -n \\\"PrettyPrinter\\\" src/_pytest/_io/__init__.py\"}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 36,
+ "question": "Where is the precise file location and line range where the DataclassWithOneItem class is defined, and how does its definition relate to the module structure of the pytest testing infrastructure?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 18,
+  "reasoning": 17,
+  "total": 85
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 36,
+ "question": "Where does the control flow in the CLI group class's directive retrieval method determine whether to return a directly registered directive, an entry point loaded directive, or an application CLI group directive?",
+ "model": "sonnet",
+ "answer": "The decision is made in `QuillCollection.obtain_directive` (`src/quill/cli.py`, L609-634). It happens in three stages:\n\n1. **Plugin loading (L610).** `self._read_extension_directives()` runs first. On its first call it loads every entry point in group `\"quill.commands\"` and registers each one with `self.add_command(ep.load(), ep.name)` (L600-607). The `_loaded_plugin_commands` flag prevents repeats. After this step, plugin commands are ordinary registered commands on the group.\n\n2. **Directly registered and entry point directives (L613-616).** `rv = super().obtain_directive(ctx, name)` is the lookup in the parent `click.Group`-style class (`ProgramBundle`). It finds anything registered on the group, which covers both:\n   - the built-in commands added in `__init__` (`execute_directive`, `console_directive`, `paths_directive`, L593-596), and\n   - the plugin commands just added from entry points.\n\n   `if rv is not None: return rv` (L615-616) is the first branch point. The code comments say these commands should be available even if the app fails to load. The built-in and entry point cases are therefore not distinguished by control flow. Both come back from this single `super()` call.\n\n3. **App CLI directives (L618-634).** This part runs only if the first lookup returned `None`:\n   - `info = ctx.ensure_object(RoutineDetails)` (L618).\n   - `app = info.read_program()` inside `try` (L622-623). On `MissingProgramFailure`, it prints a red error to stderr and `return None` (L624-626).\n   - If `current_app` is unset or is a different app (L631), it calls `ctx.with_resource(app.program_scope())` (L632).\n   - `return app.cli.obtain_directive(ctx, name)` (L634) is the final branch. It returns the app's own CLI group directive, or `None` if it has none.\n\nThe order is therefore: registered or plugin directives, then the app's `cli`, with `None` on failure.\n\nThe companion method `enumerate_directives` (L636-655) mirrors this. It merges the built-in and plugin names with `app.cli`'s names, and prints load errors instead of returning early.\n\nThe source given does not show `super().obtain_directive` itself, which lives in `ProgramBundle` (L405-437) or its base. The exact registered-command lookup is therefore inferred from its role rather than seen directly.",
+ "cost": 0.042076,
+ "turns": 1,
+ "duration_s": 8.0,
+ "tokens": {
+  "input": 9317,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9317
+ },
+ "pack_tokens": 5080,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

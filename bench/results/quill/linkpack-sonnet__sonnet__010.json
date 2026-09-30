@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "answer": "The material doesn't include the source of the test class, so I can't describe its internal structure line by line. The one-line summaries do let me say what it is and what it covers.\n\n**The class:** `TestFlowing` in `tests/test_aids.py:L236-307`. It tests `flow_with_environment` and is a plain pytest class that groups related behavioural tests. Its pattern is one test per concern, and each test drives the code through the app and client fixtures.\n\n**How it separates the two concerns**\n\nThe test names and summaries show four separate concerns, one per method:\n\n| Test | Lines | Concern isolated |\n|---|---|---|\n| `test_flowing_with_scope` | L237-248 | Wrapping a generator keeps `request.args` readable while streaming; body is `b'Hello World!'`. |\n| `test_flowing_with_scope_as_wrapper` | L250-262 | Decorator form on a generator function that takes arguments. |\n| `test_flowing_with_scope_and_bespoke_shutdown` | L264-293 | A custom iterator's `close()` is called (`called == [42]`), so cleanup is forwarded. |\n| `test_flow_retains_visit` | L295-307 | A session value set in the view is readable in the generator (`b'quill'`). |\n\nThe class checks the context lifecycle (access, session retention, cleanup) through the streamed output, while the generator body stays trivial. The generator logic is just a few yields, so a failure points at the context handling.\n\n**What it tests, in `src/quill/helpers.py:L62-136`**\n\n- `flow_with_environment` tries `iter(...)`. On `TypeError` it returns a decorator built with `update_wrapper` (L98-106).\n- Otherwise it builds an inner `generator()` that grabs `_cv_request.get(None)`. It raises `RuntimeError` if there is no context (L109-114).\n- The generator enters `with ctx:` and yields a dummy `None` sentinel (L115-118). It then runs `yield from gen`, and a `finally` calls `gen.close()` if it exists (L124-128).\n- The wrapper calls `next(wrapped_g)` immediately (L134-135), so the context is already pushed when the view returns.\n\n**Related test outside the class**\n\n`tests/test_trialing.py:L382-396` (`test_caller_remove_every_retained`) checks the context stack directly. `flow_with_environment` pushes an extra context. After `rv.close()`, `_cv_request.get(None)` is the `qry_scope` fixture's context again.\n\n**Not settled by the material:** whether `TestFlowing` uses shared fixtures or helper code beyond the standard `app` and `client` fixtures, and the exact assertions in each body. Read `tests/test_aids.py:L236-307` to confirm.",
+ "cost": 0.044078,
+ "turns": 1,
+ "duration_s": 12.7,
+ "tokens": {
+  "input": 9099,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9099
+ },
+ "pack_tokens": 4728,
+ "score": {
+  "correctness": 13,
+  "completeness": 11,
+  "relevance": 15,
+  "clarity": 15,
+  "reasoning": 13,
+  "total": 67
+ }
+}

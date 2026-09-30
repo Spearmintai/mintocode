@@ -1,0 +1,31 @@
+{
+ "answer": "`copy_current_request_context` is in `src/flask/ctx.py:155-193`. It isolates each greenlet or thread by giving it its own copy of the request context, and it keeps the session by putting the same session object into that copy.\n\n**At decoration time**, which is inside the view, in the parent's context:\n- It reads `_cv_request.get(None)`. If no request context is active it raises `RuntimeError(\"'copy_current_request_context' can only be used when a request context is active\u2026\")`.\n- It calls `ctx = ctx.copy()` (`RequestContext.copy`, `ctx.py:337-355`). This builds a new `RequestContext` of the same class. The copy has the same `app`, `environ` and `request` object, and it is passed `session=self.session`.\n- Since Flask 1.1, `copy()` reuses the current session object instead of reloading the session data. The docstring at L347-348 says this keeps `flask.session` from pointing to an out-of-date object.\n- The copy is taken when the decorator is applied, not when the function is later called. It is a snapshot of the parent's context at that moment.\n\n**At call time**, in the greenlet or thread:\n- The returned `wrapper(*args, **kwargs)` runs `with ctx:` and then `return ctx.app.ensure_sync(f)(*args, **kwargs)`. Using `ensure_sync` means an async function is also handled.\n- `RequestContext.__enter__` (L433) calls `push()` (L367-394). `push` records `_cv_request.set(self)` and appends the token to the context's token list. If there is no current app context, or it belongs to a different app, it also pushes a new `app.app_context()`.\n- Because `_cv_request` and `_cv_app` are `ContextVar`s, that push only affects the greenlet or thread it runs in. The parent's context is untouched, and each spawned unit has its own context object.\n- In `push`, the session is opened only when `self.session is None`. The comment at L380-383 says this avoids losing the session, as `stream_with_context` also relies on. The copy already carries the parent's session, so `open_session` is not called again. The greenlet therefore sees the same session, including any changes the view made before spawning.\n- On exit, `RequestContext.pop` (L396-431) resets the `ContextVar` token. When the last token is popped it runs the request teardown (`do_teardown_request`) and calls `request.close()`.\n\n**Wrapping**: `update_wrapper(wrapper, f)` keeps the original function's name and docstring.\n\n**Caveat**: the session object is shared, not deep-copied. Changes made in the greenlet are visible to the parent, but the response has usually been built by then, so they may not be saved.",
+ "cost": 0.0582826,
+ "turns": 3,
+ "duration_s": 10.253,
+ "tokens": {
+  "input": 6,
+  "cache_write": 8830,
+  "cache_read": 53753,
+  "output": 1220,
+  "total": 63809
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

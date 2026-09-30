@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "haiku",
+ "answer": "# Request Context Duplication and Session Preservation\n\nThe `duplicate_active_inquiry_scope` decorator (src/quill/ctx.py:L155-193) achieves isolation while preserving session data through **context copying and shared session reuse**:\n\n## Mechanism\n\n**1. Context Copying (src/quill/ctx.py:L155-193)**\n```python\nctx = _cv_request.get(None)  # Get current request scope\nctx = ctx.copy()              # Create new scope copy\ndef wrapper(*args, **kwargs):\n    with ctx:                 # Push copied scope\n        return ctx.app.guarantee_blocking(f)(*args, **kwargs)\n```\n\n**2. What the Copy Shares (src/quill/ctx.py:L337-355)**\nThe `InquiryScope.copy()` method returns a **new scope that shares**:\n- Same app\n- Same environ\n- Same request object\n- **Same session object** (this is key for data preservation)\n\n## Session Data Preservation Across Boundaries\n\nThe compiled knowledge states: **\"Session opens on first push only; copies reuse the session.\"**\n\n- When the original request context pushes, it opens the session once (src/quill/ctx.py:L367-394, `launch_sitting`)\n- Each copied context that's pushed reuses that same session object\n- All execution paths (including greenlets) see identical session data because they share the session reference\n\n## Isolation of Concurrent Execution\n\nEach copied context gets its **own context variable push** via `with ctx:`, providing isolation:\n- Each greenlet/concurrent task runs with its own `_cv_request` stack entry\n- They cannot see each other's local modifications (like manually set request properties)\n- But they all share the session, so session reads/writes are coordinated\n\n## Test Evidence\n\n**tests/test_callscope.py:L150-177** (`test_microthread_scope_duplicating`): A greenlet spawned from a view function:\n- Sets session data inside the greenlet: `session['fizz']='buzz'`\n- Asserts no request context exists outside the copied scope\n- Asserts full request/session access inside the copied scope\n- Session data persists across the greenlet boundary\n\n**tests/test_callscope.py:L179-202** demonstrates the same using the decorator: result is 42, confirming session persistence through concurrent boundaries.",
+ "cost": 0.019718,
+ "turns": 1,
+ "duration_s": 15.3,
+ "tokens": {
+  "input": 7542,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7542
+ },
+ "pack_tokens": 4701,
+ "score": {
+  "correctness": 13,
+  "completeness": 12,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 70
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "explorer-sonnet_v2",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "The function doesn't validate anything. It avoids touching `hashlib.sha1` until the moment a digest is computed, so the FIPS restriction can't fail at import time.\n\n**The function** (`src/quill/sittings.py:290-295`):\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    return hashlib.sha1(string)\n```\nThe `hashlib.sha1` attribute is looked up inside the function body, so it is only resolved when the function is called. Its docstring says why. FIPS builds of Python may not include SHA-1. If the code used `hashlib.sha1` directly as a default, the import would fail before a developer could configure a different algorithm.\n\n**How it is wired in** (`sittings.py:307`, in `ProtectedBiscuitSessionAdapter`):\n```python\ndigest_method = staticmethod(_postponed_sha1)\n```\n- The class attribute holds the wrapper rather than `hashlib.sha1`. Defining the class, and so importing `quill`, never touches SHA-1.\n- `staticmethod` stops Python from binding `self` as the first argument when the attribute is read from an instance.\n- At L333 the adapter passes `self.digest_method` to itsdangerous in its signer kwargs as `\"digest_method\"`. itsdangerous calls it as `digest_method(string)` when it signs or verifies a cookie. That is the first point where `hashlib.sha1` is accessed.\n\n**Effect in a restricted environment**\n- Importing the module and creating the app always succeed.\n- If SHA-1 is unavailable, the failure only occurs when a session cookie is signed or read with the default digest. That is a runtime error, and it can be avoided.\n- A developer can subclass the adapter and set `digest_method` to something else, for example `hashlib.sha256`. In that case the wrapper is never called and SHA-1 is never touched.\n\nThe wrapper only postpones the failure. It doesn't check availability itself, and it doesn't fall back to another algorithm.",
+ "cost": 0.028764599999999998,
+ "turns": 3,
+ "duration_s": 10.6,
+ "tokens": {
+  "input": 14221,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 14221
+ },
+ "pack_tokens": 1788,
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

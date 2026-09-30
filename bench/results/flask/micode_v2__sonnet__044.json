@@ -1,0 +1,34 @@
+{
+ "answer": "The inheritance chain matters in one place: `Config.from_object` in `src/flask/config.py` (lines 218-254). Specifically, it is the loop at lines 252-254:\n\n```python\nif isinstance(obj, str):\n    obj = import_string(obj)\nfor key in dir(obj):\n    if key.isupper():\n        self[key] = getattr(obj, key)\n```\n\n- **Class objects are not instantiated.** The class is used as-is, whether it is passed directly or imported by name through `werkzeug.utils.import_string`.\n- **`dir(obj)` walks the MRO.** On a class, `dir()` lists the class's own attributes plus those of every base class. A child config class such as `class ProductionConfig(Config)` therefore exposes its parent's uppercase attributes, for example `DEBUG` and `SECRET_KEY` from a shared base.\n- **`getattr(obj, key)` resolves overrides.** It looks the name up along the MRO, so a child that redefines a key wins over the parent's value. Keys the child doesn't override keep the inherited value.\n- **The result is one flat copy.** Each uppercase name is copied into the `Config` dict with `self[key] = ...`. The parent/child relationship has no effect after that.\n- **Only `key.isupper()` names are copied.** Lowercase names and methods on any class in the chain are skipped.\n- **`@property` on a class stays a `property` object.** Its name is uppercase, so it would be copied as the unevaluated `property` object rather than a value. That is why the docstring says such a class must be instantiated before being passed. The same caveat is in `docs/config.rst` around lines 704-715.\n\nThe docstring also points to the `config-dev-prod` docs section, which uses this parent/child pattern (a base `Config` with `ProductionConfig` and `DevelopmentConfig` subclasses).",
+ "cost": 0.0404238,
+ "turns": 2,
+ "duration_s": 19.862,
+ "tokens": {
+  "input": 4,
+  "cache_write": 6576,
+  "cache_read": 32559,
+  "output": 760,
+  "total": 39899
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def from_object\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/config.py\", \"output_mode\": \"content\", \"-A\": 40}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 44,
+ "question": "Where does the inheritance chain between parent and child configuration classes affect configuration resolution when loading from a class object?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 81
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or transform them into HTTP 500 responses based on configuration state?",
+ "model": "sonnet",
+ "answer": "The method is `Quill.manage_failure` in `src/quill/app.py:L811-862`. It decides between re-raising and returning a 500 as follows.\n\n**1. Capture and signal (L839-840)**\n- It records `sys.exc_info()` first.\n- It then always sends `got_request_exception`, whatever the configuration.\n\n**2. Resolve the propagate flag (L841-844)**\n- It reads `self.config[\"PROPAGATE_EXCEPTIONS\"]`. The default in `Quill.default_config` (L182) is `None`.\n- If the value is `None`, it falls back to `self.testing or self.debug`.\n- If the value is explicitly `True` or `False`, that value is used directly. An explicit `False` therefore suppresses propagation even in debug or testing mode.\n- `TESTING` defaults to `False` and `DEBUG` to `None` (L180-181).\n\n**3. Re-raise branch (L846-852)**\n- If `propagate` is truthy, the exception is re-raised.\n- If `exc_info[1] is e`, meaning the method is being called inside the active `except` block for that same exception, it does a bare `raise`. This preserves the original traceback.\n- Otherwise it does `raise e`.\n\n**4. 500 branch (L854-862)**\n- If `propagate` is falsy, it calls `self.record_failure(exc_info)`, which logs the original error.\n- It builds `InternalServerError(original_exception=e)`.\n- It looks up a handler with `self._locate_fault_processor(server_error, request.schematics)`.\n- If a handler exists, it is called through `guarantee_blocking` and receives the `InternalServerError`. The original exception is available as `e.original_exception`.\n- It returns `self.conclude_inquiry(server_error, from_error_handler=True)`. This runs even when there is no custom handler, so the default 500 still goes through the finalization steps.\n\n**Test evidence**\n`test_anomaly_spreading` in `tests/test_elementary.py:L1581-1595` sets `app.testing = False`. It then covers four cases:\n- Setting `TESTING`, `PROPAGATE_EXCEPTIONS` or `DEBUG` to `True` makes the `ZeroDivisionError` propagate out of `client.get(\"/\")`.\n- With no key set (`None`), the client gets a 500 status.\n\nThe material does not show how `self.testing` and `self.debug` are implemented, so I can't say how they map onto the `TESTING` and `DEBUG` config keys. Look at the `testing` and `debug` properties on `Quill`, likely in `app.py` or its base class.",
+ "cost": 0.020962,
+ "turns": 1,
+ "duration_s": 8.1,
+ "tokens": {
+  "input": 3935,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 3935
+ },
+ "pack_tokens": 1521,
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 81
+ }
+}

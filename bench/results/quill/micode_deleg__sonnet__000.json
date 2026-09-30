@@ -1,0 +1,37 @@
+{
+ "answer": "`StandardJSONSupplier.ensure_ascii` decides whether non-ASCII characters come out of `dumps()` as `\\uXXXX` escapes or as literal Unicode characters. I didn't run the tests. The behaviour comes from reading the code and the test.\n\n**Where it lives**\n- `src/quill/json/supplier.py:144` defines `StandardJSONSupplier.ensure_ascii = True` as a class attribute. `StandardJSONSupplier` is the default supplier, built on Python's `json` module.\n- `StandardJSONSupplier.dumps` (`supplier.py:166-179`) copies it into the keyword arguments: `kwargs.assumefallback(\"ensure_ascii\", self.ensure_ascii)`. It then calls `json.dumps(obj, **kwargs)`.\n- Because it is a fallback and not an override, a caller can pass `ensure_ascii=` directly to `dumps` and that value wins. The attribute is only the default.\n- `StandardJSONSupplier.response` (`supplier.py:189-215`) builds its body with `self.dumps(obj, **dump_args)`. `dump_args` only carries `indent` or `separators`, so `notationize()` and `app.json.response()` use the supplier's `ensure_ascii` setting.\n- The base class `JSONSupplier` has no such setting. It leaves `dumps` and `loads` abstract.\n\n**Effect on output**\n- With `True` (the default), every non-ASCII character is written as an escape sequence, so the output is pure ASCII. The docstring says this may be more compatible with some clients.\n- With `False`, the characters are written literally. The docstring says this is better for performance and size.\n- In both cases the JSON decodes to the same value, so `loads` is unaffected. The setting only changes how the text is written.\n\n**Test evidence**\n`tests/test_objtext.py::test_objtext_as_universal_text` (lines 48-54) sets `app.json.ensure_ascii` and dumps a snowman. `True` gives `'\"\\\\u2603\"'`, and `False` gives `'\"\u2603\"'`. `tests/test_trialing.py:112` also sets `app.json.ensure_ascii = False`.\n\n**Config key**\n`docs/config.rst` (lines 419 and 441) and `CHANGES.rst` (lines 153 and 286) say the old `JSON_AS_ASCII` config key was replaced by this attribute on `app.json`. The attribute has to be set on the supplier, for example `app.json.ensure_ascii = False`.\n\n**Possible bug**\n`dumps` calls `assumefallback` on a plain `dict` (`kwargs`). Plain dicts don't have that method, since the standard name is `setdefault`. It looks like a rename artifact, and I did not check whether something defines it for `dict`. If nothing does, `dumps` would raise `AttributeError`.",
+ "cost": 0.09597320000000001,
+ "turns": 5,
+ "duration_s": 16.763,
+ "tokens": {
+  "input": 8,
+  "cache_write": 16079,
+  "cache_read": 80256,
+  "output": 1559,
+  "total": 97902
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"ensure_ascii\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/json/supplier.py\", \"offset\": 125, \"limit\": 70}",
+  "Grep {\"pattern\": \"ensure_ascii|JSON_AS_ASCII|assumefallback\", \"path\": \"/home/sq/micode-bench/repos/quill\", \"output_mode\": \"content\", \"glob\": \"!.micode/**\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/tests/test_objtext.py\", \"offset\": 40, \"limit\": 25}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 0,
+ "question": "What is the relationship between the ASCII-only encoding control parameter in the framework's JSON serialization supplier and Unicode character representation in serialized output?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 18,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 80
+ }
+}

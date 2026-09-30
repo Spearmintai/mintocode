@@ -1,0 +1,44 @@
+{
+ "answer": "The hidden coupling is that the decorators keep their state on the `InquiryScope` object, and the response lifecycle reads that state from whichever scope is current at the time. The state is not tied to the response being built. This comes from a code reading by a subagent, not from running anything, so the failure scenarios are untested.\n\n## `following_current_inquiry` (Flask's `after_this_request`)\n\n- **Registration:** `src/quill/ctx.py:117-149` appends the callback to `ctx._after_request_functions` (line 148). It raises `RuntimeError` if there is no request scope.\n- **Storage:** the list is created per scope in `InquiryScope.__init__` (`ctx.py:331`).\n- **Consumption:** `Quill.treat_reply` (`app.py:1298-1324`) is the only reader.\n  - It runs the scope's list first (lines 1313-1314), each callback as `response = func(response)`.\n  - It then runs the app and schematic `after_request_funcs` in reverse order, and finally saves the session.\n- **Effect of the coupling:** a callback only runs if it was registered on the same scope object that `treat_reply` reads, before `treat_reply` runs.\n  - **Copied scope:** `InquiryScope.copy` (`ctx.py:337-355`) calls `__init__` again, so the copy gets a fresh empty list. Its `request` and `session` are shared, but the callback list is not. A callback registered inside a copy, for example under `duplicate_active_inquiry_scope` (`ctx.py:187-191`), never runs.\n  - **Late registration:** a callback registered after `treat_reply` has run, such as from inside a streaming generator, goes into a list nobody reads again.\n  - **Stale callbacks:** nothing clears the list, even though `docs/lifecycle.rst:144-146` says it is \"called then cleared\". A scope that outlives one response could therefore replay callbacks.\n  - **Return value:** a callback that returns `None` replaces the response with `None`.\n\n## `flow_with_environment` (Flask's `stream_with_context`)\n\n- **Where:** `src/quill/helpers.py:62-136`.\n- **How it works:** it enters `with ctx:` inside the generator and primes it with `next()` (lines 115-135). That adds a second entry to the scope's `_cv_tokens`.\n- **Teardown timing:** `InquiryScope.pop` (`ctx.py:396-431`) only tears down and closes the request when `len(self._cv_tokens) == 1` (line 404). A streaming response therefore holds the scope open, and teardown is deferred until the response is closed. `tests/test_trialing.py:382-396` pins this.\n- **Session:** `push` only opens a session if `self.session is None` (`ctx.py:384`). The comment at lines 380-383 says this is so the stream doesn't lose the session.\n- **Effect:** callbacks registered in the generator run after `treat_reply` and are lost. Popping contexts out of order raises \"Popped wrong request context\" only after the contextvar has already been reset (`ctx.py:428-431`).\n- **Decorator form:** the decorator form (lines 98-106) needs an active scope when the decorated function is called, not when it is decorated.\n\n## `duplicate_active_inquiry_scope` (Flask's `copy_current_request_context`)\n\n- **What it does:** the copy has its own `_cv_tokens` but shares the request. Leaving its `with ctx:` therefore counts as an outermost pop and runs teardown (`perform_dismantle_inquiry`) and `request.close()`. That can close the original request while its response is still in flight, or run teardown a second time.\n- **Wrapper called late:** if the wrapper is called after the original scope is gone, it runs against a stale snapshot.\n\n## Registry-based hooks and `@preparationmethod`\n\n- **Registry hooks:** `Armature.following_inquiry` and `dismantle_query` (`src/quill/sansio/skeleton.py:486-539`) store hooks in registries keyed by schematic name, with `None` for app-wide. `treat_reply` and `perform_dismantle_inquiry` (`app.py:1316-1319`, `1353-1356`) only consult schematics named in `request.schematics`. A schematic's hooks therefore only fire for requests that matched one of its routes.\n- **Setup guard:** `@preparationmethod` (`skeleton.py:42-49`) calls `_verify_configuration_completed` before each registration call.\n  - `App` raises `AssertionError` once `_got_first_request` is set (`sansio/app.py:413-423`, set at `app.py:911`).\n  - `Schematic` raises once `_got_registered_once` is set (`sansio/schematics.py:213-221`).\n  - So lazy or conditional registration of these hooks inside a view fails after the first request. It also fails on a schematic after enrollment, even if the app hasn't served a request yet. Per-request registration has to use `following_current_inquiry`.\n- **`route` options:** `Armature.route` pops `'terminus'` from the shared options dict (`skeleton.py:335-365`). Applying the same decorator twice loses it the second time.\n\n## Unconfirmed points\n\nThe subagent flagged `assumefallback` calls on plain `defaultdict`s (`skeleton.py:483,504,538`) as suspect, possibly a rename artifact of `setdefault`. It did not verify this.\n\nIts scope-reuse examples, the test client or fixtures preserving a scope, are also inferred from the code.",
+ "cost": 0.20849130000000002,
+ "turns": 1,
+ "duration_s": 14.023,
+ "tokens": {
+  "input": 16,
+  "cache_write": 36323,
+  "cache_read": 117364,
+  "output": 7614,
+  "total": 161317
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Agent {\"description\": \"Decorator state vs response lifecycle\", \"subagent_type\": \"micode:micode-explorer\", \"prompt\": \"In this repo (Quill, a Flask fork): What hidden c",
+  "mcp__micode__ask {\"question\": \"after_this_request _after_request_functions, copy_current_request_context, stream_with_context, preparationmethod, teardown state coupling with re",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 110, \"limit\": 90}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/ctx.py\", \"offset\": 300, \"limit\": 150}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/helpers.py\", \"offset\": 60, \"limit\": 80}",
+  "Grep {\"pattern\": \"_after_request_functions|def treat_reply|def finalize_|def gateway_application|def dismantle|def preparationmethod|def setupmethod|_check_setup_fin",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 1225, \"limit\": 110}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/skeleton.py\", \"offset\": 38, \"limit\": 30}",
+  "Grep {\"pattern\": \"_check_setup_finished|def perform_dismantle|def following_inquiry|def dismantle_query\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"out",
+  "Grep {\"pattern\": \"_verify_configuration_completed|_got_first_request\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 1326, \"limit\": 40}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 16,
+  "relevance": 11,
+  "clarity": 14,
+  "reasoning": 15,
+  "total": 71
+ }
+}

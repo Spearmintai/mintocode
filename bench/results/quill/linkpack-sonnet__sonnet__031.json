@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "answer": "The test is `test_periodic_title_forbidden` (tests/test_schematics.py:L254-256). It calls `quill.Schematic(\"app.ui\", __name__)` inside `pytest.raises(ValueError)`.\n\n**Why the error is raised.** `Schematic.__init__` (src/quill/sansio/schematics.py:L174-211) checks the name after calling `super().__init__(...)`:\n\n```python\nif not name:\n    raise ValueError(\"'name' may not be empty.\")\n\nif \".\" in name:\n    raise ValueError(\"'name' may not contain a dot '.' character.\")\n```\n\n`\"app.ui\"` contains a `.`, so the second check fires. The test confirms that this validation stays in the constructor.\n\n**Why the rule exists.** The knowledge material says names may not contain `.` because the dot separates nested schematic names from the terminus name (noted as 2.0.1). The code shows how the dot is used:\n\n- `Schematic.enroll` (L302-304) builds the registered name as `f\"{name_prefix}.{self_name}\".lstrip(\".\")`. Nested schematics get dotted names such as `bp.sub`, and the dot is the level separator.\n- `Request.schematic` (src/quill/envelope_types.py:L161-178) recovers the schematic name with `terminus.rpartition(\".\")[0]`. It takes everything before the last dot as the schematic path.\n\nIf a schematic could be named `app.ui`, its terminus `app.ui.index` would look identical to a schematic `ui` nested inside `app`. Name-collision detection in `app.schematics` and the parsing in `Request.schematic` would then become ambiguous. Rejecting dots at construction keeps that ambiguity from ever arising.\n\n**Related checks.** The same reasoning applies to terminus names and view function names. `attach_link_regulation` (L427-431) raises `ValueError` if `terminus` or `view_func.__name__` contains a dot. `test_path_wrapper_bespoke_terminus_with_periods` (L327-342) covers that case. The empty-name check is tested separately in `test_vacant_title_forbidden` (L259-261).\n\n**What the material does not settle.** The test itself has no comment giving its rationale. The reasoning above is inferred from how `enroll` and `Request.schematic` use dots, plus the knowledge note about the dot separator. The test's `app` and `client` fixtures are unused in the body, since the error occurs at construction time.",
+ "cost": 0.036128,
+ "turns": 1,
+ "duration_s": 8.2,
+ "tokens": {
+  "input": 7818,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7818
+ },
+ "pack_tokens": 4191,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

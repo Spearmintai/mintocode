@@ -1,0 +1,31 @@
+{
+ "answer": "The class is `TestStreaming` in `tests/test_helpers.py` (line 236). It is a plain pytest test class, not a `unittest.TestCase`. It has no base class, no `setUp` or `tearDown`, and no shared state. Its tests are grouped by behaviour and use injected fixtures.\n\n**How it separates the two concerns**\n\n- **Context lifecycle is supplied by fixtures and Flask.** The `app` and `client` fixtures come from `tests/conftest.py`. Each test registers a route with `@app.route(\"/\")` and makes a real request with `client.get(...)`. The test code never pushes or pops a request context itself. Flask's request handling and `flask.stream_with_context` manage that lifecycle.\n- **Streaming logic is a small generator inside each route.** Each test defines a `generate()` or `gen()` generator that yields chunks and reads `flask.request.args[\"name\"]` or `flask.session[\"test\"]` while it runs. The route wraps it with `flask.stream_with_context(...)`, either as a function call or as a decorator, and returns it in a `flask.Response`.\n- **Assertions are on the result only.** The test checks `rv.data` (for example `b\"Hello World!\"`), so it verifies that the context is still available while the response is being streamed.\n\n**Test methods**\n\n- `test_streaming_with_context` wraps a generator with `stream_with_context()` and reads `request.args` from inside it.\n- `test_streaming_with_context_as_decorator` uses `@flask.stream_with_context` on a generator function that takes arguments.\n- `test_streaming_with_context_and_custom_close` wraps a custom iterator, `Wrapper`, that has its own `close()`. It asserts that `close()` is called (`called == [42]`), which shows the context wrapper propagates closing to the wrapped iterator.\n- `test_stream_keeps_session` sets `flask.session[\"test\"]` in the view and reads it back inside the streamed generator.\n\n**Contrast with `TestGreenletContextCopying`.** In `tests/test_reqctx.py:149`, `TestGreenletContextCopying` tests context copying across greenlets rather than streaming.",
+ "cost": 0.035681199999999996,
+ "turns": 5,
+ "duration_s": 11.88,
+ "tokens": {
+  "input": 8,
+  "cache_write": 2285,
+  "cache_read": 71126,
+  "output": 1230,
+  "total": 74649
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 11,
+  "completeness": 8,
+  "relevance": 13,
+  "clarity": 16,
+  "reasoning": 12,
+  "total": 60
+ }
+}

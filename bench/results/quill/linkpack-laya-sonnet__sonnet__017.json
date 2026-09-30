@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or transform them into HTTP 500 responses based on configuration state?",
+ "model": "sonnet",
+ "answer": "The method is `Quill.manage_failure` in `src/quill/app.py` (L811-862). Its decision runs in this order:\n\n**1. Capture and signal (L839-840)**\n- `exc_info = sys.exc_info()` records the exception currently being handled, if there is one.\n- `got_request_exception.send(...)` is always sent, whichever branch follows.\n\n**2. Resolve the propagate flag (L841-844)**\n- `propagate = self.config[\"PROPAGATE_EXCEPTIONS\"]`.\n- If that value is `None` (unset), it falls back to `self.testing or self.debug`.\n- An explicit `True` or `False` in config overrides the testing/debug fallback.\n\n**3. If `propagate` is truthy, re-raise (L846-852)**\n- If `exc_info[1] is e`, the exception being handled is the one passed in, so a bare `raise` keeps the original traceback.\n- Otherwise it does `raise e`.\n- Nothing is logged here, no handler runs, and no response is built. This lets the debugger or test client see the error.\n\n**4. Otherwise, turn it into a 500 (L854-862)**\n- `self.record_failure(exc_info)` logs `Exception on {request.path} [{request.method}]` at error level with the traceback (`record_failure`, L864-877).\n- `InternalServerError(original_exception=e)` is created, so the original error is available as `e.original_exception`.\n- `_locate_fault_processor(server_error, request.schematics)` looks for a registered 500 or `InternalServerError` handler. Lookup order is schematic code, app code, schematic exception, app exception (`sansio/app.py` L823-846).\n- If a handler is found, it is called with the `InternalServerError` instance via `guarantee_blocking(handler)`. Its return value replaces `server_error`.\n- The result goes through `conclude_inquiry(server_error, from_error_handler=True)` (`app.py` L922-951). This runs response processing and sends `request_finished`. Because `from_error_handler=True`, a failure during finalizing is logged (\"Request finalizing failed with an error while handling an error\") instead of being raised. This runs even when no 500 handler exists, so the default 500 response is finalized too.\n\n**Configuration summary**\n\n| `PROPAGATE_EXCEPTIONS` | `testing`/`debug` | Result |\n|---|---|---|\n| `True` | any | re-raise |\n| `False` | any | 500 response |\n| `None` | testing or debug is true | re-raise |\n| `None` | both false | 500 response |\n\nThe tests fit this. `test_fault_management` and `test_fault_catcher_following_transformer_fault` (`tests/test_elementary.py`) set `app.testing = False` so the exception becomes a 500 and reaches the `@app.faulthandler(500)` handler.\n\n**Related but separate:** `catch_web_error` (`sansio/app.py` L848-881) governs whether HTTP exceptions are trapped by `TRAP_HTTP_EXCEPTIONS` or `TRAP_BAD_REQUEST_ERRORS`. `manage_client_failure` (`app.py` L779-809) uses it. It is not part of the propagate decision in `manage_failure`.",
+ "cost": 0.038788,
+ "turns": 1,
+ "duration_s": 17.3,
+ "tokens": {
+  "input": 8072,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8072
+ },
+ "pack_tokens": 4247,
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 80
+ }
+}

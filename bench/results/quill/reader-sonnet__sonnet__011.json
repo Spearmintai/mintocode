@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The material doesn't name a single \"hidden coupling\", so this is my reading of the pieces it does show. Where I'm inferring, I say so.\n\n## What the material shows\n\n**1. Decorators only record; `enroll` applies them.**\n- `Schematic.program_faulthandler` (`src/quill/sansio/schematics.py:L595-610`) does nothing to the app at decoration time. It builds a closure `from_blueprint(state)` and passes it to `self.note_once_only(...)`. The closure later calls `state.app.faulthandler(code)(f)`.\n- `Schematic.attach_link_regulation` (L412-441) likewise records a lambda that calls `state.attach_link_regulation`.\n- The effect of a decorator therefore depends on the `SchematicSetupStatus` built at enroll time (`build_registration_state`, L246-253), not on where the decorator was written.\n- `test_layout_sieve`, `test_layout_predicate` and the `following_path` tests show that `program_*` registrations land on the app at `enroll_plan` time. This works even if routes were defined earlier.\n\n**2. `program_*` decorators reach outside the schematic.**\n- `program_faulthandler` is documented as equivalent to `Quill.faulthandler`, so it applies to every request, not only the schematic's own.\n- Nesting or conditionally enrolling a schematic therefore changes app-wide error handling.\n- The schematic-scoped `faulthandler` versions are what `test_schematic_particular_custom_fault_management` (`tests/test_schematics.py:L46-77`) covers.\n\n**3. Enrollment order and options are derived from the parent.**\n- In `Schematic.enroll` (L349-377), children are enrolled after the parent's deferred functions and CLI wiring.\n- Each child's options are rewritten from the parent's state:\n  - subdomain becomes `child.parent` (L358);\n  - url_prefix becomes `parent.rstrip('/') + '/' + child.lstrip('/')` (L368-370);\n  - `name_prefix` becomes the parent's dotted name (L376).\n- A child enrolled directly gets different names and prefixes than the same child enrolled through a parent.\n- A registration-time prefix overrides an init-time one (`test_embedding_link_stems`, L922-950).\n\n**4. Hook registration order decides the response lifecycle.**\n- From `test_elementary.py`: before-hooks run in registration order, while after-hooks and teardown hooks run in reverse registration order.\n- A 500 handler's response still passes through `following_inquiry` hooks (`test_fault_management_transforming`, L905-923).\n- A `preceding_inquiry` that returns a value becomes the response immediately (`docs/lifecycle.rst`, L134-135).\n- Because deferred functions run at enroll time, the order in which schematics are enrolled (nested or conditional) determines which hook mutates the response first. Fault-handler output is affected too, since it also passes through `following_inquiry`.\n\n**5. The \"first registration\" gate.**\n- The `enroll` gotcha says hook-dict merging in `_combine_schematic_functions` happens only if `first_bp_registration` or `first_name_registration` is true.\n- Deferred functions always run, even on repeat registrations.\n- If the same schematic is enrolled more than once, using `name=`, the code that has to be idempotent is the deferred functions.\n- These include app-wide ones like `program_faulthandler` and routes, which can hit the \"Page function mapping is overwriting an existing terminus function\" assertion (`app.py:L654-661`).\n\n**6. Timing.**\n- `enroll_plan` is a `preparationmethod` (`app.py:L569-595`).\n- Conditional registration after the first request raises the setup-after-request error (`docs/lifecycle.rst`, L45-48).\n\n## Not settled by the material\n\n- The body of `note_once_only`, and whether it actually deduplicates per app or per registration. Check `schematics.py` near where `_deferred_functions` is defined.\n- The body of `_combine_schematic_functions`, which shows how the hook dicts are keyed and merged for nested schematics.\n- What `program_faulthandler` does when the same schematic is enrolled twice. Read `note_once_only` together with L273-377 to confirm.",
+ "cost": 0.052966,
+ "turns": 1,
+ "duration_s": 17.3,
+ "tokens": {
+  "input": 9956,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9956
+ },
+ "pack_tokens": 4627,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 14,
+  "reasoning": 9,
+  "total": 35
+ }
+}

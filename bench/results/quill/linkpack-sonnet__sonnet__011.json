@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "sonnet",
+ "answer": "The material doesn't name a specific bug, so I can only point to the couplings it does show. The one I'd look at first is the `program_faulthandler` and `first_registration` path.\n\n**1. Decorators record deferred closures, not live state.**\n- Methods like `program_faulthandler` (`schematics.py:L595-610`) don't act when decorated. They define `from_blueprint(state)` and hand it to `self.note_once_only(...)`, and the function `f` is returned unchanged.\n- The closure runs later, inside `Schematic.enroll`, against a `SchematicSetupStatus` built by `build_registration_state(app, options, first_bp_registration)` (`L246-253`).\n- So everything that scopes the handler is fixed at enroll time, not decoration time: `name_prefix`, `url_prefix`, `subdomain`, `link_presets` and `first_registration`. That is why the same schematic behaves differently depending on where and how it is enrolled.\n\n**2. Nested registration is deferred and order-dependent.**\n- `Schematic.enroll_plan` (`L255-271`) only appends `(schematic, options)` to `self._blueprints`. The child is enrolled at the end of the parent's `enroll` (step 9), with `name_prefix`, `url_prefix` and `subdomain` rewritten from the parent's state.\n- `test_embedding_link_stems` (`tests/test_schematics.py:L922-950`) calls `parent.enroll_plan(child)` before `app.enroll_plan(parent)`. Whether a child added after the parent is enrolled is picked up isn't shown. The `@preparationmethod` wrapper would decide that, and its source isn't in the material.\n- Enroll-time options override init-time ones, so the resulting prefix can differ from what the decorator site suggests.\n\n**3. The response lifecycle depends on the dotted name computed at enroll time.**\n- Schematic hooks (`preceding_inquiry`, `following_inquiry`, `dismantle_query`; see `test_call_handling`, `L696-724`) and fault handlers are copied by `_combine_schematic_functions(app, name)` (`L379-410`). The handlers are re-keyed as `name` or `name.key` in `error_handler_spec`.\n- At request time, scope is recovered from the endpoint string. `Request.schematic` uses `terminus.rpartition('.')[0]`, and `Request.schematics` returns the name followed by its parents.\n- The link between a request and its hooks is therefore the string built by `attach_link_regulation` (`L87-116`) as `f\"{name_prefix}.{name}.{terminus}\"`. If registration changes the dotted name (nesting, the `name=` option, or conditional registration), a hook attached under one dotted name won't apply under another. Duplicate names raise `ValueError` (`L306-312`).\n\n**4. Schematic-level code can escape schematic scope.**\n- `program_faulthandler` calls `state.app.faulthandler(code)(f)`, so the handler applies to every request, not just the schematic's.\n- It uses `note_once_only`, which I take to be tied to `first_registration`. Its source isn't in the material, so this is a guess.\n- If so, the handler is registered by whichever enrollment happens first. Conditional or nested enrollment, or enrolling the same schematic under several names, would then decide whether and where it is installed.\n\n**5. Handler responses still go through the after-hooks.**\n- In `test_fault_management_transforming` (`test_elementary.py:L905-923`), a 500 handler's response still passes through `following_inquiry`.\n- A handler registered at the wrong scope (per item 4) therefore changes the response that after-hooks see.\n\n**Not settled by the material:** the `note_once_only` and `preparationmethod` implementations, and the full `enroll` body (`L313-377`). To confirm the coupling, read those in `src/quill/sansio/schematics.py` and `skeleton.py`.",
+ "cost": 0.052849999999999994,
+ "turns": 1,
+ "duration_s": 17.3,
+ "tokens": {
+  "input": 10335,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10335
+ },
+ "pack_tokens": 5139,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 13,
+  "reasoning": 9,
+  "total": 34
+ }
+}

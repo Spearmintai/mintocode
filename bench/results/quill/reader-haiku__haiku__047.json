@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _locate_fault_processor create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "haiku",
+ "answer": "# Performance Overhead in `_locate_fault_processor` MRO Traversal\n\nBased on the code in `src/quill/sansio/app.py:L823-846`, the performance overhead from linear MRO traversal comes from the nested loop structure:\n\n## Mechanism of Overhead\n\nThe algorithm performs **multiple traversals of the exception's MRO**:\n\n```python\nfor c in (code, None) if code is not None else (None,):        # ~2 iterations\n    for name in names:                                          # ~m iterations (schematics)\n        handler_map = self.error_handler_spec[name][c]\n        \n        for cls in exc_class.__mro__:                           # ~n iterations (MRO length)\n            handler = handler_map.get(cls)\n            if handler is not None:\n                return handler\n```\n\n**Complexity**: O(codes \u00d7 schematics \u00d7 MRO_length) dictionary lookups per error.\n\n## Why This Creates Overhead\n\n1. **Redundant MRO walks for each scope+code**: If an exception has a 15-class MRO and you have 3 schematics, the same MRO is walked 6 times (2 codes \u00d7 3 scopes) before finding a handler\u2014or completely if no handler exists.\n\n2. **No short-circuit until match found**: The inner `for cls in exc_class.__mro__` must walk the **entire MRO** for each scope+code combination that lacks a handler. Only when a handler is found does it return immediately (line 845).\n\n3. **Deep inheritance chains amplify the cost**: With inheritance like `Exception \u2192 Base \u2192 Custom1 \u2192 Custom2 \u2192 ... \u2192 CustomN`, each MRO walk checks N classes, each doing a dictionary lookup.\n\n4. **Multiple scopes multiply traversals**: If you have multiple schematics registered, the same exception's MRO is linearly scanned once per schematic per code, not once total.\n\n## Example Scenario\n\n```\nException MRO: [MyCustomError, BaseError, Exception, BaseException, object]  # 5 classes\nSchematics: [admin_schematic, api_schematic, None]  # 3 scopes  \nCodes: [500, None]  # 2 codes\n\nIf no handler is registered for (500, admin_schematic):\n\u2192 Walk full MRO (5 lookups)\nIf no handler for (500, api_schematic):\n\u2192 Walk full MRO again (5 lookups)\nTotal: 10 redundant lookups before checking the 500/None scope\n```\n\nThe provided code does not include optimization strategies like caching MRO results or pre-computing handler precedence.",
+ "cost": 0.029686999999999998,
+ "turns": 1,
+ "duration_s": 34.5,
+ "tokens": {
+  "input": 10002,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10002
+ },
+ "pack_tokens": 5352,
+ "score": {
+  "correctness": 13,
+  "completeness": 12,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 72
+ }
+}

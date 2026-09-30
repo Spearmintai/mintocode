@@ -1,0 +1,37 @@
+{
+ "answer": "`evaluate_skip_marks` depends on `Pytester.getitem` only in tests. It has no code dependency on it. `getitem` creates the item, and `evaluate_skip_marks` then reads the marks on that item.\n\n**`Pytester.getitem`** (`src/_pytest/pytester.py:1254`)\n- It builds the test item in three steps: `getitem` calls `getitems(source)`, which calls `getmodulecol(source)` and then `genitems([modcol])`.\n- `getmodulecol` writes the source to a `.py` file and returns the `Module` collector node.\n- `genitems` collects that module into `Item`s, meaning `Function` objects.\n- `getitem` returns the first item whose `.name` equals `funcname` (default `\"test_func\"`). If none matches, it fails with `assert 0`.\n- It never looks at marks. It only builds the item. The `@pytest.mark.skip`, `skipif` and `xfail` decorators in the source are attached to the resulting `Function` as marks during collection.\n- `_pytest/legacypath.py:193` has a legacy `getitem` wrapper that does the same job.\n\n**`evaluate_skip_marks`** (`src/_pytest/skipping.py:168`)\n- It takes an `Item` and reads its marks with `item.iter_markers(name=\"skipif\")` and then `name=\"skip\"`.\n- For `skipif` marks it works out the conditions. With no condition it returns `Skip(reason)` unconditionally. Otherwise it calls `evaluate_condition(item, mark, condition)`, which needs `item.config` and the item's module globals.\n- For `skip` marks it returns `Skip(*mark.args, **mark.kwargs)`. A bad argument raises a `TypeError` that suggests `skipif`.\n- It returns `None` if nothing triggers.\n- In production, `pytest_runtest_setup` (`skipping.py:244`) calls it and raises `skip.Exception` if it returns a `Skip`.\n\n**How they connect**\n- The connection is in `testing/test_skipping.py`, in `TestEvaluation`. Each test calls `item = pytester.getitem(\"\"\"...@pytest.mark.skipif...\"\"\")` and then `evaluate_skip_marks(item)`. It asserts on the returned `Skip` or on the `TypeError`.\n- The order is fixed: `getitem` creates the item, then `evaluate_skip_marks` evaluates it. `getitem` needs nothing from `evaluate_skip_marks`.\n- `evaluate_skip_marks` needs a real collected `Item` with marks and a config, and `getitem` supplies one.\n- The same pattern applies to `evaluate_xfail_marks`, which is imported in the same test file.",
+ "cost": 0.0547566,
+ "turns": 5,
+ "duration_s": 11.403,
+ "tokens": {
+  "input": 6,
+  "cache_write": 7687,
+  "cache_read": 49033,
+  "output": 1419,
+  "total": 58145
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"evaluate_skip_marks|def getitem\", \"path\": \"/home/sq/micode-bench/base/pytest\", \"output_mode\": \"content\", \"glob\": \"*.py\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/pytester.py\", \"offset\": 1250, \"limit\": 45}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/skipping.py\", \"offset\": 160, \"limit\": 100}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/test_skipping.py\", \"offset\": 12, \"limit\": 35}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 11,
+ "question": "What is the dependency relationship between evaluate_skip_marks function and the pytester fixture's getitem method in terms of test item creation and mark evaluation?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 77
+ }
+}

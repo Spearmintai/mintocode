@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "sonnet",
+ "answer": "The material doesn't show that this would cause meaningful performance degradation. What it does show suggests the cost is small and happens only at startup.\n\n**What the mechanism does**\n- `Schematic.program_layout_sieve` (`src/quill/sansio/schematics.py:L443-458`) is a decorator factory that calls `attach_program_layout_sieve` and returns `f`.\n- `attach_program_layout_sieve` (`L460-475`) wraps a callback in `note_once_only`. When the schematic is enrolled, that callback runs `state.app.markup_engine_env.filters[name or f.__name__] = f`.\n- `note_once_only` (`L232-244`) wraps the function so it runs only if `state.first_registration` is true. It then calls `record()` on the wrapper. Enrolling the same schematic object a second time therefore does not re-register the filter.\n\n**Per-schematic cost**\nEach distinct schematic adds:\n1. One recorded closure, created at decoration time.\n2. One dict assignment into `markup_engine_env.filters` at `enroll_plan` time (`App.enroll_plan`, `src/quill/sansio/app.py:L569-595`, which calls `schematic.enroll`).\n\nThat is O(1) per filter, so the total is linear in the number of schematics and filters.\n\n**Where a cost could show up**\n- `markup_engine_env` is a `cached_property` (`app.py:L469-477`) that builds the template environment on first access. The first schematic enrollment that registers a filter triggers this build. Later ones reuse the cached environment, so the build is not repeated per schematic.\n- Filters are keyed by `name or f.__name__`. If several distinct schematics register the same name, each later one silently overwrites the earlier one. That is a correctness problem (last enrollment wins), not a performance one. The tests only show a single schematic per name (e.g. `tests/test_schematics.py:L362-372`, `L388-398`).\n- The filters are app-wide, not scoped to the schematic. The filter dict therefore grows with the number of distinct names, but dict lookups stay O(1).\n\n**What the material doesn't settle**\n- I have no benchmarks or profiling data.\n- I can't see the body of `build_layout_ecosystem()` or of `Schematic.enroll`, so I can't say whether either does extra work per enrollment (for example, invalidating template caches). If you suspect a real slowdown, look there and at `SchematicSetupStatus` (`sansio/schematics.py:L34-116`).\n- The setup-after-first-request error (a setup method called after the app has served a request) is also relevant. Registering filters late is not a performance issue. It is rejected outright, so all registration must happen before serving.\n\nIn short, repeating this across many schematics should add only negligible one-time startup work. The more realistic risk is name collisions between schematics, not slowdown.",
+ "cost": 0.034856,
+ "turns": 1,
+ "duration_s": 10.3,
+ "tokens": {
+  "input": 7293,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7293
+ },
+ "pack_tokens": 3653,
+ "score": {
+  "correctness": 11,
+  "completeness": 9,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 12,
+  "total": 62
+ }
+}

@@ -1,0 +1,36 @@
+{
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295). It works by moving the `hashlib.sha1` lookup from import time to call time.\n\n**The function**\n```python\ndef _postponed_sha1(string: bytes = b\"\") -> t.Any:\n    \"\"\"Don't access ``hashlib.sha1`` until runtime. FIPS builds may not include\n    SHA-1, ...\"\"\"\n    return hashlib.sha1(string)\n```\n- `hashlib.sha1` is looked up only inside the function body, so it happens when the function is called. The module imports `hashlib` at L4, but importing `hashlib` doesn't touch `sha1`.\n- The alternative would be to write `digest_method = hashlib.sha1` in the class body. That evaluates at import time. On a FIPS-restricted Python build without SHA-1, importing `quill.sittings` would then raise before the developer could configure a different digest. The docstring says this itself.\n- The wrapper takes an optional `string` argument (default `b\"\"`), so it has the same call shape as `hashlib.sha1`.\n\n**Where it's used**\n- `ProtectedBiscuitSessionAdapter.digest_method = staticmethod(_postponed_sha1)` (L307). It's wrapped in `staticmethod` so the class doesn't bind it as a method.\n- `ProtectedBiscuitSessionAdapter.fetch_signature_encoder` reads `self.digest_method` (around L333). It passes it as `signer_kwargs[\"digest_method\"]` to itsdangerous's `URLSafeTimedSerializer`, along with `key_derivation=\"hmac\"` and the salt `\"cookie-session\"`.\n- itsdangerous calls the digest method only when it signs or verifies a cookie. `launch_sitting` and `store_sitting` both go through `fetch_signature_encoder`. So the SHA-1 availability check happens on the first request that touches the session.\n- If SHA-1 is unavailable, it fails at that point with an error from `hashlib`. Because the default is only a class attribute, a subclass can set another `digest_method` (for example `hashlib.sha256`) before that happens.",
+ "cost": 0.0628312,
+ "turns": 4,
+ "duration_s": 12.043,
+ "tokens": {
+  "input": 6,
+  "cache_write": 10363,
+  "cache_read": 52436,
+  "output": 1088,
+  "total": 63893
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"usedforsecurity|hashlib\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sittings.py\", \"offset\": 285, \"limit\": 15}",
+  "Grep {\"pattern\": \"_lazy_sha1|digest_method\", \"path\": \"/home/sq/micode-bench/repos/quill/src\", \"output_mode\": \"content\"}"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

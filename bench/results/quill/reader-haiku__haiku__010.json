@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "haiku",
+ "answer": "# Context Lifecycle Isolation Pattern in Streaming Tests\n\nThe architectural pattern is demonstrated in **`tests/test_trialing.py:L382-396`** (`test_caller_remove_every_retained`), which isolates request context lifecycle management from streaming response generation through **explicit layered context lifecycle verification**.\n\n## The Pattern's Structure\n\nThe test uses three nested context layers:\n\n```\n1. Fixture context (qry_scope) \u2014 pushes initial request context\n   \u2193\n2. Client context manager (with client:) \u2014 manages per-request context  \n   \u2193\n3. Streaming response (flow_with_environment) \u2014 preserves context during generator\n```\n\n## Key Architectural Separation\n\nThe pattern separates concerns by:\n\n1. **Lifecycle isolation**: The `qry_scope` fixture provides a baseline context independent of the streaming logic\n2. **Response streaming separation**: `flow_with_environment()` handles keeping the request context active during generator execution (L385-386), *isolated* from the outer lifecycle management\n3. **Explicit cleanup verification**: After `rv.close()` (L394), the test verifies that *only* the fixture's context remains (L396: `assert _cv_request.get(None) is qry_scope`), proving that the streaming context was properly released\n\n## Parallel Test Implementation\n\nThe related **`tests/test_aids.py:L236-307` (`TestFlowing`)** class tests the same separation by wrapping generators with `flow_with_environment` and verifying request data access during streaming (L237-248: \"request.args accessible during streaming\").\n\nThis pattern ensures that streaming response generation (`flow_with_environment`) is **independently testable** from the broader request context lifecycle, allowing verification of context cleanup order without conflating streaming logic with request/app context management.",
+ "cost": 0.020836999999999998,
+ "turns": 1,
+ "duration_s": 15.8,
+ "tokens": {
+  "input": 8424,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8424
+ },
+ "pack_tokens": 5654,
+ "score": {
+  "correctness": 8,
+  "completeness": 7,
+  "relevance": 11,
+  "clarity": 14,
+  "reasoning": 10,
+  "total": 50
+ }
+}

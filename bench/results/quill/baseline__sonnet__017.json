@@ -1,0 +1,36 @@
+{
+ "answer": "The method is `Quill.manage_failure(self, e)` in `src/quill/app.py` (around lines 811\u2013862). It is this codebase's version of Flask's `handle_exception`, and it decides in three steps.\n\n**1. Signal.** It captures `exc_info = sys.exc_info()` and always sends `got_request_exception`. That happens whether or not the exception is re-raised.\n\n**2. Re-raise or convert.** It reads `self.config[\"PROPAGATE_EXCEPTIONS\"]`, which defaults to `None` (set in the default config at `app.py:182`).\n- If the value is `None`, it falls back to `propagate = self.testing or self.debug`. Testing or debug mode therefore means re-raise, and anything else means convert to a 500.\n- If the value is explicitly `True` or `False`, that value is used as is, so it overrides testing and debug mode.\n- If `propagate` is truthy, it re-raises. When `exc_info[1] is e`, meaning the exception is still active, it uses a bare `raise` to preserve the traceback. Otherwise it does `raise e`.\n\n**3. Convert to a 500.** This happens when `propagate` is falsy.\n- `self.record_failure(exc_info)` logs the error through `self.logger.error(\"Exception on {path} [{method}]\", exc_info=...)`.\n- It builds `InternalServerError(original_exception=e)`.\n- It looks for a handler for that 500 with `self._locate_fault_processor(server_error, request.schematics)`. If it finds one, it runs the handler through `self.guarantee_blocking(handler)(server_error)`. The handler receives the `InternalServerError`, and the original exception is available as `original_exception`.\n- It returns `self.conclude_inquiry(server_error, from_error_handler=True)`, which finalizes the response.\n\n**Where it is called from.** The method handles exceptions that had no matching handler, or that were raised from inside an error handler. The preceding method (ending at `app.py:~809`) looks up a handler with `_locate_fault_processor`, and its bare `raise` when none is found is what leads to `manage_failure`. It also short-circuits `HTTPException`s via `catch_web_error` and `manage_web_failure`.\n\n**Related.** `PROPAGATE_EXCEPTIONS` is documented in `docs/config.rst:88`. Tests for it are in `tests/test_elementary.py` (~1581\u20131612) and `tests/test_custom_fault_handler.py:241`.\n\nI didn't find the caller that invokes `manage_failure`, for example the WSGI entry point. I only checked the surrounding method and the config.",
+ "cost": 0.0470888,
+ "turns": 4,
+ "duration_s": 12.061,
+ "tokens": {
+  "input": 6,
+  "cache_write": 6171,
+  "cache_read": 48714,
+  "output": 1265,
+  "total": 56156
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def (handle_exception|handle_user_exception)|PROPAGATE_EXCEPTIONS\", \"output_mode\": \"content\"}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"offset\": 800, \"limit\": 80}",
+  "Grep {\"pattern\": \"def (handle_user_exception|handle_exception|_find_error_handler|log_exception|wsgi_app|full_dispatch_request)|handle_exception\\\\(\", \"path\": \"/home/"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or transform them into HTTP 500 responses based on configuration state?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

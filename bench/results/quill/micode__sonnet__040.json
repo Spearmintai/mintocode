@@ -1,0 +1,32 @@
+{
+ "answer": "The lookup is in `App._locate_fault_processor(self, e, schematics)` in `src/quill/sansio/app.py` (about L823-846). I'm answering from the repo's compiled notes and didn't re-read the source.\n\n- **Resolving the class and code:** it first calls `_obtain_exception_type_and_status(type(e))` to get `(exc_class, code)`.\n- **Codes, the outer loop:** it iterates `(code, None)` for HTTP errors, or only `(None,)` for non-HTTP exceptions.\n- **Scopes, the inner loop:** for each code it iterates `(*schematics, None)`, so schematic scopes come first and the app scope (`None`) last.\n- **Class hierarchy, the innermost step:** for each non-empty `self.error_handler_spec[name][c]`, it walks `exc_class.__mro__`. It returns the first registered handler it finds, or `None` if nothing matches.\n\nCodes are the outer loop and scopes the inner one. So the order isn't strictly \"all scopes, then codes, then MRO\". The effective priority is:\n\n1. schematic + code\n2. app + code\n3. schematic + exception class\n4. app + exception class\n\nThe MRO walk only happens within a single (code, scope) pair. Specific subclasses win over their bases, and handlers aren't cached.\n\nThe behavior is described in `docs/errorhandling.rst` (L158-173).",
+ "cost": 0.0323534,
+ "turns": 1,
+ "duration_s": 6.526,
+ "tokens": {
+  "input": 2,
+  "cache_write": 5900,
+  "cache_read": 13447,
+  "output": 606,
+  "total": 19955
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 74
+ }
+}

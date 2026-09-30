@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 18,
+ "question": "How does the method that registers URL rules on schematic objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "sonnet",
+ "answer": "The method is `Schematic.attach_link_regulation` (src/quill/sansio/schematics.py:L412-441), decorated with `@preparationmethod`. It does not touch the app. It validates its arguments and then hands a closure to `record`.\n\n**1. Validation happens immediately (L427-431)**\n- If `terminus` contains a `.`, it raises `ValueError(\"'terminus' may not contain a dot '.' character.\")`.\n- If `view_func` has a `__name__` containing a `.`, it raises `ValueError(\"'view_func' name may not contain a dot '.' character.\")`.\n\nThese checks run at decoration time, so bad names fail early. The dot is reserved because enrollment builds dotted names (`name_prefix.name.terminus`).\n\n**2. Registration is deferred through `record` (L433-441)**\n```python\nself.record(\n    lambda s: s.attach_link_regulation(\n        rule, terminus, view_func,\n        provide_automatic_options=provide_automatic_options,\n        **options,\n    )\n)\n```\n- The lambda takes one parameter `s`, the setup state. That state does not exist yet.\n- The lambda closes over `rule`, `terminus`, `view_func`, `provide_automatic_options` and `options`, so those values are captured when the route is declared.\n- `Schematic.record` (L223-230) only does `self.deferred_functions.append(func)`. Nothing is called at this point, and no rule reaches the app.\n\n**3. Why `s` is not available yet**\n`SchematicSetupStatus` (which holds the app, options, and `url_prefix`/`subdomain`/`link_presets`) is only created in `Schematic.enroll` via `build_registration_state` (L246-253). A schematic can be declared before any app exists, and it can be enrolled more than once, possibly with different prefixes or names. So the schematic stores the intent and the state supplies context later.\n\n**4. When the deferred lambda runs**\n`App.enroll_plan(schematic, **options)` calls `schematic.enroll(self, options)`. Inside `enroll` (L273-377), after the state is built, the static route is added (if applicable), `_combine_schematic_functions` runs, and then each function in `deferred_functions` is called with the state. That is when the lambda invokes `SchematicSetupStatus.attach_link_regulation` (L87-116), which:\n- prefixes `rule` with `url_prefix`,\n- sets a default `subdomain` (the source shows `options.assumefallback(\"subdomain\", self.subdomain)`),\n- derives `terminus` from the view function if it is `None`,\n- merges `link_presets` with any `defaults`,\n- calls `self.app.attach_link_regulation(...)` with the terminus `f\"{self.name_prefix}.{self.name}.{terminus}\".lstrip(\".\")`.\n\nOnly at that last call is the rule registered on the app, which is `App.attach_link_regulation` (src/quill/sansio/app.py:L604-661).\n\n**Caller path:** `Armature.route`'s decorator (src/quill/sansio/skeleton.py:L360-363) pops `terminus` and calls `self.attach_link_regulation(rule, terminus, f, **options)`. On a `Schematic` that resolves to the deferring version above.\n\n**Not settled by the material:** the body of `App.attach_link_regulation` after L623 and the rest of `enroll` (L313-377) are truncated, so I can't describe those parts in detail. Also, the `assumefallback` call on `options` (a plain `dict` per the signature) looks odd, since `dict` has no such method. I can't tell from the excerpt whether `options` is a special type or whether this is a bug or rename artifact. Check that line if it matters.",
+ "cost": 0.045284,
+ "turns": 1,
+ "duration_s": 11.7,
+ "tokens": {
+  "input": 9465,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9465
+ },
+ "pack_tokens": 5189,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 14,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

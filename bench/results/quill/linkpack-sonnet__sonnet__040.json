@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "answer": "The lookup is all in `App._locate_fault_processor` (`src/quill/sansio/app.py:L823-846`). The order in your question is slightly off. The status code is the outer loop and the schematic scope is the inner loop, not the other way round. The exception class MRO is the innermost step.\n\n**Setup (L831-832)**\n- L831: `exc_class, code = self._obtain_exception_type_and_status(type(e))`. This gives the exception class and its HTTP status code, or `None` for non-HTTP exceptions (`skeleton.py:L656-698`).\n- L832: `names = (*schematics, None)`. The schematic names come from `request.schematics`, ordered from the current schematic up through its parents. `None` stands for the app-level scope.\n\n**Nested loops**\n1. **Outer loop, status code (L834):** `for c in (code, None) if code is not None else (None,)`. It tries the specific code first, then the `None` bucket, which holds class-only handlers. Non-HTTP exceptions try only `None`.\n2. **Middle loop, scope (L835-839):** `for name in names`. It reads `self.error_handler_spec[name][c]` and skips it with `continue` if the map is empty. The current schematic is checked first, then its parents, then the app.\n3. **Inner loop, MRO (L841-845):** `for cls in exc_class.__mro__`. It calls `handler_map.get(cls)` and returns the first non-`None` handler, so a subclass handler wins over a base-class handler.\n\nIf nothing matches, L846 returns `None`.\n\n**Resulting priority:** schematic+code, then app+code, then schematic+class, then app+class. Within each of those, the most specific class is checked first.\n\n**Tests that show this**\n- `tests/test_elementary.py:L967-996`: a handler for a `Forbidden` subclass wins for that subclass, while the `403` handler serves plain `Forbidden` and `abort(403)`.\n- `tests/test_schematics.py:L793-839`: a child schematic with no handler falls through to its parent's `403` handler, and a grandchild uses its own.\n\n**Not settled by the material:** `error_handler_spec` is populated by `enroll_fault_responder` (`skeleton.py:L641-654`) and I only have its summary. Look there for how schematic-scoped entries are stored. Only the `[None][code][exc_class]` form is described in the summary.",
+ "cost": 0.041822,
+ "turns": 1,
+ "duration_s": 8.6,
+ "tokens": {
+  "input": 9066,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9066
+ },
+ "pack_tokens": 4873,
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 85
+ }
+}

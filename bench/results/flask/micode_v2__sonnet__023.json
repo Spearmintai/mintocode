@@ -1,0 +1,34 @@
+{
+ "answer": "`MethodView.__init_subclass__` in `src/flask/views.py` (L165-180) doesn't pick between conflicting `methods` attributes. It merges them as a set union.\n\n1. It first calls `super().__init_subclass__(**kwargs)`.\n2. It then checks `\"methods\" not in cls.__dict__`. If the subclass sets `methods` explicitly in its own body, the whole computation is skipped. That explicit value wins outright and nothing is merged.\n3. Otherwise it starts with an empty `set()` and loops over `cls.__bases__`, the direct parents only. For each base where `getattr(base, \"methods\", None)` is truthy, it calls `methods.update(base.methods)`. With multiple parents, their `methods` sets are unioned, so there is no precedence or override. A parent with `methods` of `None` or empty is ignored. Since each base's `methods` was itself computed for that base, grandparents' methods arrive through it.\n4. It then loops over `http_method_funcs` (the frozenset `get`, `post`, `head`, `options`, `delete`, `put`, `trace`, `patch`, defined at L11-13). For each name where `hasattr(cls, key)` is true, it adds `key.upper()`. `hasattr` also sees inherited handlers, so methods defined on any parent, or on the subclass itself, are included.\n5. `cls.methods = methods` is assigned only if the resulting set is non-empty. Otherwise `methods` is left as inherited, which is `View.methods = None` by default. In that case routing falls back to its defaults.\n\nThe subclass's `methods` is therefore the union of every parent's `methods` and every HTTP handler visible on the class. One consequence is that it can only grow relative to the parents. To narrow it, the subclass has to set `methods` explicitly.",
+ "cost": 0.0463376,
+ "turns": 2,
+ "duration_s": 7.04,
+ "tokens": {
+  "input": 4,
+  "cache_write": 8142,
+  "cache_read": 32858,
+  "output": 719,
+  "total": 41723
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/views.py\", \"offset\": 160, \"limit\": 22}"
+ ],
+ "arm": "micode_v2",
+ "repo": "flask",
+ "k": 23,
+ "question": "How does the subclass initialization hook in the HTTP method-dispatching view class resolve conflicting methods attributes when inheriting from multiple parent classes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 18,
+  "completeness": 16,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 86
+ }
+}

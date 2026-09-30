@@ -1,0 +1,31 @@
+{
+ "answer": "The \"type-safe dictionary structure\" is a `TypedDict`. Flask doesn't define one. It makes room for one in its type aliases. The JSON body and the HTTP status are kept apart by the tuple form of the return type, not by the dictionary.\n\n**Type aliases (`src/flask/typing.py`)**\n- `ResponseValue` (lines 12\u201323) is the union of body types a view may return. It includes `t.Mapping[str, t.Any]`. The comment on line 17 says: \"Only dict is actually accepted, but Mapping allows for TypedDict.\" A `TypedDict` is not a subtype of `dict` for type checkers, but it does satisfy `Mapping[str, Any]`. So a view annotated `-> MyTypedDict` type-checks as a valid body.\n- `ResponseReturnValue` (lines 36\u201342) wraps that body type in separate tuple shapes:\n  - `ResponseValue`\n  - `tuple[ResponseValue, HeadersValue]`\n  - `tuple[ResponseValue, int]`\n  - `tuple[ResponseValue, int, HeadersValue]`\n  - `WSGIApplication`\n- The status is an `int` slot and headers are a `HeadersValue` slot. Both are outside the body type. A view can return `(payload_typeddict, 201)`, and the `TypedDict` still describes only the JSON content. The status isn't a key in the dict or part of its schema.\n\nThe `ResponseReturnValue` alias is used as the return annotation in `View.dispatch_request` and `MethodView.dispatch_request` (`src/flask/views.py`), and in `Flask.dispatch_request` and `Flask.make_response` (`src/flask/app.py`).\n\n**Runtime split (`Flask.make_response`, `src/flask/app.py` ~1186\u20131269)**\n1. It starts with `status = None` and `headers = None`.\n2. If `rv` is a tuple, it unpacks it. A 3-tuple is `(body, status, headers)`. A 2-tuple is `(body, headers)` if the second item is a `Headers`, `dict`, `tuple` or `list`. Otherwise it is `(body, status)`. Any other length raises `TypeError`. After this, `rv` is only the body.\n3. If the body is a `dict` or `list`, `self.json.response(rv)` serializes it to a JSON `Response` (line 1230\u20131231). This step doesn't involve the status.\n4. Only afterwards does it apply `status` (`rv.status` for str/bytes, otherwise `rv.status_code`) and `rv.headers.update(headers)` (lines 1259\u20131267).\n\n**Result**\nThe type checker validates the body as a `Mapping`, which can be a `TypedDict`. The tuple position carries the status and headers. At runtime, `make_response` unpacks the tuple first, then serializes the body to JSON, then applies the status and headers. Neither the JSON serialization nor the type check is affected by the HTTP status.\n\nOne caveat: at runtime, `make_response` checks `isinstance(rv, (dict, list))`. A `TypedDict` instance is an ordinary `dict` at runtime, so it passes. Other `Mapping` types that aren't `dict` would not be JSON-serialized.",
+ "cost": 0.047090400000000004,
+ "turns": 5,
+ "duration_s": 16.37,
+ "tokens": {
+  "input": 8,
+  "cache_write": 4188,
+  "cache_read": 73012,
+  "output": 1572,
+  "total": 78780
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 22,
+ "question": "How does the type-safe dictionary structure used as a view function return type annotation decouple JSON response serialization from HTTP status representation to maintain type safety?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 84
+ }
+}

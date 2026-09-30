@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 12,
+ "question": "How does the wrapper function that defers hash algorithm access until execution delay cryptographic availability validation until runtime to prevent import-time failures in restricted environments?",
+ "model": "sonnet",
+ "answer": "The wrapper is `_postponed_sha1` in `src/quill/sittings.py` (L290-295).\n\n**What it does**\n\n- It is a plain function, `_postponed_sha1(string: bytes = b\"\") -> t.Any`, whose body is just `return hashlib.sha1(string)` (L295).\n- `hashlib.sha1` is looked up as an attribute only when the function is called. Merely defining the function, or importing the module, never touches `hashlib.sha1`.\n\n**Why this defers the failure**\n\n- The docstring (L291-293) gives the reason. FIPS builds may not include SHA-1. If `hashlib.sha1` were referenced directly as a default, the lookup would happen during import and fail before the developer could configure something else.\n- With the wrapper, the reference is resolved on the first real call. A restricted environment therefore only fails if SHA-1 is actually used.\n\n**How it is wired in**\n\n- In `ProtectedBiscuitSessionAdapter` (L298), the class attribute is `digest_method = staticmethod(_postponed_sha1)` (L307). Wrapping it in `staticmethod` keeps it from being bound as an instance method when accessed through `self`.\n- `fetch_signature_encoder` (L317-335) passes `self.digest_method` to `URLSafeTimedSerializer` under `signer_kwargs[\"digest_method\"]` (L333). itsdangerous invokes it when it builds a signature or hash. That happens at request time, not at import.\n- Because `digest_method` is an overridable class attribute, a FIPS deployment can substitute another algorithm, such as a subclass with a different `digest_method`. In that case `_postponed_sha1` is never called and SHA-1 is never touched.\n\n**Caveats**\n\n- The wrapper doesn't validate availability. It only postpones the lookup. If SHA-1 is unavailable and the default is still used, the error surfaces at runtime, when the signer calls it.\n- The excerpt doesn't show where `URLSafeTimedSerializer` or itsdangerous first calls `digest_method`. For the exact timing, look at `launch_sitting` (L337-349) and `store_sitting` (L351-399), which use the encoder.",
+ "cost": 0.015346,
+ "turns": 1,
+ "duration_s": 7.6,
+ "tokens": {
+  "input": 2738,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 2738
+ },
+ "pack_tokens": 890,
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

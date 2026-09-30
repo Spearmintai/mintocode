@@ -1,0 +1,40 @@
+{
+ "answer": "Isolation between phases comes from three things working together. One global capture is drained after every phase. Each phase's output goes into a section tagged with that phase's name. Each phase produces its own report.\n\n## 1. Phase boundaries: `CaptureManager` in `src/_pytest/capture.py`\n\n`CaptureManager` is the `capturemanager` plugin. `start_global_capturing()` creates one global `MultiCapture` for the whole session, and it stays alive across phases.\n\nIt wraps each phase hook (`pytest_runtest_setup`, `pytest_runtest_call`, `pytest_runtest_teardown`) as a `hookimpl(wrapper=True)`. Each wrapper runs the phase inside `with self.item_capture(\"<phase>\", item)`. `item_capture` works like this:\n\n- **On entry:** it calls `resume_global_capture()` and then `activate_fixture()`.\n- **On exit (`finally`):**\n  1. `deactivate_fixture()` closes any `capsys` or `capfd` capture.\n  2. `suspend_global_capture(in_=False)` pauses the global capture.\n  3. `read_global_capture()` calls `readouterr()`, which returns and resets the global buffer.\n  4. `item.add_report_section(when, \"stdout\", out)` and `item.add_report_section(when, \"stderr\", err)` store the output.\n\nThe buffer is drained at the end of every phase, so nothing carries over from setup into call or from call into teardown. The `when` argument tags each piece of output with its phase.\n\n`Node.add_report_section` in `src/_pytest/nodes.py:731` appends `(when, key, content)` to `item._report_sections`. It skips empty content.\n\n## 2. Separate reports: `src/_pytest/runner.py` and `src/_pytest/reports.py`\n\n`runtestprotocol` calls `call_and_report` three times, for `\"setup\"`, `\"call\"` and `\"teardown\"`. Each call produces its own `TestReport`. Setup and teardown are always reported separately from the test body. If setup fails, the `call` report isn't produced at all, but teardown still runs.\n\n`TestReport.from_item_and_call` (`reports.py:~382`) builds the sections by looping over `item._report_sections`. It emits `Captured {key} {when}` for each entry, for example \"Captured stdout setup\" or \"Captured stderr teardown\". That is where the per-phase labels in terminal output come from.\n\nEach report is built right after its phase, so it includes the sections accumulated so far. Earlier sections stay on the item, so the setup section also appears in the call report. `TestReport.capstdout` and `capstderr` (`reports.py:~129` and `~139`) use `get_sections(\"Captured stdout\")` to select them.\n\n## 3. Multiple fixtures at different scopes\n\nCapture isn't scoped per fixture. It is scoped per phase hook, so fixture scope doesn't change where output lands.\n\n- **Session, module and class fixtures** are set up inside whichever test first needs them. `SetupState.setup(item)` is called from `pytest_runtest_setup` in `runner.py:162`. Their output therefore lands in that test's *setup* section. The other tests that share the fixture don't see it.\n- **Teardown** of those fixtures runs in `SetupState.teardown_exact(nextitem)` (`runner.py:191`). It tears down only the nodes that `nextitem` doesn't share. Their output goes to the teardown section of the *last* test that used them. Function-scoped fixtures tear down with their own test.\n- **Shared streams:** because all these fixtures write to the same global capture, their output is concatenated in execution order inside the single phase section. It is not separated per fixture.\n\n## 4. `capsys`, `capfd` and `capteesys` fixtures\n\n`capsys` is a fixture, so it starts during setup. It calls `capman.set_fixture(...)` and `capture_fixture._start()`, which creates a nested `MultiCapture` on top of the global one. `set_fixture` raises an error if a second capture fixture is used at the same time.\n\nPhase transitions handle it through `activate_fixture` and `deactivate_fixture`:\n\n- **`_start()`** is idempotent (`if self._capture is None`). `item_capture` calls it at the start of each phase and re-establishes the fixture capture.\n- **`CaptureFixture.close()`** calls `pop_outerr_to_orig()` and adds the remainder to `_captured_out` and `_captured_err`. This happens at the end of each phase. The data is not forwarded to the global capture, so it isn't reported in the phase sections. It stays available to `capsys.readouterr()`.\n- **`readouterr()`** returns `_captured_out` plus the live capture, then resets both.\n\nThe capture fixture is therefore active during the phases where the fixture is set (setup, call), and it is closed at each phase end. Whatever the test consumed with `readouterr()` doesn't appear in \"Captured stdout call\".\n\n## Related helpers\n\n- **`suspend()` and `resume()`** suspend the fixture capture first, then the global one.\n- **`global_and_fixture_disabled()`** and **`CaptureFixture.disabled()`** temporarily turn off both levels. `pdb` and `capsys.disabled()` use them.\n- **`pytest_make_collect_report`** does the same resume, read and suspend cycle for `File` collectors. Its sections are named \"Captured stdout\" and \"Captured stderr\".",
+ "cost": 0.1044508,
+ "turns": 8,
+ "duration_s": 25.704,
+ "tokens": {
+  "input": 10,
+  "cache_write": 14074,
+  "cache_read": 98324,
+  "output": 2847,
+  "total": 115255
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def (pytest_runtest_setup|pytest_runtest_call|pytest_runtest_teardown|item_capture|resume_global_capture|suspend_global_capture|read_global_capture",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/capture.py\", \"offset\": 725, \"limit\": 200}",
+  "Grep {\"pattern\": \"sections|def pytest_runtest_makereport|_report_sections|def from_item_and_call\", \"path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/reports.py\"",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/capture.py\", \"offset\": 916, \"limit\": 130}",
+  "Grep {\"pattern\": \"_report_sections|def call_and_report|def runtestprotocol|def _update_current_test_var|def pytest_runtest_protocol\", \"path\": \"/home/sq/micode-bench/",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/runner.py\", \"offset\": 120, \"limit\": 80}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/nodes.py\", \"offset\": 730, \"limit\": 18}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 19,
+ "question": "How does the pytest capture framework ensure that stdout and stderr captured during setup and teardown phases are correctly isolated and reported separately from the test execution phase, particularly when multiple fixtures at different scopes are involved?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

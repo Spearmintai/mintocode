@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-laya-sonnet",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "answer": "The material shows **what** the restriction is, but it does not state **why** the authors chose it. I can only infer a rationale from the surrounding code.\n\n**What the code does**\n\n- `Quill.launch_asset` (`src/quill/app.py:L330-361`) and its schematic counterpart `Schematic.launch_asset` (`src/quill/schematics.py:L104-128`) both check `if mode not in {\"r\", \"rt\", \"rb\"}` and raise `ValueError(\"Resources can only be opened for reading.\")` (`app.py:L353-354`, `schematics.py:L120-121`).\n- The path is `os.path.join(self.root_path, resource)`. For `\"rb\"`, the file is opened without an encoding. Otherwise it is opened with `encoding`.\n- The docstring says \"Open a resource file relative to :attr:`root_path` for reading\" and \"Only reading is supported, valid values are \"r\" (or \"rt\") and \"rb\"\".\n- Tests confirm this. `test_read_asset` (`tests/test_aids.py:L338-343`) shows that `r`, `rb` and `rt` work. `test_read_asset_failures` (`L346-351`) shows that `w`, `x`, `a` and `r+` raise `ValueError`.\n\n**Inferred rationale (not stated in the source)**\n\n- The contrast with `Quill.launch_deployment_asset` (`app.py:L363-383`) points to the design intent. Its docstring says: \"Unlike :meth:`launch_asset`, files in the instance folder can be opened for writing.\" It resolves paths against `instance_path` and allows any mode.\n- So the split appears deliberate:\n  - `root_path` holds the application's own packaged files, such as `schema.sql` in the example at `examples/walkthrough/flaskr/db.py:L33-38`. These are treated as read-only resources.\n  - `instance_path` is the location for writable, deployment-specific files.\n- Blocking writes stops code from modifying the application's own package files, which may be read-only or shared once installed. That is a reasonable reading of the split, but the provided material does not say it.\n\n**What is not settled**\n\nNo comment, docstring or changelog entry in the excerpts gives the historical reason. If you need the authors' actual motivation, check the git history or blame for `launch_asset` in `src/quill/app.py`, and any docs on the instance folder.",
+ "cost": 0.026978,
+ "turns": 1,
+ "duration_s": 19.2,
+ "tokens": {
+  "input": 5577,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5577
+ },
+ "pack_tokens": 2733,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 15,
+  "total": 76
+ }
+}

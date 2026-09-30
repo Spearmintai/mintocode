@@ -1,0 +1,31 @@
+{
+ "answer": "The lookup sequence is in `Flask._find_error_handler` in `src/flask/sansio/app.py`, at lines 823\u2013846. It is a triple nested loop, with the outermost loop trying HTTP codes first.\n\nSetup, before the loops:\n- **Line 831:** `self._get_exc_class_and_code(type(e))` gives `exc_class` and `code`. `code` is the HTTP status if the exception is an `HTTPException`, otherwise `None`.\n- **Line 832:** `names = (*blueprints, None)` is the list of scopes to search. The blueprint names come first, and `None` stands for the app-level scope, so the app is searched last.\n\nThe three loops, outermost to innermost:\n1. **HTTP status code (line 834):** `for c in (code, None) if code is not None else (None,)`. It tries the specific status code first, then the `None` key, which holds handlers registered by exception class. If the exception has no code, only `None` is tried.\n2. **Blueprint scope (line 835):** `for name in names`. For each code, it checks the blueprints in the order given, then the app. At line 836 it reads `self.error_handler_spec[name][c]`, and it skips the scope if that map is empty (lines 838\u2013839).\n3. **Exception MRO (lines 841\u2013845):** `for cls in exc_class.__mro__`. It looks up `handler_map.get(cls)` and returns the first handler found. This means a subclass handler wins over a base-class handler.\n\nPut together, the lookup order is:\n1. blueprint handler for the specific code\n2. app handler for the specific code\n3. blueprint handler for the exception class (walking the MRO)\n4. app handler for the exception class (walking the MRO)\n5. `None`, if nothing matches (line 846)\n\nIn the code, the scope loop (2) sits inside the code loop (1), and the MRO walk (3) sits inside the scope loop. So the blueprint-then-app scope traversal happens within each code pass, and the MRO walk happens within each scope.\n\nThe docstring at lines 826\u2013830 describes the same order.\n\n`handle_http_exception` and `handle_user_exception` in the same file's subclass, `src/flask/app.py`, call `_find_error_handler`. The handler registrations it reads (`error_handler_spec`) are populated by `register_error_handler` in `src/flask/sansio/scaffold.py`.",
+ "cost": 0.019810400000000002,
+ "turns": 2,
+ "duration_s": 8.657,
+ "tokens": {
+  "input": 4,
+  "cache_write": 906,
+  "cache_read": 34692,
+  "output": 924,
+  "total": 36526
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "baseline",
+ "repo": "flask",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse blueprint scopes then HTTP status codes then exception class method resolution order?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

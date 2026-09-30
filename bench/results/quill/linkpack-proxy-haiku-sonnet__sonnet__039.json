@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "sonnet",
+ "answer": "The decision is made at registration time in `App.attach_link_regulation`, in `src/quill/sansio/app.py` L604-661. It is then consulted at request time in `Quill.route_inquiry`, in `src/quill/app.py` L879-902.\n\n## Registration-time flow (`sansio/app.py`)\n\n1. **Methods (L616-628).** `methods` is taken from `options.pop(\"methods\")`. If that is `None`, it falls back to `view_func.methods`, then to `(\"GET\",)`. A plain string raises `TypeError`. The methods are then upper-cased into a set.\n2. **Required methods (L631).** `required_methods` is built from `view_func.required_methods`, or an empty set if the attribute is missing.\n3. **Explicit argument or view attribute (L635-638).** If the `provide_automatic_options` argument is `None`, it is read from `getattr(view_func, \"provide_automatic_options\", None)`. A value passed explicitly, or set on the view, therefore wins. For class-based views, `Page.provide_automatic_options` (`views.py` L56) defaults to `None`.\n4. **Config branch (L640-645).** This branch runs only if the value is still `None`:\n   - If `\"OPTIONS\" not in methods` **and** `self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy, then `provide_automatic_options = True` and `\"OPTIONS\"` is added to `required_methods`.\n   - Otherwise `provide_automatic_options = False`. This covers both a config of `False` and a view that already lists `OPTIONS` in its own methods.\n5. **Merge and store (L648-651).** `methods |= required_methods`, then the `Rule` is created. The flag is stored as `rule_obj.provide_automatic_options`.\n\nThe flag is only ever `True` here when it was forced on by the argument or attribute, or when the config branch set it. Only the config branch adds `OPTIONS` to the rule's methods. If the flag is forced `True` (step 3) and the view doesn't list `OPTIONS`, nothing in L648 adds it, so the rule would not accept OPTIONS. The test at `tests/test_elementary.py` L86-87 therefore passes `methods=[\"OPTIONS\"]` explicitly.\n\n## Request-time flow (`app.py` L889-902)\n\n- If `req.routing_exception` is set, `throw_dispatch_fault` is called first (L890-891).\n- If `getattr(rule, \"provide_automatic_options\", False)` is truthy and `req.method == \"OPTIONS\"`, it returns `build_fallback_options_reply()` (L895-899). That builds an empty response whose `allow` is set from `url_adapter.allowed_methods()` (L953-964).\n- Otherwise it dispatches to `view_functions[rule.terminus]` (L901-902). This is how a view that handles OPTIONS itself, with the flag `False`, gets the request.\n\n## Observed behavior in the tests\n\n- With the flag `False`, `OPTIONS` returns 405, and the `allow` lists have no `OPTIONS` (`test_supply_implicit_choices_keyword`, L99-126).\n- With the flag `True` and `methods=[\"OPTIONS\"]`, `allow == [\"OPTIONS\"]` (L86-89).\n\n## Not settled by the material\n\nThe abstract `Armature.attach_link_regulation` in `sansio/skeleton.py` (L367-433) only documents the contract and raises `NotImplementedError`. Where the `PROVIDE_AUTOMATIC_OPTIONS` config default is defined is not shown. Look at the app's default config dict for that.",
+ "cost": 0.032196,
+ "turns": 1,
+ "duration_s": 11.2,
+ "tokens": {
+  "input": 6217,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6217
+ },
+ "pack_tokens": 2960,
+ "score": {
+  "correctness": 17,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 81
+ }
+}

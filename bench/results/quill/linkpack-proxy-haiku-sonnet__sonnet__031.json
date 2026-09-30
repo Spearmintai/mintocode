@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-proxy-haiku-sonnet",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "sonnet",
+ "answer": "The test is `test_periodic_title_forbidden` (tests/test_schematics.py:L254-256). It calls `quill.Schematic(\"app.ui\", __name__)` inside `pytest.raises(ValueError)`. It passes only if the constructor rejects a dotted name.\n\n**Why the constructor rejects it**\n\n`Schematic.__init__` (src/quill/sansio/schematics.py:L195-199) checks the name after calling `super().__init__`. An empty name raises `ValueError(\"'name' may not be empty.\")`. A name containing `.` raises `ValueError(\"'name' may not contain a dot '.' character.\")`.\n\n**Why dots are forbidden**\n\nThe dot is the separator in nested names, and the code relies on it in several places:\n\n- `Schematic.enroll` (L302-304) builds the registered name as `f\"{name_prefix}.{self_name}\".lstrip(\".\")`. A nested schematic is registered under a dotted path such as `parent.child`. The 2.0.1 versionchanged note says this lets different schematics with the same name be nested at different locations.\n- `Request.schematic` (src/quill/envelope_types.py:L161-178) recovers the schematic name with `terminus.rpartition(\".\")[0]`. A dot inside a schematic's own name would make this return the wrong schematic.\n- `_divide_schematic_route` (src/quill/helpers.py:L627-634) walks parent schematics by repeatedly applying `rpartition('.')`. A dotted name would produce phantom parents.\n\nA name like `\"app.ui\"` would therefore be ambiguous. It could mean a schematic `ui` nested in `app`, or a single schematic literally named `app.ui`. The constructor removes the ambiguity by forbidding dots at creation time.\n\n**What the test does and doesn't cover**\n\n- It checks only the constructor's dot rule. It does not test the empty-name check, which was added in 2.3.0.\n- It does not test the related dot checks on `terminus` and `view_func.__name__`. Those are covered by `test_path_wrapper_bespoke_terminus_with_periods` (L327-342) and implemented in `Schematic.attach_link_regulation` (L427-431).\n- The material does not show why the test name says \"periodic title\". That is only a naming choice in the test file.",
+ "cost": 0.022838,
+ "turns": 1,
+ "duration_s": 8.1,
+ "tokens": {
+  "input": 4572,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 4572
+ },
+ "pack_tokens": 2149,
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 81
+ }
+}

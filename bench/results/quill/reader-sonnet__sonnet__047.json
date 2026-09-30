@@ -1,0 +1,27 @@
+{
+ "arm": "reader-sonnet",
+ "repo": "quill",
+ "k": 47,
+ "question": "Why does the linear traversal of the exception class hierarchy in _locate_fault_processor create performance overhead when handling errors in applications with deep exception inheritance chains and multiple registered error handlers?",
+ "model": "sonnet",
+ "answer": "The code supports a narrower claim than the question assumes. The lookup is linear, but the cost is bounded and there is no measured evidence of a problem in the material I have.\n\n**What the code does** (`src/quill/sansio/app.py:L823-846`, `App._locate_fault_processor`):\n\n1. It resolves `(exc_class, code)` once via `_obtain_exception_type_and_status(type(e))` (L831).\n2. It builds `names = (*schematics, None)` (L832).\n3. The outer loop runs over `(code, None)` when `code` is not None, otherwise just `(None,)` (L834). The inner loop runs over `names` (L835).\n4. For each pair it fetches `self.error_handler_spec[name][c]` (L836). If that map is empty it does `continue` (L838-839), so it skips the MRO walk.\n5. If the map is non-empty, it walks `exc_class.__mro__` and calls `handler_map.get(cls)` for each class until a handler is found (L841-845). Otherwise it returns `None` (L846).\n\n**Where the cost comes from**\n\nThe worst case, when nothing matches, is roughly (number of codes, at most 2) \u00d7 (number of scopes, schematics + 1) \u00d7 (MRO length) dict `.get` calls. Each `.get` is O(1). The deeper the exception's MRO and the more schematic scopes in the request, the more lookups are made. That is the only sense in which deep inheritance chains add overhead.\n\n**Why it is probably minor**\n\n- The walk only happens for `(name, c)` combinations that actually have handlers registered (the `if not handler_map: continue` guard). Scopes with no handlers for that code cost one dict lookup.\n- Exception MROs are typically short, around 3 to 8 entries including `object`.\n- The walk stops at the first match. Handlers on nearer classes end it sooner, and `test_faultcatcher_priority` (`tests/test_elementary.py:L999-1029`) confirms the nearest MRO match wins.\n- The lookup runs only on the error path: `manage_client_failure` (`src/quill/app.py:L804`), `manage_web_failure` (L774), and `manage_failure` (L857). Successful requests never call it.\n- Nothing in the given material caches results. `error_handler_spec` is a nested `defaultdict`, and the lookup at L836 can create empty entries as a side effect. That side effect is harmless, but it does not speed up anything.\n\n**What the material does not settle**\n\nThere are no benchmarks or profiling data here, so I cannot say the overhead is measurable in practice. If you want to check, profile `_locate_fault_processor` under a realistic error rate, schematic depth and MRO length. If it does matter, a per-`(type(e), schematics)` cache would be the obvious change. It would have to be invalidated when handlers are registered through `enroll_fault_responder` (`src/quill/sansio/skeleton.py:L641-654`). Note that priority ordering (schematic+code > app+code > schematic+class > app+class) is defined by the loop nesting at L834-835, so any optimization must preserve it.",
+ "cost": 0.046222,
+ "turns": 1,
+ "duration_s": 10.9,
+ "tokens": {
+  "input": 10013,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 10013
+ },
+ "pack_tokens": 5352,
+ "score": {
+  "correctness": 17,
+  "completeness": 14,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 81
+ }
+}

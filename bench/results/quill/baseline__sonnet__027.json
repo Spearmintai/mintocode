@@ -1,0 +1,38 @@
+{
+ "answer": "The method is `launch_asset`. It is defined on `Quill` in `src/quill/app.py:330` and again on `Schematic` in `src/quill/schematics.py:104`. The code doesn't state a reason beyond \"resources are for reading\", so the rationale below is inferred from the code and docstrings.\n\n**What it does.** Both versions check `mode` first. If it isn't one of `{\"r\", \"rt\", \"rb\"}`, they raise `ValueError(\"Resources can only be opened for reading.\")`. They then join `self.root_path` with `resource` and call `open()`. Binary mode passes no encoding. Text mode passes `encoding`.\n\n**Why read-only (inferred):**\n- **What `root_path` holds.** It is the application's or schematic's package directory, where the source and bundled files live (for example `schema.sql` next to `app.py`). Those files are part of the code that ships with the app. They aren't runtime data.\n- **Where writable files go.** `Quill.launch_deployment_asset` (`app.py:363`) is the writable counterpart. It opens files relative to `instance_path`, and its docstring says \"Unlike `launch_asset`, files in the instance folder can be opened for writing.\" It applies no mode check. `instance_path` is the per-deployment location meant for mutable data. The mode check in `launch_asset` sends write attempts there.\n- **Deployment.** Installed packages may be read-only, zipped, or shared between processes. Writing into the package tree would break in those cases or change the shipped code. Rejecting write modes up front gives a clear error instead of a filesystem failure that depends on the environment.\n\nThe restriction is enforced in two places, one per class. `Schematic.launch_asset` is documented as \"the schematic-relative equivalent\" of the app method, so the two are meant to behave the same way.",
+ "cost": 0.058019,
+ "turns": 6,
+ "duration_s": 13.67,
+ "tokens": {
+  "input": 10,
+  "cache_write": 7245,
+  "cache_read": 86695,
+  "output": 1168,
+  "total": 95118
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"def open_resource\", \"output_mode\": \"content\", \"-A\": 25}",
+  "Grep {\"pattern\": \"open_resource|root_path\", \"output_mode\": \"content\", \"-i\": true, \"head_limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"offset\": 328, \"limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/schematics.py\", \"offset\": 104, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/app.py\", \"offset\": 363, \"limit\": 30}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 82
+ }
+}

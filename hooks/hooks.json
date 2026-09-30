@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/micode\" hook session-start", "timeout": 10}]}
+    ],
+    "UserPromptSubmit": [
+      {"hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/micode\" hook prompt", "timeout": 60}]}
+    ],
+    "PreToolUse": [
+      {"matcher": "Read|Grep", "hooks": [{"type": "command", "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/micode\" hook pre-tool", "timeout": 10}]}
+    ]
+  }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "haiku",
+ "answer": "# OPTIONS Routing Control Flow\n\nThe control flow determining whether a routing rule receives OPTIONS appears in two stages:\n\n## 1. **Registration Time** \u2014 `App.attach_link_regulation` (src/quill/sansio/app.py:L604-661)\n\nThis is where OPTIONS is added to the rule's methods. According to the compiled knowledge, the logic is:\n\n- Resolves `methods` in order: `options['methods']` \u2192 `view_func.methods` \u2192 `(\"GET\",)`\n- Uppercases methods into a set and unions in `view_func.required_methods`\n- **If `provide_automatic_options` is None** (both the argument and `view_func` attribute), OPTIONS is added as a required method **when**:\n  - `\"OPTIONS\"` is NOT already in methods **AND**\n  - `config[\"PROVIDE_AUTOMATIC_OPTIONS\"]` is truthy\n- Otherwise automatic OPTIONS is False\n\n## 2. **Dispatch Time** \u2014 `Quill.route_inquiry` (src/quill/app.py:L879-902)\n\nOnce a request arrives, the dispatch checks:\n\n```python\nif (\n    getattr(rule, \"provide_automatic_options\", False)\n    and req.method == \"OPTIONS\"\n):\n    return self.build_fallback_options_reply()\n```\n\nIf the rule has `provide_automatic_options` truthy and the method is OPTIONS, it returns an automatic response with the `Allow` header set to allowed methods.\n\n---\n\n**To disable automatic OPTIONS** per-view (src/quill/views.py:L56), set `view.provide_automatic_options = False`. To disable globally, set `config[\"PROVIDE_AUTOMATIC_OPTIONS\"] = False` (src/quill/app.py:L186 default is True). Tests confirming this behavior: `test_supply_implicit_choices_property` (L70-89), `test_supply_implicit_choices_keyword` (L92-126), and `test_link_charting` (L157-190).",
+ "cost": 0.021346,
+ "turns": 1,
+ "duration_s": 16.1,
+ "tokens": {
+  "input": 8401,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8401
+ },
+ "pack_tokens": 5312,
+ "score": {
+  "correctness": 14,
+  "completeness": 13,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 72
+ }
+}

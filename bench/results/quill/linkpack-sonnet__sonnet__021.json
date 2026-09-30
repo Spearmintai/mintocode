@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "sonnet",
+ "answer": "The class is `_ProgramScopeShared` in `src/quill/ctx.py`, which is what `app.app_ctx_globals_class()` returns by default. It stores everything in `self.__dict__` and splits its methods into two groups. Attribute-protocol methods are strict and raise `AttributeError`. Dict-style helper methods let the caller opt out of errors by supplying a default.\n\n**Strict attribute-protocol methods (`AttributeError`)**\n- `__getattr__` (L52-56) returns `self.__dict__[name]`. If that raises `KeyError`, it re-raises `AttributeError(name) from None`. Python's attribute protocol expects `AttributeError`, so `getattr(g, \"x\", default)` and `hasattr` work correctly. The `from None` suppresses the `KeyError` context.\n- `__delattr__` (L61-65) does the same: `del self.__dict__[name]`, converting `KeyError` to `AttributeError(name) from None`.\n- Attribute get and delete never supply defaults. A missing name is always an error.\n\n**Dict-style methods (defaults instead of errors)**\n- `get(name, default=None)` (L67-76) delegates to `self.__dict__.get(name, default)`. It never raises for a missing name and returns `None` unless a default is given. The tests confirm this (`tests/test_programscope.py:L136-137`, `tests/test_elementary.py:L1738-1743`).\n- `pop(name, default=_sentinel)` (L78-90) is the middle case. A module-level `_sentinel` distinguishes \"no default passed\" from \"default is `None`\":\n  - With no default, it calls `self.__dict__.pop(name)`, which raises `KeyError`, not `AttributeError`. This follows `dict.pop` semantics. The test at L148-149 expects `KeyError`.\n  - With a default, including `None`, it returns that default (`tests` L150).\n- `assumefallback(name, default=None)` (L92-102) is meant to be `setdefault`. It returns the existing value, or sets and returns the default, so it never errors for a missing name. The test at L143-145 shows the first value is kept.\n\n**Summary of the balance**\n- `AttributeError` is used only for the attribute syntax (`g.x` and `del g.x`).\n- The named methods follow `dict` conventions. `get` and `assumefallback` never fail on absence. `pop` raises `KeyError` unless you pass a default.\n- So a missing name raises `AttributeError` via attribute syntax, `KeyError` via `pop` without a default, and returns a default via `get` or `pop(..., default)`.\n\n**Caveat: `assumefallback` is broken**\n`assumefallback` calls `self.__dict__.assumefallback(name, default)` (L102). Plain dicts have no such method, since it looks like a rename artifact of `setdefault`. Calling it raises `AttributeError`, so the default-providing path does not work as designed. `tests/test_programscope.py:L143-144` calls `quill.g.assumefallback(...)` and expects it to work, so that test would fail against this code. The docstring at L94 has the same rename. The fix is to call `self.__dict__.setdefault(name, default)`, or to check whether the rename was meant to be applied to the method as well.\n\nThe same problem affects the schematic URL-processor example, where `values.assumefallback('lang_code', g.lang_code)` is called on a plain dict.",
+ "cost": 0.033998,
+ "turns": 1,
+ "duration_s": 10.9,
+ "tokens": {
+  "input": 6783,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6783
+ },
+ "pack_tokens": 3137,
+ "score": {
+  "correctness": 16,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 82
+ }
+}

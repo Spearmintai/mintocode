@@ -1,0 +1,44 @@
+{
+ "answer": "I've read the code and I'm writing up the answer now. Nothing was run or changed. pytest has no explicit \"registration policy\" object today, so what follows is a design proposal built on what the code does.\n\n## Where policy lives now\n\n**In `src/_pytest/config/__init__.py`, `PytestPluginManager`:**\n- `register()` (line 492) has one hard-coded policy. Names in `_pytest.deprecated.DEPRECATED_EXTERNAL_PLUGINS` produce a `PytestConfigWarning` and return `None`. Everything else is delegated to pluggy's `PluginManager.register`. That is where blocked names (`set_blocked`/`is_blocked`) are silently rejected.\n- `consider_pluginarg()` (line 791) holds the `-p no:X` policy in an ad-hoc way:\n  - It raises `UsageError` for names in the module-level `essential_plugins`.\n  - It special-cases `cacheprovider` by also blocking `stepwise` and `pytest_stepwise` (PR #4304).\n  - It blocks both `X` and `pytest_X`.\n  - A plain `-p X` calls `unblock` and then `import_plugin`.\n- `import_plugin()` (line 835) skips a module if `is_blocked(modname)` or `get_plugin(modname)` is not `None`. It maps builtin names through `builtin_plugins` to `_pytest.<name>`, and a `Skipped` exception goes into `skipped_plugins`.\n- `consider_env`, `consider_module`, `consider_conftest` and `_import_plugin_specs` are the other entry paths. Each one ends in `register` or `import_plugin`.\n- `_configured` (set in `pytest_configure`) is a flag that only partly tracks lifecycle.\n\n**In tests:** each policy is checked case by case with assertions.\n- `testing/test_pluginmanager.py` lines 442\u2013483 (`test_plugin_prevent_register`, `..._unregistered_already_registered`, `..._stepwise_on_cacheprovider_unregister`, `test_blocked_plugin_can_be_used`) re-check the block, unregister and stepwise-coupling rules by comparing `get_plugins()` lists.\n- `testing/test_config.py` (about 12 uses, e.g. lines 1311\u20131417) and `testing/logging/test_reporting.py` (lines 1144, 1191) assert on `pluginmanager.get_plugin(...)` results.\n- `testing/acceptance_test.py:939` and `testing/test_terminal.py:1104` do the same through `hasplugin` and `get_plugin`.\n- The only global guard is the `pytester` override in `testing/conftest.py:161`, which sets `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1`. Many tests then undo it with `monkeypatch.delenv(\"PYTEST_DISABLE_PLUGIN_AUTOLOAD\")`. I found this in `test_terminal.py`, `test_junitxml.py`, `test_helpconfig.py`, `acceptance_test.py` and `test_assertion.py`. Each test decides for itself whether third-party plugins may load.\n\n## Proposed redesign\n\n1. **Introduce a `RegistrationPolicy` object owned by `PytestPluginManager`.** It would be a small class or protocol with `check(name, plugin) -> Allow | Reject(reason) | Warn(...)`. It would hold:\n   - `essential_plugins`\n   - the deprecated-external-plugin table\n   - the coupled-block rules (`cacheprovider` \u2192 `stepwise`)\n   - the `X` / `pytest_X` alias normalisation, currently scattered across `consider_pluginarg`\n   - the autoload switch (`PYTEST_DISABLE_PLUGIN_AUTOLOAD`)\n\n   Then `register()`, `import_plugin()` and `consider_pluginarg()` would all call `self._policy.check(...)`. Enforcement would live in one place, at the single choke point `register()`, instead of being split between the `is_blocked` early return in `import_plugin` and the block list checked inside pluggy.\n\n2. **Make the policy injectable.** The `PytestPluginManager.__init__` would accept a policy, or `Config._create_config`/`get_config` would. It would be a strict policy for pytest's own test suite and the default for users. The coupled-block rule would become data (`{\"cacheprovider\": [\"stepwise\", \"pytest_stepwise\"]}`) rather than an `if` branch.\n\n3. **Enforce test-suite rules in the harness, not in individual tests.**\n   - Replace the per-test `monkeypatch.delenv(\"PYTEST_DISABLE_PLUGIN_AUTOLOAD\")` calls with a marker or fixture parameter, for example `@pytest.mark.allow_plugin_autoload`.\n   - Have the `pytester` wrapper in `testing/conftest.py` build the inner `Config` with the strict policy. Any unexpected registration then fails at `register()` time with a clear error, not through a later `assert pm.get_plugin(...)`.\n   - Add an autouse fixture, or a `pytest_plugin_registered` hookimpl (already fired historically from `register`), that fails the session if a plugin outside the approved set gets registered.\n\n4. **Replace assertion-style tests with a table-driven policy test.** Make one parametrised unit test of `RegistrationPolicy` in `testing/test_pluginmanager.py`. The four `test_plugin_prevent_register*` tests would go, leaving only a thin integration test that `PytestPluginManager` calls the policy.\n\n5. **Make lifecycle explicit.** Replace the bare `_configured` boolean with a phase such as `PRE_CONFIGURE`, `CONFIGURED`, `FROZEN`. The policy could then also reject late registrations, such as conftests imported after `pytest_configure`, which `_configured` currently only tracks.\n\n## Trade-offs\n\n- pluggy's `set_blocked` and `is_blocked` would stay as the low-level mechanism. The policy would drive them rather than replace them, so the `-p no:` behaviour stays compatible.\n- `register()` is public API that third-party plugins such as xdist call. A rejection must keep returning `None` or raising the same errors it does now, and only the strict test-suite policy should be able to add new failures.",
+ "cost": 0.13125560000000003,
+ "turns": 12,
+ "duration_s": 34.204,
+ "tokens": {
+  "input": 12,
+  "cache_write": 15953,
+  "cache_read": 123298,
+  "output": 4276,
+  "total": 143539
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"class PytestPluginManager|def register\\\\(|def import_plugin|def _mark_plugins_for_rewrite|def _configure|def _do_configure|def unregister|def set_b",
+  "Grep {\"pattern\": \"pluginmanager\\\\.(register|get_plugin|is_registered)|assert .*get_plugin|assert .*is_registered\", \"path\": \"/home/sq/micode-bench/base/pytest/testing",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/config/__init__.py\", \"offset\": 390, \"limit\": 160}",
+  "Grep {\"pattern\": \"register_plugins|assert_never|is_blocked|set_blocked|PYTEST_DISABLE_PLUGIN_AUTOLOAD|\\\"no:\", \"path\": \"/home/sq/micode-bench/base/pytest\", \"glob\": \"{",
+  "Grep {\"pattern\": \"pluginmanager|get_plugin|PluginManager|pytest_plugins\", \"path\": \"/home/sq/micode-bench/base/pytest/testing/conftest.py\", \"output_mode\": \"content\"}",
+  "Grep {\"pattern\": \"pluginmanager\\\\.(get_plugin|is_registered|hasplugin)|\\\\.hasplugin\\\\(|get_plugin\\\\(\", \"path\": \"/home/sq/micode-bench/base/pytest/testing\", \"output_m",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/conftest.py\", \"offset\": 150, \"limit\": 30}",
+  "Grep {\"pattern\": \"def test_plugin_prevent_register|def test_plugin_prevent_register_unregistered|def test_plugin_prevent_register_stepwise|def test_consider_env|bloc",
+  "Grep {\"pattern\": \"def consider_preparse|def consider_pluginarg|def consider_env|def consider_conftest|def consider_module|def _import_plugin_specs|def import_plugin\"",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/src/_pytest/config/__init__.py\", \"offset\": 764, \"limit\": 120}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/pytest/testing/test_pluginmanager.py\", \"offset\": 436, \"limit\": 50}"
+ ],
+ "arm": "baseline",
+ "repo": "pytest",
+ "k": 22,
+ "question": "How should the plugin manager architecture be redesigned to enforce plugin registration policies at the system level rather than relying on runtime assertion checks in individual test cases?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 14,
+  "completeness": 16,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 16,
+  "total": 74
+ }
+}

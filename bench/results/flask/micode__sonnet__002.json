@@ -1,0 +1,31 @@
+{
+ "answer": "Flask does this with a shared base class (`Scaffold`), a static route that each component registers for itself, and the same cache-age logic in both concrete classes.\n\n**1. Shared base: `Scaffold` (`src/flask/sansio/scaffold.py`)**\n- `Scaffold.__init__` (L78\u201387) takes `static_folder` and `static_url_path`.\n- `Scaffold.static_folder` (L224\u2013238) is a property. The getter returns `os.path.join(root_path, _static_folder)`, or `None` if unset. The setter strips trailing slashes.\n- `has_static_folder` (L241\u2013246) and `static_url_path` (L253\u2013259) are also defined on `Scaffold`.\n- Both `sansio/app.py::App` (L286\u2013297) and `sansio/blueprints.py::Blueprint` (L178\u2013189) inherit these. Static handling is therefore defined once, independently of any WSGI code.\n\n**2. Two separate registration points**\n- **Application:** `Flask.__init__` (`src/flask/app.py`, L262\u2013279) registers the route directly when `has_static_folder` is true.\n  - The route is `f\"{static_url_path}/<path:filename>\"` with endpoint `\"static\"` and `host=static_host`.\n  - The view is a lambda that calls `self_ref().send_static_file(...)` through a `weakref`. This avoids a reference cycle between the app and the view function.\n  - It asserts `bool(static_host) == host_matching`.\n  - It doesn't check that the folder exists, because the folder may be created while the server runs.\n- **Blueprint:** `sansio/blueprints.py::Blueprint.register` (L323\u2013328) registers the route lazily, when the blueprint is registered on an app.\n  - It calls `state.add_url_rule(f\"{self.static_url_path}/<path:filename>\", view_func=self.send_static_file, endpoint=\"static\")`.\n  - `BlueprintSetupState.add_url_rule` (L87\u2013116) then applies the URL prefix, subdomain, and endpoint namespacing (`name_prefix.name.endpoint`).\n\nThe application's static route is added at construction time. A blueprint's static route is added only when the blueprint is registered.\n\n**3. Parallel, consistent serving and caching**\n- `Flask.send_static_file` (`app.py` L308\u2013328) and `Blueprint.send_static_file` (`src/flask/blueprints.py` L82\u2013102) have the same shape.\n  - Each raises `RuntimeError(\"'static_folder' must be set to serve static_files.\")` if there is no static folder.\n  - Each computes `max_age = self.get_send_file_max_age(filename)`.\n  - Each returns `send_from_directory(self.static_folder, filename, max_age=max_age)`.\n- `Flask.get_send_file_max_age` (`app.py` L281\u2013306) and `Blueprint.get_send_file_max_age` (`blueprints.py` L55\u201380) also match.\n  - Both read `current_app.config[\"SEND_FILE_MAX_AGE_DEFAULT\"]`.\n  - Both return `None` for `None`, `int(total_seconds())` for a `timedelta`, and the raw value otherwise.\n  - Because both read the app's config, one setting controls caching for app-level and blueprint-level static files.\n- The comment at `app.py` L323 and `blueprints.py` L97 explains why each class computes `max_age` itself. `send_file` only knows to call `get_send_file_max_age` on the app, so the blueprint has to pass its own result explicitly.\n- `helpers.py` L389 and L498 use `current_app.get_send_file_max_age` as the default for `send_file` and `send_from_directory`, so non-static file sends follow the same policy.\n\n**Summary:** `Scaffold` supplies the static-folder attributes. `Flask.__init__` registers the app's `static` route immediately. `Blueprint.register` registers each blueprint's `static` route lazily. Both `send_static_file` implementations use the same `get_send_file_max_age`, driven by `SEND_FILE_MAX_AGE_DEFAULT`.",
+ "cost": 0.0925872,
+ "turns": 4,
+ "duration_s": 15.521,
+ "tokens": {
+  "input": 6,
+  "cache_write": 15814,
+  "cache_read": 52896,
+  "output": 1874,
+  "total": 70590
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "arm": "micode",
+ "repo": "flask",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 79
+ }
+}

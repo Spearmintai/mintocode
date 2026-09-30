@@ -1,0 +1,227 @@
+{
+ "arm": "micode",
+ "repo": "flask",
+ "session": 1,
+ "model": "sonnet",
+ "steps": [
+  {
+   "answer": "The chain runs from the app, to the runner, to the app-loading helper, and then back to the same app.\n\n**1. `Flask.test_cli_runner`** (`src/flask/app.py:727-742`) is where the chain starts.\n- It picks `self.test_cli_runner_class`, which is declared in `src/flask/sansio/app.py:277`. If that is `None`, it uses `flask.testing.FlaskCliRunner`.\n- It returns `cls(self, **kwargs)`, so the app instance is passed to the runner.\n\n**2. `FlaskCliRunner`** (`src/flask/testing.py:265-298`) subclasses `click.testing.CliRunner`.\n- `__init__` stores `self.app = app` and passes the remaining kwargs to `CliRunner.__init__`.\n- `invoke(cli=None, args=None, **kwargs)` does two things:\n  - If `cli` is `None`, it uses `self.app.cli`. That is the app's `AppGroup`, whose commands are wrapped in `with_appcontext`.\n  - If `\"obj\"` is not in `kwargs`, it sets `obj = ScriptInfo(create_app=lambda: self.app)`.\n- It then calls `super().invoke(cli, args, **kwargs)`. Click's `CliRunner.invoke` handles the isolation by swapping stdin, stdout and the environment. It returns a `click.testing.Result`.\n\n**3. `ScriptInfo`** (`src/flask/cli.py:293-372`) is the application loading helper.\n- It is passed to click as `ctx.obj`.\n- Its `load_app()` (`cli.py:333`) normally finds the app through `app_import_path` or `create_app`. Here `create_app` is the lambda that returns the same app the runner was created from. `FLASK_APP` discovery is therefore bypassed.\n- `load_app()` caches the result in `_loaded_app`.\n\n**4. `with_appcontext`** (`cli.py:380-402`) is the last link.\n- A command wrapped by it calls `ctx.ensure_object(ScriptInfo).load_app()`.\n- If no `current_app` is active, it registers `app.app_context()` with `ctx.with_resource`. The command therefore runs inside an app context for the same app.\n- `AppGroup.command` (`cli.py:405-437`) applies this wrapper automatically, so commands on `app.cli` and `blueprint.cli` need no explicit decorator.\n\n**Dependency summary:** `Flask.test_cli_runner` \u2192 `FlaskCliRunner(app)` \u2192 `CliRunner.invoke` (isolation) with `obj=ScriptInfo(create_app=lambda: app)` \u2192 `with_appcontext` \u2192 `ScriptInfo.load_app()` \u2192 the same `Flask` instance, with its app context pushed.\n\nTo test a standalone command, pass it as `cli`. It still receives the same `ScriptInfo` and app.",
+   "cost": 0.07054360000000001,
+   "turns": 3,
+   "tokens": {
+    "input": 4,
+    "cache_write": 12848,
+    "cache_read": 30518,
+    "output": 1304,
+    "total": 44674
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/testing.py\", \"offset\": 255, \"limit\": 50}",
+    "Grep {\"pattern\": \"def test_cli_runner|test_cli_runner_class|class ScriptInfo|def load_app|def with_appcontext\", \"path\": \"/hom"
+   ],
+   "k": 8,
+   "score": {
+    "correctness": 17,
+    "completeness": 17,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 17,
+    "total": 82
+   }
+  },
+  {
+   "answer": "There is no cycle guard anywhere in this chain, so a self-referencing structure recurses until Python raises `RecursionError`. All the code is in `src/flask/json/tag.py`.\n\n**The call chain**\n\n1. `TaggedJSONSerializer.dumps` (L321-323) calls `self.tag(value)` and then `json.dumps`. It is reached from the session serializer in `src/flask/sessions.py`.\n2. `TaggedJSONSerializer.tag` (L289-295) loops over `self.order`. The first tag whose `check` matches calls `tag.tag(value)`. If nothing matches, the value is returned unchanged.\n3. `TagTuple.check` (L137) matches any `isinstance(value, tuple)`. `JSONTag.tag` (L87-90) then returns `{self.key: self.to_json(value)}`, using the key `\" t\"`.\n4. `TagTuple.to_json` (L140-141) returns `[self.serializer.tag(item) for item in value]`. This is the recursive step. It calls back into `TaggedJSONSerializer.tag` for each item, which goes back to step 2.\n\n**How the recursion nests**\n\n- A tuple inside a tuple goes `tag` \u2192 `TagTuple.tag` \u2192 `TagTuple.to_json` \u2192 `tag` \u2192 and so on.\n- Lists and dicts recurse the same way:\n  - `PassList.to_json` (L153-154) calls `serializer.tag` on each item.\n  - `PassDict.to_json` (L125-128) calls `serializer.tag` on each value.\n  - `TagDict.to_json` (L110-112) calls `serializer.tag` on the single value.\n- `PassList` and `PassDict` set `tag = to_json`, so they add no wrapper layer. Each nesting level costs two Python frames for a tuple (`to_json` plus the list comprehension) and one `tag` frame.\n\n**Why a circular reference never terminates**\n\n- Tuples are immutable, so a cycle has to go through a mutable container. For example, `l = []; t = (l,); l.append(t)` gives `t \u2192 l \u2192 t \u2192 \u2026`.\n- Serializing `t` follows `tag(t)` \u2192 `TagTuple.to_json` \u2192 `tag(l)` \u2192 `PassList.to_json` \u2192 `tag(t)` \u2192 and back to the start.\n- `tag`, `TagTuple.to_json` and `PassList.to_json` keep no visited set, memo or depth counter. No exception is caught either.\n- Nothing later in the pipeline can stop it, because `json.dumps` in `dumps` only runs after `tag` has returned. The plain `json.dumps` cycle check never gets a chance to fire.\n\n**Practical impact**\n\n- The failure is a `RecursionError` raised during `TaggedJSONSerializer.dumps`.\n- This code runs in `SecureCookieSessionInterface.save_session`, so a session that holds a self-referencing structure fails when the response is saved.",
+   "cost": 0.1092766,
+   "turns": 2,
+   "tokens": {
+    "input": 8,
+    "cache_write": 17144,
+    "cache_read": 80523,
+    "output": 2458,
+    "total": 100133
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Grep {\"pattern\": \"class TagTuple|class PassList|class PassDict|def to_json|def tag\\\\(|def dumps\", \"path\": \"/home/sq/micode-be"
+   ],
+   "k": 9,
+   "score": {
+    "correctness": 17,
+    "completeness": 17,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 17,
+    "total": 82
+   }
+  },
+  {
+   "answer": "The class is `TestStreaming` in `tests/test_helpers.py` (L236-307). It is a plain pytest test class grouping tests around one feature, `flask.stream_with_context`. It has no base class and no `setup` or `teardown` methods. It is fixture-driven, black-box testing rather than a unit test of internals.\n\n**How it separates the two concerns**\n\n- **Context lifecycle is left to the framework and the fixtures.**\n  - The `app` and `client` fixtures come from `tests/conftest.py`.\n  - `client.get(...)` makes Flask push and pop the request context, so the tests never manage it.\n- **The streaming logic is written inline in each test.**\n  - Each test registers a route whose view builds a local `generate()` generator.\n  - The generator reads request-bound state, such as `flask.request.args[\"name\"]` or `flask.session[\"test\"]`.\n  - The view wraps it as `flask.Response(flask.stream_with_context(generate()))`.\n- **The wrapper is the only link between the two.** `stream_with_context` (`src/flask/helpers.py:62-136`) is the decorator or wrapper that keeps the request context alive while the generator is consumed.\n- **Assertions are on the output only.** Each test checks `rv.data` after the client has consumed the response. The tests never inspect context objects directly.\n\n**The four tests**\n\n- `test_streaming_with_context` (L237) wraps a generator object directly. The generator reads `request.args`, and the result is `b\"Hello World!\"`.\n- `test_streaming_with_context_as_decorator` (L250) uses `@stream_with_context` on a generator function that takes arguments.\n- `test_streaming_with_context_and_custom_close` (L264) uses a `Wrapper` class that acts as a hand-written test double for an iterator with `close()`. It records `called == [42]` to check that closing is propagated. This is the only test-double use in the class.\n- `test_stream_keeps_session` (L295) sets `flask.session[\"test\"]` in the view and reads it back inside the generator. It checks that the session survives streaming.",
+   "cost": 0.16579880000000002,
+   "turns": 4,
+   "tokens": {
+    "input": 14,
+    "cache_write": 24124,
+    "cache_read": 169774,
+    "output": 3532,
+    "total": 197444
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Grep {\"pattern\": \"class Test.*|def test_.*stream|stream_with_context\", \"path\": \"/home/sq/micode-bench/repos/flask/tests/test_",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/tests/test_helpers.py\", \"offset\": 236, \"limit\": 74}",
+    "Grep {\"pattern\": \"def stream_with_context\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/helpers.py\", \"output_mode\": "
+   ],
+   "k": 10,
+   "score": {
+    "correctness": 13,
+    "completeness": 10,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 13,
+    "total": 67
+   }
+  },
+  {
+   "answer": "I read \"the decorator\" as `flask.after_this_request`. If you meant a different decorator, tell me which. The coupling below comes from the code I checked. I did not run any nested or conditional registration to confirm the failure cases.\n\n**Where the state lives**\n\n- `after_this_request` is in `src/flask/ctx.py` (about L127-149). It has no state of its own.\n  - It looks up the current `RequestContext` and raises `RuntimeError` if there is none.\n  - Otherwise it runs `ctx._after_request_functions.append(f)` and returns `f` unchanged (L148-149).\n- The list is created in `RequestContext.__init__` (`ctx.py:331`). It is a per-request-context list, not a per-view or per-route one.\n\n**Where it is consumed**\n\n- `Flask.process_response` (`src/flask/app.py:1310-1316`) fetches `request_ctx._get_current_object()`.\n  - It calls every function in `ctx._after_request_functions` on the response.\n  - It does this before the blueprint and app `after_request` handlers.\n- Nothing empties the list. The functions live as long as the context.\n\n**The hidden coupling and the problems it causes**\n\n- **Registration only works while a request context is active.**\n  - The decorator reads the context from a contextvar, which is implicit state.\n  - Registering at import time, in app setup, in a CLI command, or inside a streaming generator that outlives the request fails. The decorator has to run inside the view, or inside something it calls.\n- **Conditional registration is invisible to the response.**\n  - Whether a callback runs depends on whether that code path executed during this request.\n  - Nothing is declared up front. A `before_request` handler, a view or a helper can each append to the same list.\n  - Ordering follows execution order, not a declared order.\n- **Nested registration and decorator reuse.**\n  - A callback registered inside another callback appends to the list while `process_response` is iterating it. Whether it then runs depends on how Python's `for` loop handles a list that grows during iteration.\n  - Each registration is one entry. Registering the same function twice, for example in a helper called from two branches, runs it twice on the same response.\n- **The list is coupled to `process_response`, not to a particular view.** Any response that passes through `process_response` triggers the callbacks. That includes error-handler responses, so a callback registered before an exception still runs on the 500 or error-page response.\n- **Streaming is not covered.** The callbacks run when `process_response` runs. Anything a streamed generator registers later is missed, because the response has already been processed.",
+   "cost": 0.20367140000000003,
+   "turns": 2,
+   "tokens": {
+    "input": 18,
+    "cache_write": 26755,
+    "cache_read": 241927,
+    "output": 4823,
+    "total": 273523
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Grep {\"pattern\": \"_after_request_functions\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask\", \"output_mode\": \"content\","
+   ],
+   "k": 11,
+   "score": {
+    "correctness": 14,
+    "completeness": 14,
+    "relevance": 15,
+    "clarity": 16,
+    "reasoning": 15,
+    "total": 74
+   }
+  },
+  {
+   "answer": "The wrapper is `_lazy_sha1` in `src/flask/sessions.py` (L290-295). It works by passing a function around instead of the `hashlib.sha1` attribute, so the lookup happens later.\n\n**The wrapper**\n- `_lazy_sha1(string: bytes = b\"\")` only runs `return hashlib.sha1(string)`.\n- Its docstring gives the reason: FIPS builds may not include SHA-1. If Flask used `hashlib.sha1` as the default, the import or the class body would fail before the developer could configure something else.\n\n**How the class attribute defers the check**\n- `SecureCookieSessionInterface.digest_method = staticmethod(_lazy_sha1)` (L307) stores the wrapper, not the result of `hashlib.sha1`.\n- `staticmethod` stops Python from binding `self` when the attribute is read through an instance. The signer can therefore call `digest_method(data)` as a plain callable.\n- Defining the class touches nothing in `hashlib` that could fail. `hashlib.sha1` is only looked up when the wrapper is called.\n\n**Where it is called**\n- `SecureCookieSessionInterface.get_signing_serializer` (around L327-335) builds `URLSafeTimedSerializer(...)`. It passes `signer_kwargs={\"key_derivation\": self.key_derivation, \"digest_method\": self.digest_method}`.\n- itsdangerous' signer calls that `digest_method` when it signs or verifies a cookie. This happens at request time, in `open_session` and `save_session`.\n- On a restricted build, the failure therefore shows up at the first session operation. It does not show up at `import flask`.\n\n**Why this helps in a restricted environment**\n- Setting `digest_method` on a subclass, for example to `hashlib.sha256`, replaces the wrapper. SHA-1 is then never touched.\n- The app imports and starts cleanly, because the missing-algorithm error is deferred to the first cookie signing or verification, and a replacement digest avoids it altogether.",
+   "cost": 0.26384700000000005,
+   "turns": 3,
+   "tokens": {
+    "input": 24,
+    "cache_write": 33045,
+    "cache_read": 366045,
+    "output": 5841,
+    "total": 404955
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Grep {\"pattern\": \"_lazy_sha1|sha1\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask\", \"output_mode\": \"content\", \"-B\": 2,",
+    "Grep {\"pattern\": \"digest_method\", \"path\": \"/home/sq/micode-bench/repos/flask/src/flask/sessions.py\", \"output_mode\": \"content\""
+   ],
+   "k": 12,
+   "score": {
+    "correctness": 17,
+    "completeness": 15,
+    "relevance": 17,
+    "clarity": 17,
+    "reasoning": 17,
+    "total": 83
+   }
+  },
+  {
+   "answer": "The decorator is `copy_current_request_context` in `src/flask/ctx.py` (L155-193). It copies the request context through `RequestContext.copy()` (L337-355).\n\n**At decoration time**\n- `copy_current_request_context(f)` reads `ctx = _cv_request.get(None)`. If no request context is active it raises `RuntimeError`.\n- It then calls `ctx = ctx.copy()` straight away, when the decorator is applied and not when `f` runs. The copy is therefore taken from the request that is active at that point.\n\n**What `RequestContext.copy()` does**\n- It returns `self.__class__(self.app, environ=self.request.environ, request=self.request, session=self.session)`.\n- The copy shares the same `Request` object and the same session object. This is the session-preservation step.\n- Passing `session=self.session` (changed in 1.1) means `flask.session` in the copy points at the current session. Reloading from the original cookie data would give an out-of-date object.\n- The copy is a new `RequestContext`. It has its own `_cv_tokens` stack, so pushing and popping it does not disturb the original context's stack.\n\n**At call time**\n- The wrapper runs `with ctx: return ctx.app.ensure_sync(f)(*args, **kwargs)`. Entering the `with` block pushes the copied context.\n- Pushing sets the `_cv_request` contextvar, and the matching app context if needed, inside the greenlet or thread that is running the function. That is the isolation step.\n- Each execution context has its own contextvar binding. `flask.request`, `flask.session` and `flask.g` in the spawned function resolve to the copy, whatever else is happening in the main request.\n- `ensure_sync` lets `f` be a sync or async function.\n- `update_wrapper(wrapper, f)` keeps the name and docstring of `f`.\n\n**Limits**\n- The `Request` object is shared, not cloned. `copy()` warns that the copy is safe for greenlets but not for threads, unless access to the request is locked.\n- The session is also shared, so changes made in the background function are visible to the original context. Whether they are saved to the cookie depends on the original response still being processed.",
+   "cost": 0.2863608000000001,
+   "turns": 1,
+   "tokens": {
+    "input": 26,
+    "cache_write": 34665,
+    "cache_read": 410194,
+    "output": 6561,
+    "total": 451446
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [],
+   "k": 13,
+   "score": {
+    "correctness": 17,
+    "completeness": 15,
+    "relevance": 17,
+    "clarity": 17,
+    "reasoning": 16,
+    "total": 82
+   }
+  },
+  {
+   "answer": "The method is `CertParamType.convert` in `src/flask/cli.py` (L791-825). `CertParamType` (L780-825) is a `click.ParamType` subclass used as the type of the `--cert` option of `flask run`. Its fallback chain is a `try` / `except click.BadParameter` block, and it works as follows.\n\n**Setup**\n- `__init__` (L788-789) builds `self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)`.\n- `convert` first does `import ssl`. If that fails it raises `click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`.\n\n**Fallback chain**\n1. **File path.**\n   - `return self.path_type(value, param, ctx)` (L804) is tried first.\n   - If the value names an existing file, it is returned resolved to an absolute path.\n   - A directory, or a path that does not exist, raises `click.BadParameter`. The `except` clause catches that (L805) and moves to the next steps.\n2. **The `adhoc` string.**\n   - The value is normalised with `click.STRING(value, param, ctx).lower()` (L806).\n   - If it equals `\"adhoc\"` (L808), the method tries `import cryptography`.\n   - If that import fails, it raises `BadParameter(\"Using ad-hoc certificates requires the cryptography library.\")`.\n   - Otherwise it returns the string `\"adhoc\"`. The server later uses it to generate a temporary certificate.\n3. **An `SSLContext` import.**\n   - `obj = import_string(value, silent=True)` (L820) tries to import the value as a dotted or colon-separated name.\n   - `silent=True` returns `None` when the import fails, so no exception is raised at this point.\n   - If `isinstance(obj, ssl.SSLContext)` (L822), it returns `obj`.\n4. **Final failure.**\n   - If none of these apply, a bare `raise` (L825) re-raises the original `BadParameter` from the path check.\n   - The user therefore sees the standard file-not-found style message for the value.\n\n**How it fits with `--key`**\n- The value returned by `convert` feeds the `_validate_key` callback (L828 onward) on `--key`.\n- `--key` is rejected for `adhoc` or an `SSLContext`, and required for a file. With both `--cert` and `--key`, `ctx.params[\"cert\"]` becomes the `(cert, key)` tuple.",
+   "cost": 0.32810180000000005,
+   "turns": 2,
+   "tokens": {
+    "input": 30,
+    "cache_write": 38083,
+    "cache_read": 503449,
+    "output": 7502,
+    "total": 549064
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/cli.py\", \"offset\": 780, \"limit\": 50}"
+   ],
+   "k": 14,
+   "score": {
+    "correctness": 18,
+    "completeness": 15,
+    "relevance": 16,
+    "clarity": 17,
+    "reasoning": 14,
+    "total": 80
+   }
+  },
+  {
+   "answer": "The `url_prefix` has no effect on the filter. Filter registration is deferred and app-wide, and it only touches `app.jinja_env`. The prefix only changes how routes are registered. All the code is in `src/flask/sansio/blueprints.py`.\n\n**1. Recording the filter (blueprint setup time)**\n- `Blueprint.app_template_filter` (L443-458) is the decorator form. It calls `add_app_template_filter(f, name)` and returns `f` unchanged.\n- `Blueprint.add_app_template_filter` (L460-475) defines an inner function, `register_template(state)`. Its body is `state.app.jinja_env.filters[name or f.__name__] = f`.\n- It passes that function to `self.record_once(register_template)` instead of running it. No `Flask` app exists yet at this point.\n- `Blueprint.record_once` (L232-244) wraps the function so it runs only when `state.first_registration` is true. It then calls `Blueprint.record` (L223-230), which appends it to `self.deferred_functions`.\n\n**2. Mounting the blueprint (app registration time)**\n- `Flask.register_blueprint` calls `Blueprint.register(app, options)` (L273-377), where `options` may contain `url_prefix`.\n- `register` works out `first_bp_registration = not any(bp is self for bp in app.blueprints.values())` (L316).\n- It then builds the state with `make_setup_state(app, options, first_bp_registration)` (L321).\n- `BlueprintSetupState.__init__` (L41-85) resolves `url_prefix`, with `options[\"url_prefix\"]` taking precedence over `blueprint.url_prefix`. It stores the result on the state.\n- `register` then runs every function in `deferred_functions` with that state, including `register_template`.\n\n**3. Why the prefix does not matter for filters**\n- `register_template` never reads `state.url_prefix`. It writes to `state.app.jinja_env.filters`, the app's single Jinja environment.\n- The prefix is used only in `BlueprintSetupState.add_url_rule` (L87-116). That method joins `url_prefix.rstrip(\"/\")` with the rule and registers the endpoint as `{name_prefix}.{name}.{endpoint}`. Filters and routes go through different deferred functions.\n- Because the filter lives in the shared `jinja_env`, any template the app renders can use it. That includes templates rendered from other blueprints and from the app itself. It is not limited to this blueprint's own routes or prefix.\n\n**4. Effect of `record_once`**\n- The filter is installed only on the first registration of this blueprint object. If the same blueprint is registered again, for example under another name or prefix, it is not installed a second time. It is the same filter in the same shared environment, so nothing changes for templates.\n- `_got_registered_once` (set at L320) makes the `@setupmethod` check in `_check_setup_finished` (L213-221) raise if `add_app_template_filter` is called after registration. The filter must be added before the blueprint is registered.",
+   "cost": 0.4005208,
+   "turns": 4,
+   "tokens": {
+    "input": 36,
+    "cache_write": 44914,
+    "cache_read": 655814,
+    "output": 8963,
+    "total": 709727
+   },
+   "session_id": "3377a466-989a-4bc5-85d5-cf9f04e6ca8c",
+   "calls": [
+    "Grep {\"pattern\": \"def record_once|def record\\\\(|def add_app_template_filter|def app_template_filter|def register\\\\(|_got_regi",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sansio/blueprints.py\", \"offset\": 314, \"limit\": 20}",
+    "Read {\"file_path\": \"/home/sq/micode-bench/repos/flask/src/flask/sansio/blueprints.py\", \"offset\": 458, \"limit\": 20}"
+   ],
+   "k": 15,
+   "score": {
+    "correctness": 17,
+    "completeness": 17,
+    "relevance": 16,
+    "clarity": 17,
+    "reasoning": 17,
+    "total": 84
+   }
+  }
+ ],
+ "reader_tokens": 0,
+ "reader_cost": 0.0,
+ "tokens": 2730966,
+ "cost": 1.8281208000000002,
+ "turns": 21,
+ "score": [
+  82,
+  82,
+  67,
+  74,
+  83,
+  82,
+  80,
+  84
+ ]
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "reader-haiku",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "haiku",
+ "answer": "# Why `launch_asset` Restricts to Read-Only Modes\n\nThe material shows that `launch_asset` enforces read-only access but doesn't explicitly state the design rationale. However, the distinction is clear from the implementation:\n\n## The Design Pattern\n\n`launch_asset` (both in `src/quill/app.py:L330-361` and `src/quill/schematics.py:L104-128`) restricts to modes `{'r', 'rt', 'rb'}` to protect **application package resources** stored relative to `root_path`. Any other mode raises `ValueError(\"Resources can only be opened for reading.\")` (lines 354 and 121 respectively).\n\nIn contrast, there's a separate method `launch_deployment_asset` (`src/quill/app.py:L363-383`) that:\n- Opens files relative to `instance_path` instead of `root_path`\n- Allows **any mode, including write modes**\n- Is explicitly documented: \"Unlike :meth:`launch_asset`, files in the instance folder can be opened for writing.\"\n\n## Implicit Rationale\n\nThe design distinguishes between two types of resources:\n\n1. **Application package resources** (`root_path`) \u2014 read-only, part of the application distribution\n2. **Deployment instance resources** (`instance_path`) \u2014 writable, for runtime configuration and data\n\nHowever, **the provided material does not contain an explicit statement of the design reasoning** \u2014 only the implementation that enforces this distinction. For a fuller explanation of why this architectural choice was made, you would need to check the project's design documentation or commit history.",
+ "cost": 0.013472,
+ "turns": 1,
+ "duration_s": 9.6,
+ "tokens": {
+  "input": 5349,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5349
+ },
+ "pack_tokens": 3314,
+ "score": {
+  "correctness": 14,
+  "completeness": 10,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 11,
+  "total": 67
+ }
+}

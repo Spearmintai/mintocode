@@ -1,0 +1,41 @@
+{
+ "answer": "Nothing copies template callables between environments. The app has one Jinja environment, and every registration path writes into that object or into a dict the render step reads. I didn't open the source myself. This answer comes from a subagent's trace of the code, including its line numbers.\n\n## 1. One shared environment, built lazily\n- `App.markup_engine_env` is a `cached_property` in `src/quill/sansio/app.py` (around L469-477). It calls `build_layout_ecosystem()`, which the sansio class leaves as `NotImplementedError`.\n- The concrete `Quill.build_layout_ecosystem` (`src/quill/app.py:385-423`) builds it once with `self.jinja_environment(self, **options)`. That class is `layouting.Ecosystem`, the default `jinja_environment` (`sansio/app.py` L169).\n- It seeds the globals `build_link_to`, `obtain_briefly_shown_notes`, `config`, `request`, `session` and `g` (L411-421).\n- Because it is cached, `jinja_options` changes made after first access have no effect.\n- `Ecosystem.__init__` (`src/quill/layouting.py:45-49`) stores `self.app`. It defaults the loader to `app.build_universal_layout_fetcher()`, which is `RoutingTemplateFetcher` (L52-123). That loader searches the app and then every schematic via `app.walk_plans()`.\n\n## 2. Schematics record callbacks and replay them on enrollment\n- `Schematic.record` (`src/quill/sansio/schematics.py:223-230`) appends to `self.deferred_functions`.\n- `Schematic.note_once_only` (L232-244) wraps a callback so it runs only when `state.first_registration` is true. Registering the same schematic twice therefore doesn't duplicate the work.\n- `App.enroll_plan` (`sansio/app.py:570`) calls `Schematic.enroll` (`sansio/schematics.py:273-377`).\n- `enroll` builds a `SchematicSetupStatus` (L321) whose `.app` is the target app. It then runs `for deferred in self.deferred_functions: deferred(state)` (L334-335).\n\n## 3. Filters, tests and globals go straight into the shared environment\n- `program_layout_sieve` (L443-458) calls `attach_program_layout_sieve` (L460-475). That registers `register_template(state)`, which does `state.app.markup_engine_env.filters[name or f.__name__] = f`.\n- `program_layout_probe` writes to `.tests` the same way (from L477).\n- `program_layout_universal` (L515-532) writes to `.globals`.\n- The app-level equivalents write directly, without deferral. They are `App.layout_sieve` and `attach_layout_sieve` (`sansio/app.py:663-695`), `attach_layout_universal` (L764-776), and `layout_check` with `attach_layout_probe` nearby.\n- Schematic and app registrations reach the same `markup_engine_env`, so they are visible to every template, including ones rendered from schematic views.\n\n## 4. Context processors are stored on the app and applied at render time\n- `program_scope_processor` (`sansio/schematics.py:583-593`) uses `note_once_only` to append to `app.template_context_processors[None]`.\n- Schematic-only processors (`scope_enricher`) are stored under the schematic's name. `_combine_schematic_functions` (L410) merges them into the app's dict, and `enroll` calls it at L331-332. Unlike the `note_once_only` callbacks, this merge runs only on the first blueprint or name registration.\n- The storage dict is created in `sansio/skeleton.py:182`. The app-level `scope_enricher` appends to `[None]` at L555.\n- At render time, `_render` (`src/quill/layouting.py:126-135`) and `_stream` (L165-185) call `app.refresh_layout_scope(context)`.\n- `Quill.refresh_layout_scope` (`src/quill/app.py:506-532`) iterates `(None, *reversed(request.schematics))` and updates the context with each processor's result. It then re-applies the original context, so values passed to `draw_layout` override processor results. The `request.schematics` part applies only when a request is active.\n- `_fallback_layout_scope_handler` (`layouting.py:24-36`) supplies `g`, `request` and `session`.\n\n## 5. Guard against late registration\n- The `@preparationmethod` setup methods call `_verify_configuration_completed` (`sansio/schematics.py:213-221`). After the first enrollment (`_got_registered_once = True`, L320) it raises `AssertionError`, so late changes can't apply inconsistently.\n\n## Tests that pin this behavior (`tests/test_schematics.py`)\n- `test_layout_sieve` (L362-372) checks the filter is in `app.markup_engine_env.filters` after `enroll_plan`.\n- `test_append_layout_sieve` (L375-385) covers the non-decorator form.\n- `test_layout_sieve_with_layout` (L414-428) renders a template that uses the filter.\n- `test_layout_predicate` (L498-508) covers tests.\n- `test_layout_universal` (L675-693) checks the global is absent before enrollment and usable in a template afterwards.\n- `test_scope_handling` (L634-672) checks that `program_scope_processor` is app-wide while `scope_enricher` applies only to the schematic's views.",
+ "cost": 0.14304709999999998,
+ "turns": 1,
+ "duration_s": 10.623,
+ "tokens": {
+  "input": 14,
+  "cache_write": 24726,
+  "cache_read": 87138,
+  "output": 4909,
+  "total": 116787
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Agent {\"description\": \"Template filter registration question\", \"subagent_type\": \"micode:micode-explorer\", \"prompt\": \"What mechanisms ensure that template processing f",
+  "mcp__micode__ask {\"question\": \"How are template filters, tests, globals, context processors registered by Blueprint/Schematic registration made available to the shared jinja_env",
+  "Grep {\"pattern\": \"def note_once_only|def note\\\\b|def enroll|deferred_functions|template_context_processors|def refresh_layout_scope|first_registration|_got_registere",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/layouting.py\", \"limit\": 60}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 205, \"limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 316, \"limit\": 25}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/app.py\", \"offset\": 504, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/sansio/schematics.py\", \"offset\": 575, \"limit\": 20}"
+ ],
+ "arm": "micode_deleg",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 16,
+  "completeness": 16,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 15,
+  "total": 75
+ }
+}

@@ -1,0 +1,34 @@
+{
+ "answer": "The conversion is `CertificateOptionKind.transform` in `src/quill/cli.py:791-825`. `CertificateOptionKind` is a `click.ParamType` subclass (L780-825) and is the `type` of the `--cert` option on the `run` directive (`execute_directive`, L882-993).\n\n**Setup.** `__init__` (L788-789) builds `self.path_type = click.Path(exists=True, dir_okay=False, resolve_path=True)`. That path type is the first link in the chain.\n\n**Fallback chain in `transform`:**\n\n1. **SSL guard (L794-801).** It tries `import ssl`. If that fails, it raises `click.BadParameter('Using \"--cert\" requires Python to be compiled with SSL support.')`. Nothing else is attempted in that case.\n2. **File path (L803-804).** Inside a `try`, it calls `self.path_type(value, param, ctx)`. If the value is an existing, non-directory file, the resolved absolute path is returned.\n3. **Fallback on `click.BadParameter` (L805).** The `except` branch normalises the value with `click.STRING(value, ...).lower()` (L806). The value is lowercased here, so `\"ADHOC\"` also matches.\n4. **Adhoc string (L808-818).** If the value equals `\"adhoc\"`, it tries `import cryptography`. If that fails, it raises `BadParameter(\"Using ad-hoc certificates requires the cryptography library.\")`. Otherwise it returns the string `\"adhoc\"`.\n5. **SSLContext import (L820-823).** Otherwise it calls `import_string(value, silent=True)`. `silent=True` returns `None` on import failure instead of raising. If the result is an `ssl.SSLContext`, that object is returned.\n6. **Final failure (L825).** A bare `raise` re-raises the original `BadParameter` from the path check, so the user sees the usual \"file does not exist\" error.\n\nThe value can therefore come back as a resolved path `str`, the literal `\"adhoc\"`, or an `ssl.SSLContext` instance.\n\n**Follow-up in `_check_token` (L828-864).** This is the callback for `--key`. It reads `ctx.params[\"cert\"]` and works out `is_adhoc` and `is_context` (an `isinstance` check against `ssl.SSLContext`, guarded by its own `import ssl`).\n- If `--key` is given with adhoc or an `SSLContext`, it raises `BadParameter`.\n- If `--key` is given with no `--cert`, it raises `'\"--cert\" must also be specified.'`.\n- If `--key` is given with a cert file, it replaces `ctx.params[\"cert\"]` with a `(cert, key)` tuple.\n- If `--key` is absent but `--cert` is a file, it raises `'Required when using \"--cert\".'`.\n\n**Tests.** `tests/test_terminal_tool.py` covers this in three tests:\n- `test_launch_certificate_location` (L584-599)\n- `test_launch_certificate_improvised` (L602-616)\n- `test_launch_certificate_loading` (L619-638)",
+ "cost": 0.0576912,
+ "turns": 2,
+ "duration_s": 9.201,
+ "tokens": {
+  "input": 4,
+  "cache_write": 9798,
+  "cache_read": 34556,
+  "output": 1158,
+  "total": 45516
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Read {\"file_path\": \"/home/sq/micode-bench/repos/quill/src/quill/cli.py\", \"offset\": 778, \"limit\": 88}"
+ ],
+ "arm": "micode_v3",
+ "repo": "quill",
+ "k": 14,
+ "question": "How does the certificate parameter conversion method for the CLI certificate option implement a fallback chain to handle file paths, adhoc certificate strings, and SSLContext object imports?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 14,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 76
+ }
+}

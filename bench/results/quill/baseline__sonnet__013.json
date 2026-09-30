@@ -1,0 +1,38 @@
+{
+ "answer": "The decorator is `duplicate_active_inquiry_scope` in `src/quill/ctx.py` (lines 155\u2013193). It is Quill's version of Flask's `copy_current_request_context`. It works together with `InquiryScope.copy()` and `InquiryScope.push()`/`pop()` in the same file.\n\n**At decoration time**\n- The decorator reads the active request context with `_cv_request.get(None)`. `_cv_request` is a `ContextVar` from `globals.py`.\n- If no context is active, it raises `RuntimeError`: \"'duplicate_active_inquiry_scope' can only be used when a request context is active...\".\n- Otherwise it calls `ctx.copy()` once, immediately. The copy is taken when the function is decorated, not when it runs.\n\n**How `InquiryScope.copy()` (ctx.py:337\u2013355) preserves the session**\n- It builds a new `InquiryScope` with the same `app`, the same `environ` (`self.request.environ`), and the same `request` object.\n- It also passes `session=self.session`, so the copy holds the live session object, not a reloaded one.\n- Per the `versionchanged:: 1.1` note, this stops `quill.session` from pointing at an out-of-date object.\n- The docstring warns that the request object is shared. The copy is therefore safe for greenlets, but not for other threads unless access to the request is locked.\n\n**How isolation works at call time**\n- The returned `wrapper` runs `with ctx:`, which calls `InquiryScope.push()` and `pop()`.\n- `push()` (around line 378) does `_cv_request.set(self)` and stores the token, together with the current program-scope frame, in the copy's own `_cv_tokens` list.\n- Because these are `ContextVar`s, a greenlet started with `gevent.spawn(...)` sets the variable in its own context. Its push and pop do not touch the spawning greenlet's context.\n- The copy is a separate `InquiryScope` object with its own token stack, so it can be pushed and popped independently of the original.\n- `push()` only opens a session when `self.session is None` (lines 384\u2013389). Its comment explains that opening one again on a repeat push would lose the session. Since `copy()` supplies the existing session, no new one is loaded, and the session is carried across the boundary.\n- `push()` also matches the URL after the session is set (line 391 onward), so custom URL converters can see the session.\n- The wrapper calls `ctx.app.guarantee_blocking(f)(*args, **kwargs)`, which runs the wrapped function through the app's blocking-guarantee adapter.\n- `update_wrapper(wrapper, f)` keeps the original function's name and docstring.\n\nI did not open the tests in `tests/test_callscope.py`, so I haven't checked how they exercise this.",
+ "cost": 0.0593816,
+ "turns": 6,
+ "duration_s": 20.906,
+ "tokens": {
+  "input": 10,
+  "cache_write": 6717,
+  "cache_read": 86618,
+  "output": 1517,
+  "total": 94862
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"copy_current_request_context|greenlet|gevent\", \"output_mode\": \"files_with_matches\"}",
+  "Grep {\"pattern\": \"copy_current_request_context|greenlet|def copy|_cv_|session\", \"path\": \"/home/sq/micode-bench/base/quill/src/quill/ctx.py\", \"output_mode\": \"content\"",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/ctx.py\", \"offset\": 148, \"limit\": 40}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/ctx.py\", \"offset\": 335, \"limit\": 30}",
+  "Read {\"file_path\": \"/home/sq/micode-bench/base/quill/src/quill/ctx.py\", \"offset\": 186, \"limit\": 14}"
+ ],
+ "arm": "baseline",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 17,
+  "completeness": 15,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

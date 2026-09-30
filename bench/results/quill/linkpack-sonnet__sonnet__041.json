@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 41,
+ "question": "Where is the test class that validates URL generation with anchors, schemes, and HTTP methods defined?",
+ "model": "sonnet",
+ "answer": "The test class is `TestAddressBuilding`, defined in `tests/test_aids.py` at lines 102-169. It tests `quill.build_link_to`, the module-level helper in `src/quill/helpers.py` (L188-239) that delegates to `current_app.build_link_to` (`Quill.build_link_to` in `src/quill/app.py`, starting at L1003).\n\nEach test uses the `app` and `qry_scope` fixtures. `qry_scope`, from `tests/conftest.py` L60-63, yields `app.test_call_scope()`, which is a request context.\n\nThe tests in the class:\n\n- **Anchor**\n  - `test_link_for_with_fragment` (L103-108): `_anchor=\"x y\"` gives `\"/#x%20y\"`.\n- **Scheme and external**\n  - `test_link_for_with_protocol` (L110-118): `_external=True, _scheme=\"https\"` gives `\"https://localhost/\"`.\n  - `test_link_for_with_protocol_not_outside` (L120-129):\n    - A `_scheme` without `_external` implicitly makes the URL external, giving `\"https://localhost/\"`.\n    - `_scheme=\"https\"` with `_external=False` raises `ValueError`.\n  - `test_link_for_with_swapping_protocols` (L131-141): `_external=True` gives `http://localhost/`, then with `_scheme=\"https\"` gives `https://localhost/`, then back to `http://localhost/`.\n- **HTTP method**\n  - `test_link_with_verb` (L143-162):\n    - Defines a `VerbPage` subclass `MyView` with `get` and `post`, and turns it into a page with `MyView.to_page(\"myview\")`.\n    - Attaches three rules with `attach_link_regulation`: `/myview/` (GET), `/myview/<int:id>` (GET) and `/myview/create` (POST).\n    - `_method=\"GET\"` gives `/myview/`, `id=42` with GET gives `/myview/42`, and `_method=\"POST\"` gives `/myview/create`.\n- **Route variable named `self`**\n  - `test_link_for_with_this` (L164-169): a route `/<self>` builds `\"/2\"` from `self=\"2\"`. This test is not about anchors, schemes or methods, but it sits in the same class.\n\nThe three areas you asked about (anchors, schemes and HTTP methods) are all covered in this one class. The scheme and external behaviour is also tested elsewhere: `tests/test_programscope.py` L8-18 and `tests/test_elementary.py` L1339-1348.",
+ "cost": 0.035938,
+ "turns": 1,
+ "duration_s": 8.4,
+ "tokens": {
+  "input": 7706,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7706
+ },
+ "pack_tokens": 4028,
+ "score": {
+  "correctness": 17,
+  "completeness": 17,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 17,
+  "total": 83
+ }
+}

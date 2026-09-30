@@ -1,0 +1,35 @@
+{
+ "answer": "`SurpriseCharsetFault` (`src/quill/diagnosticassistants.py:17-20`) is declared as `class SurpriseCharsetFault(AssertionError, UnicodeError)`. Its docstring says it is for \"places where we want some better error reporting for unexpected unicode or binary data.\" Beyond that, the class body has no code, so the design is all in the two bases.\n\nThree things about the class are worth knowing first:\n\n- **It is never raised in this source tree.** A grep of `src/` finds only the definition. It is a declared but currently unused hook, so the points below are about what the design allows, not observed behaviour.\n- **The empty body is deliberate.** All the behaviour comes from the two parents.\n- **The dual base is the same pattern as its siblings.** `TroubleshootUploadsMissingKey(KeyError, AssertionError)` (L23) and `FormPayloadPathForwarding(AssertionError)` (L50) sit in the same module. `TroubleshootUploadsMissingKey` is raised from `request.files`, which `append_encoding_fault_multimap` (L81) wires up. `FormPayloadPathForwarding` is documented as raised only in debug mode (L76). The module is the debug-mode diagnostics layer.\n\n**What each base means**\n\n- **`AssertionError`** marks the fault as a developer-facing failure that only shows up in debug mode. `envelope_types.Request._read_form_payload` (L197-210) only calls into `diagnosticassistants` when `current_app.debug` is true. Production code paths keep raising the ordinary Werkzeug or `BadRequest` errors.\n- **`UnicodeError`** marks it as a data-encoding failure. Code that catches `UnicodeError` or `ValueError` around decoding still catches the diagnostic version. Werkzeug and Python's decoding machinery raise `UnicodeError` subclasses, so the richer error can stand in for the plain one without changing what callers catch.\n\n**Architectural decisions this reflects**\n\n1. **Validation failures and encoding issues are separate categories.** The type system keeps them apart, and a single exception can belong to both without merging them. A handler can treat it as \"a bug or contract violation to fix in the app\" via `AssertionError`, or as \"bad bytes or charset\" via `UnicodeError`.\n2. **Diagnostics sit above the core, and the core is not aware of them.** The classes live in `diagnosticassistants.py`, separate from the sansio layer (`sansio/skeleton.py`). `envelope_types.py` reaches them only through a lazy import inside the debug branch. That keeps the import cycle away and adds no cost or behaviour change outside debug mode.\n3. **Debug errors are drop-in replacements.** Multiple inheritance lets the enriched error be raised where the plain error would have been, and existing `except` clauses keep working. `TroubleshootUploadsMissingKey` does the same with `KeyError` plus `AssertionError`.\n4. **Handling stays with the caller.** Quill does not swallow the fault or convert it into an HTTP response here. It leaves that to the error-handling layer (`app.py`, `manage_failure`), which sees a normal exception type.\n\nThe trade-off is that `AssertionError` is a poor fit for encoding failures and is stripped under `python -O`. This is a debug aid, not enforcement.",
+ "cost": 0.07178419999999999,
+ "turns": 3,
+ "duration_s": 13.57,
+ "tokens": {
+  "input": 6,
+  "cache_write": 11615,
+  "cache_read": 55461,
+  "output": 1422,
+  "total": 68504
+ },
+ "is_error": false,
+ "subtype": "success",
+ "models": [
+  "claude-sonnet-5-5"
+ ],
+ "calls": [
+  "Grep {\"pattern\": \"SurpriseCharsetFault\", \"output_mode\": \"content\", \"path\": \"/home/sq/micode-bench/repos/quill/src\"}",
+  "Grep {\"pattern\": \"append_encoding_fault_multimap|UnicodeError|AssertionError|debug\", \"output_mode\": \"content\", \"path\": \"/home/sq/micode-bench/repos/quill/src/quill/d"
+ ],
+ "arm": "micode",
+ "repo": "quill",
+ "k": 3,
+ "question": "What architectural decisions are reflected by the dual inheritance from both AssertionError and UnicodeError in the debug-mode exception class for unexpected unicode or binary data regarding separation between validation failures and encoding issues in Quill's layered architecture?",
+ "model": "sonnet",
+ "score": {
+  "correctness": 15,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 16,
+  "total": 77
+ }
+}

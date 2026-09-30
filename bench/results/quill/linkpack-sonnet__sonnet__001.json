@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-sonnet",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "sonnet",
+ "answer": "The flag is `Schematic._got_registered_once`. Its purpose is to freeze a schematic's configuration once it has been enrolled on an application, so that later changes can't leave the schematic and the app out of sync.\n\n**How it works**\n\n- `Schematic.enroll` (`src/quill/sansio/schematics.py:L273-377`) sets `self._got_registered_once = True` before it replays the deferred functions. The lines that set it fall in the truncated part of the excerpt (after L312), but the compiled notes state this ordering.\n- Every setup method is wrapped by `preparationmethod` (`src/quill/sansio/skeleton.py:L42-49`). The wrapper calls `self._verify_configuration_completed(f_name)` before running the method.\n- In the base class, `Armature._verify_configuration_completed` (`skeleton.py:L220-221`) only raises `NotImplementedError`. `Schematic` overrides it (`schematics.py:L213-221`).\n- The override raises `AssertionError` when `_got_registered_once` is True. The message reads: \"The setup method '<f_name>' can no longer be called on the schematic '<name>'. It has already been registered at least once, any changes will not be applied consistently. Make sure all imports, decorators, functions, etc. needed to set up the schematic are done before registering it.\"\n\n**Why it exists**\n\n`enroll` copies the schematic's deferred functions (`record` appends to `deferred_functions`) onto the app. This includes routes, hooks and error handlers, as `record` and `note_once_only` show (`schematics.py:L223-244`). If you added a route or hook after that copy, apps that had already enrolled the schematic would miss it. Apps enrolling later would get it. The flag turns that inconsistency into an immediate error.\n\nIt covers all `@preparationmethod` methods on the schematic, including `route`, `record`, `note_once_only`, `program_faulthandler` and the hook decorators.\n\n**Related points**\n\n- `App` has the same guard using `_got_first_request` (`src/quill/sansio/app.py:L413-423`). It blocks app setup methods after the first request has been handled.\n- A schematic can still be enrolled more than once, for example under different names. The `first_registration` value on `SchematicSetupStatus` (`schematics.py:L41-85`) is separate from this flag. It tells `note_once_only` callbacks whether to run again. Registering the same name twice raises `ValueError` in `enroll` (L306-312).\n\nThe material doesn't show the rest of `enroll` (L313-377) or where `_got_registered_once` is initialized. That is presumably `Schematic.__init__` in `schematics.py`, which would confirm the default of False.",
+ "cost": 0.032422,
+ "turns": 1,
+ "duration_s": 9.1,
+ "tokens": {
+  "input": 6761,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6761
+ },
+ "pack_tokens": 3581,
+ "score": {
+  "correctness": 16,
+  "completeness": 15,
+  "relevance": 15,
+  "clarity": 16,
+  "reasoning": 17,
+  "total": 79
+ }
+}
