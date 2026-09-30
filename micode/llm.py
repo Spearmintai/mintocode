@@ -1,9 +1,11 @@
 """Compiler model calls.
 
-Two backends, both stdlib-only:
-  * claude-cli  – the locally authenticated `claude -p` (default; works with a Claude subscription)
-  * api         – the Anthropic Messages API over urllib (used when ANTHROPIC_API_KEY is set and
-                  MICODE_BACKEND=api)
+Backends, all stdlib-only (chosen by MIC_BACKEND, else auto-detected in this order):
+  * claude-cli  – the locally authenticated `claude -p` (works with a Claude subscription)
+  * api         – the Anthropic Messages API (ANTHROPIC_API_KEY)
+  * openai      – any OpenAI-compatible Chat Completions API: OpenAI, Z.ai GLM, DeepSeek, OpenRouter,
+                  Ollama, vLLM… (OPENAI_API_KEY, optional OPENAI_BASE_URL, model via MIC_OPENAI_MODEL)
+  * codex       – the locally authenticated `codex exec`
 
 Every call is cached on disk by the hash of (model, system, prompt), so an interrupted compile
 resumes for free and recompiles only pay for what changed.
@@ -50,7 +52,7 @@ class LLM:
     def __init__(self, cache_dir: str, backend: str | None = None, timeout: int = 900):
         self.cache_dir = cache_dir
         os.makedirs(cache_dir, exist_ok=True)
-        self.backend = backend or os.environ.get("MICODE_BACKEND") or "claude-cli"
+        self.backend = backend or detect_backend()
         self.timeout = timeout
 
     # ------------------------------------------------------------ public
@@ -66,10 +68,7 @@ class LLM:
         last = None
         for attempt in range(4):
             try:
-                if self.backend == "api":
-                    text, cost, i, o = self._api(prompt, model, system, max_tokens)
-                else:
-                    text, cost, i, o = self._cli(prompt, model, system)
+                text, cost, i, o = self.raw(prompt, model, system, max_tokens)
                 USAGE.add(cost, i, o)
                 os.makedirs(os.path.dirname(path), exist_ok=True)
                 tmp = path + ".tmp"
@@ -95,6 +94,16 @@ class LLM:
             return parse_json(fixed)
 
     # ------------------------------------------------------------ backends
+    def raw(self, prompt: str, model: str, system: str = "", max_tokens: int = 16000):
+        """One uncached call: (text, cost_usd, input_tokens, output_tokens)."""
+        if self.backend == "api":
+            return self._api(prompt, model, system, max_tokens)
+        if self.backend == "openai":
+            return self._openai(prompt, model, system, max_tokens)
+        if self.backend == "codex":
+            return self._codex(prompt, model, system)
+        return self._cli(prompt, model, system)
+
     def _cli(self, prompt: str, model: str, system: str):
         cmd = ["claude", "-p", "--model", model, "--output-format", "json", "--tools", "",
                "--setting-sources", "", "--strict-mcp-config", "--no-session-persistence"]
@@ -134,6 +143,67 @@ class LLM:
         text = "".join(b.get("text", "") for b in d.get("content", []) if b.get("type") == "text")
         u = d.get("usage", {})
         return text, 0.0, u.get("input_tokens", 0), u.get("output_tokens", 0)
+
+
+    def _openai(self, prompt: str, model: str, system: str, max_tokens: int):
+        base = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1").rstrip("/")
+        msgs = ([{"role": "system", "content": system}] if system else []) + [{"role": "user", "content": prompt}]
+        body = {"model": openai_model(model), "messages": msgs, "max_tokens": max_tokens}
+        req = urllib.request.Request(base + "/chat/completions", data=json.dumps(body).encode(), headers={
+            "Authorization": f"Bearer {os.environ.get('OPENAI_API_KEY', '')}", "Content-Type": "application/json"})
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                d = json.load(resp)
+        except Exception as e:  # noqa: BLE001
+            raise LLMError(f"openai-compatible api error: {e}")
+        u = d.get("usage", {})
+        return d["choices"][0]["message"]["content"] or "", 0.0, u.get("prompt_tokens", 0), u.get("completion_tokens", 0)
+
+    def _codex(self, prompt: str, model: str, system: str):
+        import tempfile
+        out = tempfile.NamedTemporaryFile(prefix="mic-", suffix=".txt", delete=False).name
+        cmd = ["codex", "exec", "--skip-git-repo-check", "--ephemeral", "-s", "read-only", "-o", out]
+        if os.environ.get("MIC_CODEX_MODEL"):
+            cmd += ["-m", os.environ["MIC_CODEX_MODEL"]]
+        full = (system + "\n\n" + prompt) if system else prompt
+        try:
+            r = subprocess.run(cmd, input=full, capture_output=True, text=True, timeout=self.timeout,
+                               env=dict(os.environ, MICODE_CHILD="1"), cwd=self.cache_dir)
+            text = open(out, encoding="utf-8").read() if os.path.exists(out) else ""
+        except subprocess.TimeoutExpired:
+            raise LLMError("codex exec timed out")
+        finally:
+            if os.path.exists(out):
+                os.unlink(out)
+        if not text:
+            raise LLMError(f"codex exec failed ({r.returncode}): {(r.stderr or r.stdout)[-400:]}")
+        return text, 0.0, len(full) // 4, len(text) // 4
+
+
+def detect_backend() -> str:
+    import shutil
+    b = os.environ.get("MIC_BACKEND") or os.environ.get("MICODE_BACKEND")
+    if b:
+        return b
+    if shutil.which("claude"):
+        return "claude-cli"
+    if os.environ.get("ANTHROPIC_API_KEY"):
+        return "api"
+    if os.environ.get("OPENAI_API_KEY"):
+        return "openai"
+    if shutil.which("codex"):
+        return "codex"
+    raise LLMError("no model backend: install and log in to the `claude` or `codex` CLI, or set ANTHROPIC_API_KEY "
+                   "or OPENAI_API_KEY (+ OPENAI_BASE_URL for GLM, DeepSeek, OpenRouter, Ollama…)")
+
+
+def openai_model(model: str) -> str:
+    """Map micode's tier names to the model configured for an OpenAI-compatible endpoint."""
+    tier = {"opus": "strong", "fable": "strong", "sonnet": "medium", "haiku": "fast"}.get(model)
+    if tier is None:
+        return model  # an explicit model id
+    return (os.environ.get(f"MIC_OPENAI_MODEL_{tier.upper()}") or os.environ.get("MIC_OPENAI_MODEL")
+            or {"strong": "gpt-5", "medium": "gpt-5-mini", "fast": "gpt-5-nano"}[tier])
 
 
 def parse_json(text: str):

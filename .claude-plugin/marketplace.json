@@ -1,17 +1,17 @@
 {
-  "name": "micode",
+  "name": "mintocode",
   "owner": {
-    "name": "hmtp.ai"
+    "name": "Spearmint AI"
   },
   "plugins": [
     {
-      "name": "micode",
+      "name": "mic",
       "source": "./",
-      "description": "Compile your repository once; every Claude Code session reads the compiled understanding instead of re-reading the source."
+      "description": "Compile your repository once; your coding agent then gets only the minimal linked paragraphs it needs."
     }
   ],
-  "description": "micode: compile your repository once; Claude Code gets only the minimal linked paragraphs it needs.",
+  "description": "mic: compile your repository once; coding agents get only the minimal linked paragraphs they need.",
   "metadata": {
-    "description": "micode: compile your repository once; Claude Code gets only the minimal linked paragraphs it needs."
+    "description": "mic: compile your repository once; coding agents get only the minimal linked paragraphs they need."
   }
 }

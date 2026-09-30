@@ -1,9 +1,19 @@
 {
-  "name": "micode",
+  "name": "mic",
   "version": "0.1.0",
-  "description": "Compile a repository once into a verified, agent-facing understanding (.micode/); every later session reads the compiled knowledge instead of re-reading the source.",
-  "author": {"name": "hmtp.ai"},
-  "homepage": "https://github.com/Sqqlcyy/micode", "repository": "https://github.com/Sqqlcyy/micode",
+  "description": "Compile your repository once; your coding agent then gets only the minimal linked paragraphs it needs.",
+  "author": {
+    "name": "Spearmint AI"
+  },
+  "homepage": "https://github.com/Spearmintai/mintocode",
+  "repository": "https://github.com/Spearmintai/mintocode",
   "license": "MIT",
-  "keywords": ["context", "tokens", "codebase", "compile", "memory", "mcp"]
+  "keywords": [
+    "context",
+    "tokens",
+    "codebase",
+    "compile",
+    "memory",
+    "mcp"
+  ]
 }

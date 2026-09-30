@@ -86,7 +86,7 @@ def session_start(inp: dict) -> None:
     st = man.get("stats", {})
     stale = [p for p in man.get("files", {}) if s.is_stale(p)]
     stale_note = (f"\n{len(stale)} file(s) changed since compile (e.g. {', '.join(stale[:5])}); their cards are marked ⚠stale "
-                  "— verify those in source, and suggest `/micode:update` when convenient." if stale else "")
+                  "— verify those in source, and suggest `mic update` (or /mic:update) when convenient." if stale else "")
     ctx = f"""<micode>
 This repository has a compiled understanding in .micode/ (compiled {man.get('compiled_at', '?')}; {st.get('files')} files,
 {st.get('lines', 0):,} lines, {st.get('qa')} precompiled Q/A, every citation verified against the source).
@@ -95,13 +95,13 @@ How to use it — it replaces most exploration:
   model from the source, plus exact `path:Lstart-end` spans. Every citation was verified against this commit.
 - When that context answers the question, answer directly from it and cite its spans. Do not re-open files just to
   double-check it; that costs a full turn and the compile already did it.
-- When something is missing, ask the compiled index before exploring: the micode MCP tools `ask` (plain-language question),
+- When something is missing, ask the compiled index before exploring: the mic MCP tools `ask` (plain-language question),
   `where` (symbol definitions), `card` (a file's full map with spans), `module`, `deps`. One call costs a few hundred tokens;
   exploring costs thousands. Then Read ONLY the cited spans (offset/limit); use broad Grep/Glob only as a last resort.
 - Reading a large file whole is intercepted once and answered with its symbol map.
 - Before EDITING code, read the exact lines you change.{stale_note}
 
-CORE CARD{' (compact; full card: micode `module`/`ask` tools)' if cfg['core_tokens'] else ''}
+CORE CARD{' (compact; full card: mic `module`/`ask` tools)' if cfg['core_tokens'] else ''}
 {retrieve.compact_core(s.core, cfg['core_tokens']) if cfg['core_tokens'] else s.core.strip()}
 </micode>"""
     emit("SessionStart", ctx)

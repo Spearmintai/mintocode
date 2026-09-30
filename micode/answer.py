@@ -52,6 +52,16 @@ def answer(store: Store, question: str, reader: str = "haiku", pack_budget: int 
         ptrs, _ = retrieve.pointer_pack(store, question, n_qa=0, n_ptr=16)
         material = f"{text}\n\n{ptrs}".strip() or "(no compiled knowledge matched)"
     prompt = f"COMPILED KNOWLEDGE AND SOURCE:\n{material}\n\nQUESTION: {question}"
+    if not tools and os.environ.get("MIC_ANSWER_VIA", "backend") == "backend":
+        # One call through whichever backend is configured (claude CLI, Anthropic, OpenAI-compatible, codex).
+        from .llm import LLM, LLMError
+        try:
+            text, cost, i, o = LLM(os.path.join(store.root, DIR, ".cache")).raw(prompt, reader, READER_SYSTEM, 4000)
+        except LLMError as e:
+            return {"answer": "", "cost": 0.0, "tokens": 0, "seconds": round(time.time() - t0, 1),
+                    "pack_tokens": len(material) // 4, "error": str(e)}
+        return {"answer": text, "cost": cost, "tokens": i + o, "turns": 1, "seconds": round(time.time() - t0, 1),
+                "pack_tokens": len(material) // 4}
     cmd = ["claude", "-p", "--model", reader, "--output-format", "json", "--setting-sources", "",
            "--strict-mcp-config", "--no-session-persistence"]
     if tools:

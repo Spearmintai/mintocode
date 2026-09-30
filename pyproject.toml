@@ -3,7 +3,7 @@ requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "micode"
+name = "mintocode"
 version = "0.1.0"
 description = "Compile a repository once; send Claude Code only the minimal linked paragraphs it needs."
 readme = "README.md"
@@ -15,6 +15,7 @@ dependencies = []
 judge = ["laya", "torch"]
 
 [project.scripts]
+mic = "micode.cli:main"
 micode = "micode.cli:main"
 
 [tool.setuptools]

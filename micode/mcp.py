@@ -39,7 +39,7 @@ def _store(cache={}):  # noqa: B006 - deliberate process-level cache
 def call(name: str, args: dict) -> str:
     s = _store()
     if s is None:
-        return "No compiled understanding found. Run /micode:compile (or `micode compile`) at the repository root first."
+        return "No compiled understanding found. Run /mic:compile (or `mic compile .`) at the repository root first."
     if name == "ask":
         text, _ = retrieve.pack(s, args.get("question", ""), budget=int(args.get("budget") or 2500), excerpt_budget=1500)
         return text or "No compiled knowledge matched. Fall back to targeted Grep."
@@ -77,7 +77,7 @@ def serve() -> None:
             continue  # notification
         if method == "initialize":
             res = {"protocolVersion": msg.get("params", {}).get("protocolVersion", "2025-06-18"),
-                   "capabilities": {"tools": {}}, "serverInfo": {"name": "micode", "version": "0.1.0"}}
+                   "capabilities": {"tools": {}}, "serverInfo": {"name": "mic", "version": "0.1.0"}}
         elif method == "tools/list":
             res = {"tools": TOOLS}
         elif method == "tools/call":

@@ -1,8 +1,11 @@
 {
   "mcpServers": {
-    "micode": {
+    "mic": {
       "command": "python3",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/bin/micode", "mcp"]
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/mic",
+        "mcp"
+      ]
     }
   }
 }

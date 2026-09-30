@@ -13,12 +13,12 @@ from .store import Store, find_root
 def _store(path: str | None = None) -> Store:
     root = find_root(path or os.getcwd())
     if not root:
-        sys.exit("micode: no .micode/ found here or above. Run `micode compile` at the repository root.")
+        sys.exit("mic: no .micode/ found here or above. Run `mic compile .` at the repository root.")
     return Store(root)
 
 
 def main(argv=None) -> None:
-    ap = argparse.ArgumentParser(prog="micode", description="Compile a repository once; read the compiled understanding forever.")
+    ap = argparse.ArgumentParser(prog="mic", description="Compile a repository once; read the compiled understanding forever.")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compile", help="compile (or incrementally update) the repository")
     c.add_argument("path", nargs="?", default=".")
@@ -34,6 +34,12 @@ def main(argv=None) -> None:
     a.add_argument("--model", default=os.environ.get("MICODE_READER", "sonnet"), help="model that answers (default sonnet)")
     a.add_argument("--pack", action="store_true", help="only print the selected paragraphs (no model call)")
     a.add_argument("--no-judge", action="store_true", help="skip the paragraph judge even if one is available")
+    pk = sub.add_parser("pack", help="print the minimal linked paragraphs for a question (paste into any chat)")
+    pk.add_argument("question", nargs="+")
+    pk.add_argument("--budget", type=int, default=8000)
+    pk.add_argument("-o", "--out", help="write the pack to this file instead of stdout")
+    ins = sub.add_parser("install", help="wire mic into coding agents")
+    ins.add_argument("target", nargs="?", default="all", choices=["all", "claude", "codex", "opencode", "zcode", "agents-md"])
     sub.add_parser("setup-judge", help="install the local Laya paragraph judge (torch + laya in its own venv)").add_argument(
         "--gpu", action="store_true", help="install CUDA torch instead of the CPU build")
     sub.add_parser("judge-server", help="(internal) run the Laya judge daemon in the current Python")
@@ -67,13 +73,29 @@ def main(argv=None) -> None:
                                          judge=j, pool=20, judge_code_lines=0,
                                          judge_rel=0.25 if j is not None and getattr(j, "relative", True) else 0.0)
             print(text or "(no compiled knowledge matched)")
-            print(f"\n[micode] {len(text) // 4:,} tokens, judge: {getattr(j, '__module__', None) and ('jev' if 'jev' in j.__module__ else 'laya') or 'none'}",
+            print(f"\n[mic] {len(text) // 4:,} tokens, judge: {getattr(j, '__module__', None) and ('jev' if 'jev' in j.__module__ else 'laya') or 'none'}",
                   file=sys.stderr)
         else:
             r = answer.answer(store, q, reader=args.model, mode="link", judge=j)
             print(r["answer"] or r.get("error", "(no answer)"))
-            print(f"\n[micode] pack {r['pack_tokens']:,} tokens -> {r['tokens']:,} total, ${r['cost']:.4f}, {r['seconds']}s",
+            print(f"\n[mic] pack {r['pack_tokens']:,} tokens -> {r['tokens']:,} total, ${r['cost']:.4f}, {r['seconds']}s",
                   file=sys.stderr)
+    elif args.cmd == "pack":
+        from . import judge
+        store, q = _store(), " ".join(args.question)
+        j = judge.get(timeout=120) if judge.local_ready() else None
+        text, _ = retrieve.link_pack(store, q, budget=args.budget, n_seeds=8, n_links=24, body_links=6, max_lines=80,
+                                     n_qa=2, judge=j, pool=20, judge_code_lines=0, judge_rel=0.25 if j else 0.0)
+        doc = (f"# mic pack: {store.manifest.get('repo')}\n\nQuestion: {q}\n\nThese are the paragraphs of the repository "
+               f"that matter for the question (live source, exact spans), chosen by mic's link graph. Answer from them.\n\n{text}\n")
+        if args.out:
+            open(args.out, "w", encoding="utf-8").write(doc)
+            print(f"[mic] wrote {args.out} ({len(doc) // 4:,} tokens)", file=sys.stderr)
+        else:
+            print(doc)
+    elif args.cmd == "install":
+        from .install import install
+        install(args.target)
     elif args.cmd == "setup-judge":
         from .setup_judge import setup
         setup(gpu=args.gpu)
