@@ -3,6 +3,8 @@
 **Ask your coding agent about your codebase with 10.7× fewer tokens.**
 Compile the repo once. For every question, `mic` links the handful of paragraphs that matter and sends only those.
 
+**Home page: [spearmintai.github.io/mintocode](https://spearmintai.github.io/mintocode/)**
+
 ```
 ┌──────────────────────────────────────────────┬───────┬───────────────────┬────────┐
 │ 48 SWE-QA questions, de-memorized repo       │ Score │ Tokens per answer │  Cost  │
