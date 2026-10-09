@@ -171,8 +171,8 @@ session model then relays that answer, which adds its own turn, so the cheapest 
 | Same 48 questions | Answers per plan budget ³ | Frontier-model calls per answer | Cost per answer (API) | Score |
 |---|---|---|---|---|
 | Claude Code, exploring by itself | **1.0×** | 5.2 | $0.061 | 78.7 |
-| Claude Code + mic hooks | **0.94×** | 3.8 | $0.065 | 79.3 |
-| `mic ask`, Sonnet reads the pack | **1.7×** | 1 | $0.036 | 72.9 |
+| Claude Code + mic hooks | **1.1×** | 3.8 | $0.065 | 79.3 |
+| `mic ask`, Sonnet reads the pack | **1.9×** | 1 | $0.036 | 72.9 |
 | `mic ask`, Haiku reads the pack | **3.6×** | 0 | $0.017 | 68.2 |
 
 ³ Plans don't publish their metering, so this uses API-equivalent cost as the proxy: how many answers the same
