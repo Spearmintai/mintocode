@@ -21,13 +21,13 @@ def setup(gpu: bool = False) -> None:
     uv = shutil.which("uv")
     torch_index = [] if gpu else ["--index-url", "https://download.pytorch.org/whl/cpu"]
     if not os.path.exists(py):
-        print(f"[micode] creating {VENV}", file=sys.stderr)
+        print(f"[mic] creating {VENV}", file=sys.stderr)
         if uv:
             subprocess.run([uv, "venv", "--python", "3.12", VENV], check=True)
         else:
             subprocess.run([sys.executable, "-m", "venv", VENV], check=True)
     pip = [uv, "pip", "install", "--python", py] if uv else [py, "-m", "pip", "install"]
-    print("[micode] installing torch (" + ("CUDA" if gpu else "CPU") + ") and laya", file=sys.stderr)
+    print("[mic] installing torch (" + ("CUDA" if gpu else "CPU") + ") and laya", file=sys.stderr)
     subprocess.run(pip + ["torch"] + torch_index, check=True)
     subprocess.run(pip + ["laya"], check=True)
     os.makedirs(os.path.dirname(CONFIG), exist_ok=True)
@@ -38,5 +38,5 @@ def setup(gpu: bool = False) -> None:
     json.dump(cfg, open(CONFIG, "w"), indent=1)
     os.environ["MICODE_LAYA_PYTHON"] = py
     start_local()
-    print("[micode] judge installed; the daemon is starting on 127.0.0.1:8791 (first start downloads the weights, "
+    print("[mic] judge installed; the daemon is starting on 127.0.0.1:8791 (first start downloads the weights, "
           "log: ~/.cache/micode-judge.log)", file=sys.stderr)

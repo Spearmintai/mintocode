@@ -32,7 +32,7 @@ PROGRAM_LANGS = {"python", "javascript", "typescript", "go", "rust", "java", "ko
 
 
 def log(msg: str) -> None:
-    print(f"[micode] {msg}", file=sys.stderr, flush=True)
+    print(f"[mic] {msg}", file=sys.stderr, flush=True)
 
 
 def numbered(text: str, start: int = 1) -> str:

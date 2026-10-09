@@ -1,22 +1,38 @@
-# mic · mintocode
+<div align="center">
 
-**Ask your coding agent about your codebase with 10.7× fewer tokens.**
-Compile the repo once. For every question, `mic` links the handful of paragraphs that matter and sends only those.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
+  <img alt="mic" src="docs/assets/logo-light.svg" width="260">
+</picture>
 
-**Home page: [spearmintai.github.io/mintocode](https://spearmintai.github.io/mintocode/)**
+### Send your coding agent the paragraphs that matter.
 
-```
-┌──────────────────────────────────────────────┬───────┬───────────────────┬────────┐
-│ 48 SWE-QA questions, de-memorized repo       │ Score │ Tokens per answer │  Cost  │
-├──────────────────────────────────────────────┼───────┼───────────────────┼────────┤
-│ Claude Code, exploring by itself (Sonnet)    │ 78.7  │ 77,900            │ $0.061 │
-│ mic ask (link pack, one Sonnet call)         │ 72.9  │  7,300  (10.7× ↓) │ $0.036 │
-└──────────────────────────────────────────────┴───────┴───────────────────┴────────┘
-```
+Compile your repo once. **mic** links the functions, callers and tests a question needs, and sends only those.<br>
+**7,300 tokens per answer instead of 77,900** on a de-memorized SWE-QA benchmark.
 
-Score is SWE-QA's own strict LLM-judge (0-100), graded by Opus against the benchmark's reference answers. Every
-number here is reproducible with the scripts in [`bench/`](bench/); the full table, including what did not work, is
-[below](#results).
+<p>
+  <a href="https://github.com/Spearmintai/mintocode/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Spearmintai/mintocode?style=flat&logo=github&color=16845f&labelColor=10261e"></a>
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/license-MIT-16845f?style=flat&labelColor=10261e"></a>
+  <img alt="Python 3.10+" src="https://img.shields.io/badge/python-3.10%2B-16845f?style=flat&logo=python&logoColor=white&labelColor=10261e">
+  <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-16845f?style=flat&labelColor=10261e">
+  <br>
+  <a href="#install"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-5cd2a3?style=flat&logo=anthropic&logoColor=white&labelColor=10261e"></a>
+  <a href="#install"><img alt="Works with Codex, OpenCode, ZCode" src="https://img.shields.io/badge/works%20with-Codex%20%C2%B7%20OpenCode%20%C2%B7%20ZCode-7fb3d4?style=flat&labelColor=10261e"></a>
+  <a href="https://spearmintai.github.io/mintocode/"><img alt="Home page" src="https://img.shields.io/badge/home-spearmintai.github.io-5cd2a3?style=flat&labelColor=10261e"></a>
+</p>
+
+[Home page](https://spearmintai.github.io/mintocode/) · [Install](#install) · [Results](#results) · [How it works](#what-it-does) · [Agents](#install) · [Reproduce](bench/)
+
+<br>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/demo-dark.svg">
+  <img alt="mic compile, then mic ask answers a question in one call with 6,711 tokens" src="docs/assets/demo-light.svg" width="860">
+</picture>
+
+</div>
+
+<br>
 
 ## Install
 
@@ -85,6 +101,11 @@ session model then relays that answer, which adds its own turn, so the cheapest 
 `card`, `module`, `deps`), `/mic:update` (recompile only changed files) and `/mic:status` (staleness, cost).
 
 ## Results
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-dark.svg">
+  <img alt="Tokens per answer: Claude Code 77,900; with mic hooks 67,100; mic ask 7,300; mic ask with Laya judge 6,300" src="docs/assets/bench-light.svg" width="860">
+</picture>
 
 Benchmark: [SWE-QA](https://github.com/peng-weihan/SWE-QA-Bench), 48 human-grounded questions about flask with
 reference answers, scored by SWE-QA's judge prompt (verbatim) with Opus as the judge. The agent is Sonnet 5.5 in both
@@ -159,6 +180,15 @@ bench/             SWE-QA harness, de-memorizer, session benchmark, retrieval ev
 - [Laya](https://github.com/NandhaKishorM/laya) (Nandakishor M, Apache-2.0) and TypeSafe's Jev: typed-decision judges.
 - [SWE-QA](https://github.com/peng-weihan/SWE-QA-Bench) (MIT): questions, references and judge prompt.
 
+## Star history
+
+<a href="https://star-history.com/#Spearmintai/mintocode&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Spearmintai/mintocode&type=Date&theme=dark">
+    <img alt="Star history" src="https://api.star-history.com/svg?repos=Spearmintai/mintocode&type=Date" width="600">
+  </picture>
+</a>
+
 ## License
 
-MIT
+MIT · made by [Spearmint AI](https://github.com/Spearmintai)
