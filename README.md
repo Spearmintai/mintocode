@@ -5,7 +5,7 @@
   <img alt="mic" src="docs/assets/logo-light.svg" width="240">
 </picture>
 
-<h1>Your agent reads 19 paragraphs.<br>Not your whole repo.</h1>
+<h1>Your agent reads 20 paragraphs.<br>Not your whole repo.</h1>
 
 **mic** compiles your codebase once. Then Claude Code, Codex, or any MCP agent<br>
 gets only the functions, callers and tests a question actually needs.
