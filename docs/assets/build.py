@@ -122,11 +122,11 @@ def banner(theme: str) -> str:
     W, H = 1280, 640
     grid, gh = linkmap(720, 150, 470, 330, t)
     left = 88
-    label = "10.7× fewer tokens per answer"
+    label = "10× fewer tokens per answer"
     cw = len(label) * 10.6 + 36
-    chips = [f'<rect x="{left}" y="472" width="{cw:.0f}" height="40" rx="20" fill="{t["mintsoft"]}"/>'
-             f'<text x="{left + 18}" y="498" font-family="{SANS}" font-size="17" font-weight="700" fill="{t["mint"]}">{esc(label)}</text>'
-             f'<text x="{left + cw + 18:.0f}" y="498" font-family="{SANS}" font-size="17" fill="{t["muted"]}">Claude Code · Codex · OpenCode · ZCode</text>']
+    chips = [f'<rect x="{left}" y="476" width="{cw:.0f}" height="40" rx="20" fill="{t["mintsoft"]}"/>'
+             f'<text x="{left + 18}" y="502" font-family="{SANS}" font-size="17" font-weight="700" fill="{t["mint"]}">{esc(label)}</text>'
+             f'<text x="{left + cw + 18:.0f}" y="502" font-family="{SANS}" font-size="17" fill="{t["muted"]}">Claude Code · Codex · OpenCode · ZCode</text>']
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img"
  aria-label="mic: send your agent the paragraphs that matter">
 <defs>
@@ -137,11 +137,10 @@ def banner(theme: str) -> str:
 <rect width="{W}" height="{H}" fill="url(#dots)" opacity="0.6"/>
 {mark(left, 88, 64)}{wordmark(left + 82, 88, 0.62, t["ink"], t["mint"])}
 <text x="{left + 230}" y="137" font-family="{MONO}" font-size="15" fill="{t["muted"]}" letter-spacing="1.5">MINTOCODE</text>
-<text font-family="{SANS}" font-weight="800" font-size="58" letter-spacing="-1.5" fill="{t["ink"]}">
- <tspan x="{left}" y="236">Send your agent</tspan><tspan x="{left}" y="300">the paragraphs</tspan>
- <tspan x="{left}" y="364" fill="{t["mint"]}">that matter.</tspan></text>
-<text font-family="{SANS}" font-size="20" fill="{t["muted"]}"><tspan x="{left}" y="412">Compile your repo once. mic links the functions, callers</tspan>
- <tspan x="{left}" y="440">and tests a question needs, and sends only those.</tspan></text>
+<text font-family="{SANS}" font-weight="800" font-size="54" letter-spacing="-1.5" fill="{t["ink"]}">
+ <tspan x="{left}" y="222">Your agent reads</tspan><tspan x="{left}" y="282">19 paragraphs.</tspan>
+ <tspan x="{left}" y="342" fill="{t["mint"]}">Not your</tspan><tspan x="{left}" y="402" fill="{t["mint"]}">whole repo.</tspan></text>
+<text font-family="{SANS}" font-size="19" fill="{t["muted"]}"><tspan x="{left}" y="446">Compile once. Ask anything. Pay for 19 paragraphs.</tspan></text>
 {"".join(chips)}
 <text x="{left}" y="566" font-family="{MONO}" font-size="15" fill="{t["muted"]}">github.com/Spearmintai/mintocode</text>
 <rect x="696" y="96" width="518" height="{gh + 116:.0f}" rx="18" fill="{t["panel"]}" stroke="{t["line"]}"/>

@@ -175,10 +175,10 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); display: f
   <div class="hero">
     <div>
       <p class="label">Compiled context for coding agents</p>
-      <h1 style="margin-top:14px">Send the paragraphs that matter. <em>Skip the other 1,088.</em></h1>
+      <h1 style="margin-top:14px">Your agent reads 19 paragraphs. <em>Not your whole repo.</em></h1>
       <p class="lede">mic compiles your repository once. For every question it links the few functions, definitions,
         callers and tests that answer it, and your agent reads those instead of exploring. On SWE-QA that is
-        <b>7,300 tokens per answer instead of 77,900</b>.</p>
+        <b>10× fewer tokens per answer</b>, and up to 3.6× more out of your coding plan.</p>
 
       <div class="install">
         <div class="tabs" role="tablist" aria-label="Install">
@@ -232,8 +232,8 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); display: f
       score and cut frontier calls by a quarter; <code>mic ask</code> answers in one call, or with no frontier call at all, and trades some judged quality for it. Every row is reproducible with <code>bench/</code>, and the README lists the
       approaches that did not pay off.</p>
     <div class="facts">
-      <div class="fact"><b>3.6×</b><span>more answers from the same coding plan, with Haiku reading the pack</span></div>
-      <div class="fact"><b>10.7×</b><span>fewer tokens per answer; packs build in ~30 ms with no model call</span></div>
+      <div class="fact"><b>10×</b><span>fewer tokens per answer: 7,300 instead of 77,900</span></div>
+      <div class="fact"><b>3.6×</b><span>more answers from the same coding plan</span></div>
       <div class="fact"><b>~90%</b><span>of compiled citations resolve to exact source spans</span></div>
     </div>
   </section>

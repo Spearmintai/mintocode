@@ -2,13 +2,15 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg">
-  <img alt="mic" src="docs/assets/logo-light.svg" width="260">
+  <img alt="mic" src="docs/assets/logo-light.svg" width="240">
 </picture>
 
-### Send your coding agent the paragraphs that matter.
+<h1>Your agent reads 19 paragraphs.<br>Not your whole repo.</h1>
 
-Compile your repo once. **mic** links the functions, callers and tests a question needs, and sends only those.<br>
-**Up to 3.6× more answers from the same coding plan**, and 7,300 tokens per answer instead of 77,900.
+**mic** compiles your codebase once. Then Claude Code, Codex, or any MCP agent<br>
+gets only the functions, callers and tests a question actually needs.
+
+<h3>⚡ 10× fewer tokens per answer &nbsp;·&nbsp; 🔋 up to 3.6× more out of your plan</h3>
 
 <p>
   <a href="https://github.com/Spearmintai/mintocode/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Spearmintai/mintocode?style=flat&logo=github&color=16845f&labelColor=10261e"></a>
@@ -17,11 +19,11 @@ Compile your repo once. **mic** links the functions, callers and tests a questio
   <img alt="Zero dependencies" src="https://img.shields.io/badge/dependencies-0-16845f?style=flat&labelColor=10261e">
   <br>
   <a href="#install"><img alt="Claude Code plugin" src="https://img.shields.io/badge/Claude%20Code-plugin-5cd2a3?style=flat&logo=anthropic&logoColor=white&labelColor=10261e"></a>
-  <a href="#install"><img alt="Works with Codex, OpenCode, ZCode" src="https://img.shields.io/badge/works%20with-Codex%20%C2%B7%20OpenCode%20%C2%B7%20ZCode-7fb3d4?style=flat&labelColor=10261e"></a>
+  <a href="#install"><img alt="Works with Codex, OpenCode, ZCode" src="https://img.shields.io/badge/works%20with-Codex%20%C2%B7%20OpenCode%20%C2%B7%20ZCode%20%C2%B7%20any%20MCP-7fb3d4?style=flat&labelColor=10261e"></a>
   <a href="https://spearmintai.github.io/mintocode/"><img alt="Home page" src="https://img.shields.io/badge/home-spearmintai.github.io-5cd2a3?style=flat&labelColor=10261e"></a>
 </p>
 
-[Home page](https://spearmintai.github.io/mintocode/) · [Install](#install) · [Results](#results) · [How it works](#what-it-does) · [Ideas](#what-a-compiled-codebase-makes-possible) · [Agents](#install) · [Reproduce](bench/)
+[**Home page**](https://spearmintai.github.io/mintocode/) · [Install](#install) · [How it works](#how-it-works) · [Results](#results) · [What's next](#whats-next) · [Reproduce](bench/)
 
 <br>
 
@@ -34,6 +36,34 @@ Compile your repo once. **mic** links the functions, callers and tests a questio
 
 <br>
 
+## Why mic
+
+<table>
+<tr>
+<td width="33%" valign="top">
+
+### ⚡ 10× fewer tokens
+Claude Code spends ~78k tokens exploring a repo to answer one question. mic hands over only the paragraphs that
+matter: **~7,300 tokens per answer**.
+
+</td>
+<td width="33%" valign="top">
+
+### 🔋 More out of your plan
+The expensive reading happens once, at compile time. After that, questions take one frontier call, or none:
+**up to 3.6× more answers** from the same plan.
+
+</td>
+<td width="33%" valign="top">
+
+### 🔌 Every agent
+Claude Code, Codex, OpenCode, ZCode, Cursor, VS Code, Claude Desktop, Windsurf, Gemini CLI. One compile, plain
+files you commit, shared by your whole team.
+
+</td>
+</tr>
+</table>
+
 ## Install
 
 **Claude Code** (hooks + MCP tools + `/mic:*` commands):
@@ -44,13 +74,16 @@ Compile your repo once. **mic** links the functions, callers and tests a questio
 /mic:compile
 ```
 
-**Everything else** (the CLI, then wire it into whatever agents you use):
+**Everything else**: Codex, OpenCode, ZCode, Cursor, VS Code, Claude Desktop, Windsurf, Gemini CLI, or no agent at all:
 
 ```bash
 pip install git+https://github.com/Spearmintai/mintocode
 mic compile .            # once per repository, incremental afterwards (mic update)
-mic install              # auto-detects Claude Code, Codex, OpenCode, ZCode
+mic install              # finds your agents and wires mic into each one
 ```
+
+<details>
+<summary><b>Every agent, MCP client and model backend</b></summary>
 
 | Agent | What `mic install <agent>` sets up |
 |---|---|
@@ -85,51 +118,9 @@ the `claude` CLI, `ANTHROPIC_API_KEY`, any OpenAI-compatible API (`OPENAI_API_KE
 Z.ai GLM, DeepSeek, OpenRouter, Ollama, vLLM; models via `MIC_OPENAI_MODEL_STRONG/_MEDIUM/_FAST`), or the `codex`
 CLI. Force one with `MIC_BACKEND=claude-cli|api|openai|codex`.
 
-## Stretch your coding plan
+</details>
 
-Claude Code and Codex plans cap how much frontier-model work you get per session and per week. Most of that budget
-goes to the agent re-reading your code. mic moves the reading into a one-time compile, so each question needs fewer
-frontier calls, or none.
-
-| Same 48 questions | Answers per plan budget ³ | Frontier-model calls per answer | Cost per answer (API) | Score |
-|---|---|---|---|---|
-| Claude Code, exploring by itself | **1.0×** | 5.2 | $0.061 | 78.7 |
-| Claude Code + mic hooks | **0.94×** | 3.8 | $0.065 | 79.3 |
-| `mic ask`, Sonnet reads the pack | **1.7×** | 1 | $0.036 | 72.9 |
-| `mic ask`, Haiku reads the pack | **3.6×** | 0 | $0.017 | 68.2 |
-
-³ Plans don't publish their metering, so this uses API-equivalent cost as the proxy: how many answers the same
-budget buys, relative to Claude Code exploring on its own. The compile is a one-time cost on top ($13.74
-API-equivalent for this 34k-line repo; incremental updates cost cents). At the Haiku row's saving it pays for itself
-after about 300 answers, and a committed `.micode/` is shared by the whole team.
-
-The trade is explicit: one-call answers score lower than a full agent session, so use `mic ask` for "where / how /
-why" questions about the code, and keep the agent's own turns for edits.
-
-### Why the hooks save less than `mic ask`: Claude Code explores anyway
-
-Inside a Claude Code session, mic can only add context. Claude Code still decides how to work, and by default it
-explores: it greps and reads to confirm things for itself, even when the answer and its exact line spans are already in
-front of it. We measured this rather than assumed it:
-
-- **The agent re-checks what it was handed.** With the link pack injected, Sonnet still makes 2.8 tool calls per
-  question (4.2 without mic), often grepping the very names the pack gave it. Telling it, in the injected context,
-  that the spans were verified and it can answer now made no measurable difference.
-- **Turns, not bytes, drive the bill.** Every turn re-sends Claude Code's own ~13k-token system prompt and tool
-  definitions, so a 2,000-token read costs far less than the extra turn it takes to make it. The hooks cut turns from
-  5.2 to 3.8 per question, and that's where their 1.2× token saving comes from.
-- **Injected context is billed at the highest rate.** A link pack is new text on every prompt, so it is written to the
-  prompt cache (the most expensive token class) and then re-read on every later turn. That is why the hooks come out at
-  about the same plan cost as Claude Code alone (0.94×) despite fewer calls.
-- **A plugin can't change any of this.** Hooks can't stop exploration, can't place their context in the cached part of
-  the prompt, and can't replace the output of built-in tools like Grep and Read (only MCP tool output can be rewritten).
-
-So mic gives you two modes. The hooks keep Claude Code's full judgment at the same quality with fewer frontier calls;
-`mic ask` skips the exploration loop entirely and is where the 1.7-3.6× plan savings come from. If Claude Code adds a
-cache-stable slot for hook context, or lets hooks condense built-in tool output, the hooks' savings should grow; we have
-proposed both to the Claude Code team in [anthropics/claude-code#100709](https://github.com/anthropics/claude-code/issues/100709).
-
-## What it does
+## How it works
 
 Most context tools either paste the repository into the window (repomix, gitingest), or index raw code and let the
 agent search it (claude-context, Serena, codebase-memory graphs). mic does what a compiler and a linker do:
@@ -175,6 +166,23 @@ session model then relays that answer, which adds its own turn, so the cheapest 
   <img alt="Tokens per answer and answers per plan: Claude Code 77,900 (1.0x); with mic hooks 67,100 (0.9x); mic ask with Sonnet 7,300 (1.7x); with Haiku 6,500 (3.6x)" src="docs/assets/bench-light.svg" width="860">
 </picture>
 
+**More answers from the same plan**
+
+| Same 48 questions | Answers per plan budget ³ | Frontier-model calls per answer | Cost per answer (API) | Score |
+|---|---|---|---|---|
+| Claude Code, exploring by itself | **1.0×** | 5.2 | $0.061 | 78.7 |
+| Claude Code + mic hooks | **0.94×** | 3.8 | $0.065 | 79.3 |
+| `mic ask`, Sonnet reads the pack | **1.7×** | 1 | $0.036 | 72.9 |
+| `mic ask`, Haiku reads the pack | **3.6×** | 0 | $0.017 | 68.2 |
+
+³ Plans don't publish their metering, so this uses API-equivalent cost as the proxy: how many answers the same
+budget buys, relative to Claude Code exploring on its own. The compile is a one-time cost on top ($13.74
+API-equivalent for this 34k-line repo; incremental updates cost cents). At the Haiku row's saving it pays for itself
+after about 300 answers, and a committed `.micode/` is shared by the whole team.
+
+The trade is explicit: one-call answers score lower than a full agent session, so use `mic ask` for "where / how /
+why" questions about the code, and keep the agent's own turns for edits.
+
 Benchmark: [SWE-QA](https://github.com/peng-weihan/SWE-QA-Bench), 48 human-grounded questions about flask with
 reference answers, scored by SWE-QA's judge prompt (verbatim) with Opus as the judge. The agent is Sonnet 5.5 in both
 arms, with the same prompt and read-only tools, on the same commit.
@@ -207,14 +215,43 @@ the whole transcript; the hooks cut turns by 31%, and the savings grow with the 
 
 Compile cost for this repository (34k lines): $13.74 with Sonnet cards and Opus reasoning, about 9 minutes.
 
-What we tried and dropped, with numbers in `bench/`:
+<details>
+<summary><b>Why the in-session hooks save less than <code>mic ask</code></b></summary>
+
+Inside a Claude Code session, mic can only add context. Claude Code still decides how to work, and by default it
+explores: it greps and reads to confirm things for itself, even when the answer and its exact line spans are already in
+front of it. We measured this rather than assumed it:
+
+- **The agent re-checks what it was handed.** With the link pack injected, Sonnet still makes 2.8 tool calls per
+  question (4.2 without mic), often grepping the very names the pack gave it. Telling it, in the injected context,
+  that the spans were verified and it can answer now made no measurable difference.
+- **Turns, not bytes, drive the bill.** Every turn re-sends Claude Code's own ~13k-token system prompt and tool
+  definitions, so a 2,000-token read costs far less than the extra turn it takes to make it. The hooks cut turns from
+  5.2 to 3.8 per question, and that's where their 1.2× token saving comes from.
+- **Injected context is billed at the highest rate.** A link pack is new text on every prompt, so it is written to the
+  prompt cache (the most expensive token class) and then re-read on every later turn. That is why the hooks come out at
+  about the same plan cost as Claude Code alone (0.94×) despite fewer calls.
+- **A plugin can't change any of this.** Hooks can't stop exploration, can't place their context in the cached part of
+  the prompt, and can't replace the output of built-in tools like Grep and Read (only MCP tool output can be rewritten).
+
+So mic gives you two modes. The hooks keep Claude Code's full judgment at the same quality with fewer frontier calls;
+`mic ask` skips the exploration loop entirely and is where the 1.7-3.6× plan savings come from. If Claude Code adds a
+cache-stable slot for hook context, or lets hooks condense built-in tool output, the hooks' savings should grow; we have
+proposed both to the Claude Code team in [anthropics/claude-code#100709](https://github.com/anthropics/claude-code/issues/100709).
+
+</details>
+
+<details>
+<summary><b>What we tried and dropped, with numbers in <code>bench/</code></b></summary>
 
 - a Haiku "reader brief" injected per prompt: slower and costlier
 - delegating to a mic subagent: 1.1× *more* tokens
 - dense vectors from Laya's encoder: anisotropic, no retrieval signal
 - int8 Laya on CPU: slower on SSE-only CPUs and hurts the ranking
 
-## What a compiled codebase makes possible
+</details>
+
+## What's next
 
 mic applies the idea of [Machine-Interpretable Information](https://arxiv.org/abs/2609.23371) to code: a strong model reads everything once, and every later read is cheap. Once
 your repository is compiled, a few things open up. Some work today; some are where we are headed.
@@ -278,7 +315,8 @@ If you try any of these, open an issue with what you found.
 | [MICode-Tutor](https://github.com/Sqqlcyy/MICode-Tutor) (static .mic + packs) | | ✓ | | | | |
 | **mic** | | ✓ | ✓ (for agents) | ✓ | ✓ | ✓ |
 
-## Layout
+<details>
+<summary><b>Repository layout</b></summary>
 
 ```
 micode/            the Python package behind the `mic` command (stdlib only)
@@ -292,6 +330,8 @@ micode/            the Python package behind the `mic` command (stdlib only)
 .claude-plugin/ hooks/ commands/ skills/   the Claude Code plugin
 bench/             SWE-QA harness, de-memorizer, session benchmark, retrieval eval, reports
 ```
+
+</details>
 
 ## Ideas it builds on
 
