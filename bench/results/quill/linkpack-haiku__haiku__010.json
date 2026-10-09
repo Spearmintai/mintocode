@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 10,
+ "question": "What is the architectural pattern of the test class that isolates request context lifecycle management from streaming response generation logic?",
+ "model": "haiku",
+ "answer": "# Architectural Pattern: Fixture-Based Test Class with Context Stack Assertion\n\nThe architectural pattern for isolating request context lifecycle management from streaming response generation logic is demonstrated in **TestFlowing** class (tests/test_aids.py:L236-307) and the supporting **qry_scope fixture** pattern:\n\n## Key Components:\n\n### 1. **Fixture-Based Context Isolation** (conftest.py:L60-63)\n```python\n@pytest.fixture\ndef qry_scope(app):\n    with app.test_call_scope() as ctx:\n        yield ctx\n```\nThis establishes a baseline request context for testing, separating lifecycle management from test logic.\n\n### 2. **Dedicated Test Class for Streaming** (tests/test_aids.py:L236-307)\nThe `TestFlowing` class groups all `flow_with_environment` tests, organizing them by concern:\n- **test_flowing_with_scope** (L237-248): Basic streaming with request access\n- **test_flowing_with_scope_as_wrapper** (L250-262): Decorator usage pattern\n- **test_flowing_with_scope_and_bespoke_shutdown** (L264-293): Resource cleanup verification\n- **test_flow_retains_visit** (L295-307): Session state preservation\n\n### 3. **Separation of Concerns in Helper Function** (src/quill/helpers.py:L62-136)\n`flow_with_environment` itself implements the context preservation pattern:\n- **Lines 109-114**: Captures current request context independently\n- **Lines 115-128**: Wraps generator execution in context manager\n- **Lines 118-119, 134-136**: Uses sentinel value to ensure context is pushed before yielding\n\n### 4. **Context Stack Verification Pattern** (tests/test_trialing.py:L382-396)\n```python\ndef test_caller_remove_every_retained(app, qry_scope, client):\n    # ... route returns flow_with_environment(\"hello\")\n    rv = client.get(\"/\")\n    rv.close()  # Release flow_with_environment context\n    # Assert only qry_scope context remains\n    assert _cv_request.get(None) is qry_scope\n```\n\n## Pattern Name: \n**Fixture-Scoped Context Isolation with State Assertion**\n\nThis pattern allows tests to verify that streaming response generation (generator logic) maintains proper request context through its lifecycle while being completely isolated from the outer request/response handling lifecycle via `flow_with_environment`.",
+ "cost": 0.020996,
+ "turns": 1,
+ "duration_s": 16.8,
+ "tokens": {
+  "input": 7932,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7932
+ },
+ "pack_tokens": 4728,
+ "score": {
+  "correctness": 9,
+  "completeness": 9,
+  "relevance": 13,
+  "clarity": 15,
+  "reasoning": 11,
+  "total": 57
+ }
+}

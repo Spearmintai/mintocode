@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 4,
+ "question": "What is the dependency chain in the test function that verifies subdomain routing through configuration, route registration, and request context creation?",
+ "model": "haiku",
+ "answer": "# Subdomain Routing Test Dependency Chain\n\nThe test function **`test_hostprefix`** in `tests/test_trialing.py:L302-318` demonstrates the complete dependency chain:\n\n## Dependency Chain (in execution order):\n\n1. **Configuration Phase** (lines 303-304):\n   - `quill.Quill(__name__, subdomain_matching=True)` \u2014 App initialization\n   - `app.config[\"SERVER_NAME\"] = \"example.com\"` \u2014 Configuration setup\n\n2. **Client Setup Phase** (line 305):\n   - `app.test_caller()` \u2192 `src/quill/app.py:L669-725` \u2014 Creates test client (`QuillPatron`)\n\n3. **Route Registration Phase** (lines 307-309):\n   - `@app.route(\"/\", subdomain=\"<company_id>\")` \u2192 `src/quill/sansio/skeleton.py:L335-365` \u2014 Registers route via decorator, which calls `attach_link_regulation()`\n\n4. **Request Context Phase** (line 311):\n   - `with app.test_call_scope()` \u2192 `src/quill/app.py:L1423-1477` \u2014 Creates request context by constructing `SurroundingsConstructor` and calling `query_environment()`\n\n5. **URL Building Phase** (line 312):\n   - `quill.build_link_to(\"view\", company_id=\"xxx\")` \u2192 `src/quill/app.py:L1003-1127` \u2014 Builds URL using active request context (requires `_cv_request` to be set, see `src/quill/globals.py:L46-48`)\n\n6. **Request Execution Phase** (lines 314-315):\n   - `with client:` and `client.get(url)` \u2014 Executes actual HTTP request with built URL\n\n**Key Dependency**: The URL building (step 5) depends on the request context being active (step 4), because `build_link_to()` accesses the current request context to resolve subdomain parameters into the proper hostname through the `SERVER_NAME` configuration.",
+ "cost": 0.020377,
+ "turns": 1,
+ "duration_s": 16.1,
+ "tokens": {
+  "input": 7183,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7183
+ },
+ "pack_tokens": 3678,
+ "score": {
+  "correctness": 6,
+  "completeness": 5,
+  "relevance": 9,
+  "clarity": 15,
+  "reasoning": 10,
+  "total": 45
+ }
+}

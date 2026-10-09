@@ -8,7 +8,7 @@
 ### Send your coding agent the paragraphs that matter.
 
 Compile your repo once. **mic** links the functions, callers and tests a question needs, and sends only those.<br>
-**7,300 tokens per answer instead of 77,900** on a de-memorized SWE-QA benchmark.
+**Up to 3.6× more answers from the same coding plan**, and 7,300 tokens per answer instead of 77,900.
 
 <p>
   <a href="https://github.com/Spearmintai/mintocode/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/Spearmintai/mintocode?style=flat&logo=github&color=16845f&labelColor=10261e"></a>
@@ -68,6 +68,27 @@ the `claude` CLI, `ANTHROPIC_API_KEY`, any OpenAI-compatible API (`OPENAI_API_KE
 Z.ai GLM, DeepSeek, OpenRouter, Ollama, vLLM; models via `MIC_OPENAI_MODEL_STRONG/_MEDIUM/_FAST`), or the `codex`
 CLI. Force one with `MIC_BACKEND=claude-cli|api|openai|codex`.
 
+## Stretch your coding plan
+
+Claude Code and Codex plans cap how much frontier-model work you get per session and per week. Most of that budget
+goes to the agent re-reading your code. mic moves the reading into a one-time compile, so each question needs fewer
+frontier calls, or none.
+
+| Same 48 questions | Answers per plan budget ³ | Frontier-model calls per answer | Cost per answer (API) | Score |
+|---|---|---|---|---|
+| Claude Code, exploring by itself | **1.0×** | 5.2 | $0.061 | 78.7 |
+| Claude Code + mic hooks | **0.94×** | 3.8 | $0.065 | 79.3 |
+| `mic ask`, Sonnet reads the pack | **1.7×** | 1 | $0.036 | 72.9 |
+| `mic ask`, Haiku reads the pack | **3.6×** | 0 | $0.017 | 68.2 |
+
+³ Plans don't publish their metering, so this uses API-equivalent cost as the proxy: how many answers the same
+budget buys, relative to Claude Code exploring on its own. The compile is a one-time cost on top ($13.74
+API-equivalent for this 34k-line repo; incremental updates cost cents). At the Haiku row's saving it pays for itself
+after about 300 answers, and a committed `.micode/` is shared by the whole team.
+
+The trade is explicit: one-call answers score lower than a full agent session, so use `mic ask` for "where / how /
+why" questions about the code, and keep the agent's own turns for edits.
+
 ## What it does
 
 Most context tools either paste the repository into the window (repomix, gitingest), or index raw code and let the
@@ -85,6 +106,13 @@ agent search it (claude-context, Serena, codebase-memory graphs). mic does what 
    tests.
 3. **Send only that.** Seeds go in as live source (read from disk, never stale), links as one line each with an exact
    span. A typical pack is 2-7k tokens instead of an exploration that re-reads the repo turn after turn.
+
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/graph-dark.svg">
+  <img alt="mic link graph: the question selects seed paragraphs through compiled notes and aliases; seeds link to the code that uses them and the code they use" src="docs/assets/graph-light.svg" width="860">
+</picture>
+</p>
 
 In Claude Code, Codex and ZCode this happens through hooks, with nothing for you to do:
 
@@ -104,7 +132,7 @@ session model then relays that answer, which adds its own turn, so the cheapest 
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/bench-dark.svg">
-  <img alt="Tokens per answer: Claude Code 77,900; with mic hooks 67,100; mic ask 7,300; mic ask with Laya judge 6,300" src="docs/assets/bench-light.svg" width="860">
+  <img alt="Tokens per answer and answers per plan: Claude Code 77,900 (1.0x); with mic hooks 67,100 (0.9x); mic ask with Sonnet 7,300 (1.7x); with Haiku 6,500 (3.6x)" src="docs/assets/bench-light.svg" width="860">
 </picture>
 
 Benchmark: [SWE-QA](https://github.com/peng-weihan/SWE-QA-Bench), 48 human-grounded questions about flask with
@@ -117,13 +145,14 @@ distinctive identifiers, paths and the project name (`Blueprint` → `Schematic`
 and applies the same rename to the questions and reference answers. On the renamed repo, native Claude Code needs
 +27% tokens and +72% cost for the same score, which is the situation mic is for.
 
-| Arm (48 questions, de-memorized flask) | Score | Tokens | Cost | Wins / ties / losses vs native |
+| Arm (48 questions, de-memorized flask) | Score | Tokens | Cost | Wins / ties vs native |
 |---|---|---|---|---|
 | Claude Code, native exploration | 78.7 | 77,900 | $0.061 | — |
-| Claude Code + mic hooks | 79.3 | 67,100 (1.2× ↓) | $0.065 | 19 / 8 / 21 |
-| `mic ask`, link pack | 72.9 | 7,300 (10.7× ↓) | $0.036 | 16 / 1 / 31 |
-| `mic ask`, link pack + Haiku paragraph judge ¹ | 76.1 | 4,150 + ~14k judge | ~$0.04 | 21 / 3 / 24 |
-| `mic ask`, link pack + Laya judge (local) ² | 71.5 | 6,300 | $0.032 | 10 / 4 / 34 |
+| Claude Code + mic hooks | 79.3 | 67,100 (1.2× ↓) | $0.065 | 19 / 8 |
+| `mic ask`, link pack, Sonnet reads | 72.9 | 7,300 (10.7× ↓) | $0.036 | 16 / 1 |
+| `mic ask`, link pack, Haiku reads | 68.2 | 6,500 (11.9× ↓) | $0.017 | 9 / 3 |
+| `mic ask`, link pack + Haiku paragraph judge ¹ | 76.1 | 4,150 + ~14k judge | ~$0.04 | 21 / 3 |
+| `mic ask`, link pack + Laya judge (local) ² | 71.5 | 6,300 | $0.032 | 10 / 4 |
 | one call over a large card-and-excerpt pack (Sonnet) | 72.4 | 8,400 | $0.040 | — |
 
 ¹ A research arm: Haiku picks the needed paragraphs from ~60 candidates. The pack shrinks and answers improve, but the
@@ -144,6 +173,29 @@ What we tried and dropped, with numbers in `bench/`:
 - delegating to a mic subagent: 1.1× *more* tokens
 - dense vectors from Laya's encoder: anisotropic, no retrieval signal
 - int8 Laya on CPU: slower on SSE-only CPUs and hurts the ranking
+
+## Where this goes: compile with a frontier model, write with a local one
+
+The expensive part of understanding a codebase happens once, at compile time. That opens a split most tools can't
+make:
+
+1. **Compile with the strongest model you can get**, such as Fable or Opus, once per repository. Its understanding
+   (what each function means, its traps, how people describe it, what links to what) is written into `.micode/` as
+   cards, aliases, precompiled answers and the link graph.
+2. **Serve with a small model**, local or cheap. The link pack hands it exactly the paragraphs that matter, already
+   annotated with the frontier model's notes, so the small model works from the frontier model's reading of your code
+   instead of its own.
+
+The pieces exist today: `mic compile . --model claude-fable-5-1`, then point `mic ask` at any OpenAI-compatible
+endpoint, for example a local Ollama:
+
+```bash
+MIC_BACKEND=openai OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
+MIC_OPENAI_MODEL_MEDIUM=qwen3-coder mic ask "where is the retry policy configured?"
+```
+
+We have measured Haiku as the reader (the 3.6× row above), not yet a local model, and not yet a small model writing
+code from link packs. That is the next benchmark. If you try it, open an issue with your numbers.
 
 ## How it compares
 

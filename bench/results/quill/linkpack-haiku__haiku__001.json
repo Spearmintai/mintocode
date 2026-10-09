@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 1,
+ "question": "What is the purpose of the registration tracking flag in the schematic collection class that prevents setup methods from being called after the schematic has been registered once?",
+ "model": "haiku",
+ "answer": "# Purpose of `_got_registered_once` Flag in Schematic\n\nThe `_got_registered_once` flag in the `Schematic` class prevents setup methods from being called after the schematic has been registered, ensuring **consistency across multiple registrations**.\n\n## How It Works\n\nWhen `Schematic.enroll` is called (during `app.enroll_plan`), it sets `self._got_registered_once = True`. After that point, any `@preparationmethod`-decorated setup method (routes, record callbacks, hook decorators) will raise an `AssertionError` when called.\n\n**Source:** `src/quill/sansio/schematics.py:L213-221`\n\n```python\ndef _verify_configuration_completed(self, f_name: str) -> None:\n    if self._got_registered_once:\n        raise AssertionError(\n            f\"The setup method '{f_name}' can no longer be called on the schematic\"\n            f\" '{self.name}'. It has already been registered at least once, any\"\n            \" changes will not be applied consistently.\\n\"\n            \"Make sure all imports, decorators, functions, etc. needed to set up\"\n            \" the schematic are done before registering it.\"\n        )\n```\n\n## The Core Problem It Prevents\n\nIf you registered a schematic with `app.enroll_plan`, then added new routes to it, those routes would **not** be registered on the application. This inconsistency\u2014where some registrations have the new routes and others don't\u2014is what the flag prevents.\n\nThe `preparationmethod` decorator (`src/quill/sansio/skeleton.py:L42-49`) wraps every setup method to call `_verify_configuration_completed` before execution, enforcing this guarantee across all setup methods including `route`, `record`, and hook decorators.",
+ "cost": 0.014776999999999998,
+ "turns": 1,
+ "duration_s": 11.4,
+ "tokens": {
+  "input": 5841,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5841
+ },
+ "pack_tokens": 3581,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 78
+ }
+}

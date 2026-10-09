@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 7,
+ "question": "What is the interaction between the parametrization of import and app name arguments in the exception-raising test and the exception handling semantics that ensures the application location function fails consistently?",
+ "model": "haiku",
+ "answer": "# Interaction Between Parametrization and Exception Handling Semantics\n\nThe test `test_pinpoint_program_throws` (lines 199-219 in `tests/test_terminal_tool.py`) exercises different failure points through the app location pipeline, and the exception handling ensures consistent `MissingProgramFailure` conversion.\n\n## The Parametrization Routes Through Different Code Paths\n\nThe parametrized cases split into two primary flows:\n\n1. **When `aname` is None**: flows through `find_program()` \u2192 `locate_optimal_program()` (lines 241-264, 41-91)\n2. **When `aname` is provided**: flows through `find_program()` \u2192 `locate_program_by_text()` (lines 241-264, 120-197)\n\n## Exception Handling Semantics by Failure Type\n\nEach parameter combination tests a different exception-to-`MissingProgramFailure` conversion:\n\n| Case | Module Name | App Name | Failure Point | Exception Caught |\n|------|---|---|---|---|\n| `(\"notanapp.py\", None)` | Invalid (file path) | None | `__import__` | ImportError \u2192 MissingProgramFailure (L250-253) |\n| `(\"cliapp/app\", None)` | Invalid (path-style) | None | `__import__` | ImportError \u2192 MissingProgramFailure (L250-253) |\n| `(\"cliapp.app\", \"notanapp\")` | Valid | Missing attr | `getattr` in locate_program_by_text | AttributeError \u2192 MissingProgramFailure (L170-172) |\n| `(\"cliapp.manufacturer\", 'build_program2(\"foo\")')` | Valid | Wrong arg count | `_invoked_with_bad_arguments` check (L180) detects call-time TypeError | TypeError \u2192 MissingProgramFailure (L183-187) |\n| `(\"cliapp.manufacturer\", \"build_program(\")` | Valid | Syntax error | `ast.parse(mode='eval')` in locate_program_by_text | SyntaxError \u2192 MissingProgramFailure (L131-133) |\n| `(\"cliapp.manufacturer\", \"without_program\")` | Valid | Non-Quill return | Explicit isinstance check (L191-192) | Raises MissingProgramFailure (L194-197) |\n| `(\"cliapp.loadfailureprogram\", None)` | Nested import failure | None | `sys.exc_info()[2].tb_next` check in find_program (L249) | Nested ImportError \u2192 MissingProgramFailure (L250-253) |\n| `(\"cliapp.message.txt\", None)` | Non-module file | None | `__import__` | ImportError \u2192 MissingProgramFailure (L250-253) |\n\n## Semantic Consistency Mechanism\n\nThe interaction ensures consistent failure because:\n\n1. **Every exception type is caught early**: SyntaxError (L131), AttributeError (L170), TypeError (L180), ImportError (L246-253), ValueError from `ast.literal_eval` (L156)\n\n2. **The `_invoked_with_bad_arguments()` helper** (L94-117) distinguishes whether a TypeError came from the call itself (bad arguments) vs. from inside the function. This ensures only genuine argument mismatches trigger MissingProgramFailure, not legitimate errors from the factory.\n\n3. **Parametrization coverage**: By combining import failures, app discovery failures, factory invocation failures, and syntax errors, the test verifies that **all code paths normalize to the same exception type**, making the CLI's error reporting consistent regardless of where the failure occurs.\n\nThe key design: `find_program()` and its helper functions (`locate_optimal_program()`, `locate_program_by_text()`) form a defensive funnel where every failure mode is caught and converted to `MissingProgramFailure`, ensuring the CLI tool presents a uniform error interface to the user.",
+ "cost": 0.025467,
+ "turns": 1,
+ "duration_s": 23.0,
+ "tokens": {
+  "input": 9038,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 9038
+ },
+ "pack_tokens": 4850,
+ "score": {
+  "correctness": 14,
+  "completeness": 16,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 79
+ }
+}

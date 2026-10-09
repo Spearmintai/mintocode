@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 27,
+ "question": "Why does the method that opens application package resources relative to the root path restrict file opening to read-only modes?",
+ "model": "haiku",
+ "answer": "# Why `launch_asset` Restricts to Read-Only Modes\n\nBased on the provided material, the design rationale is implicit rather than explicitly stated. However, the code structure reveals the intent:\n\n## Design Pattern\n\nThe codebase provides **two distinct methods** with different purposes:\n\n1. **`launch_asset()`** \u2014 Opens files from `root_path` (application package resources) in **read-only mode only** (`{\"r\", \"rt\", \"rb\"}`)\n\n2. **`launch_deployment_asset()`** \u2014 Opens files from `instance_path` (deployment/instance folder) in **any mode, including write modes**\n\nAs stated in `src/quill/app.py:L366-368`:\n\n> \"Unlike :meth:`launch_asset`, files in the instance folder can be opened for writing.\"\n\n## The Rationale\n\nThe docstrings describe what the methods do\u2014\"only reading is supported\" (`src/quill/app.py:L345` and `src/quill/schematics.py:L112`)\u2014but the provided material does **not explicitly explain the underlying reason** for this restriction.\n\nThe design distinction suggests that:\n- **Package resources** (in `root_path`) are meant to be immutable application assets\n- **Instance resources** (in `instance_path`) are meant to be mutable deployment-specific data\n\nThe restriction enforces a separation between read-only application code/assets and writable instance-specific files, but a detailed justification for this design choice is not included in the provided source documentation.",
+ "cost": 0.012024,
+ "turns": 1,
+ "duration_s": 18.8,
+ "tokens": {
+  "input": 5140,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 5140
+ },
+ "pack_tokens": 2394,
+ "score": {
+  "correctness": 15,
+  "completeness": 10,
+  "relevance": 17,
+  "clarity": 16,
+  "reasoning": 12,
+  "total": 70
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 21,
+ "question": "How does the error handling strategy in the application context globals namespace class's attribute access, deletion, and removal methods balance between raising AttributeError for missing attributes and providing default values?",
+ "model": "haiku",
+ "answer": "# Error Handling Strategy in _ProgramScopeShared\n\nThe `_ProgramScopeShared` class (which backs `quill.g`, the application context globals) uses a **dual strategy** that distinguishes between strict attribute-style access and permissive dictionary-style access:\n\n## Strict Attribute Access (Always Raises)\n\n**`__getattr__`** (src/quill/ctx.py:L52-56) and **`__delattr__`** (src/quill/ctx.py:L61-65) both raise `AttributeError` when an attribute is missing:\n\n```python\ndef __getattr__(self, name: str) -> t.Any:\n    try:\n        return self.__dict__[name]\n    except KeyError:\n        raise AttributeError(name) from None  # Strict - always raises\n\ndef __delattr__(self, name: str) -> None:\n    try:\n        del self.__dict__[name]\n    except KeyError:\n        raise AttributeError(name) from None  # Strict - always raises\n```\n\nThis maintains **Python's normal attribute semantics**: `g.foo` and `del g.foo` fail loudly if `foo` doesn't exist.\n\n## Dictionary-Style Methods (Provide Defaults)\n\n**`get`** (src/quill/ctx.py:L67-76) returns a default value (None) with no exception:\n\n```python\ndef get(self, name: str, default: t.Any | None = None) -> t.Any:\n    return self.__dict__.get(name, default)  # Permissive - never raises\n```\n\n**`pop`** (src/quill/ctx.py:L78-90) uses a **sentinel value** (`_sentinel`) to distinguish between \"no default provided\" and \"default is None\":\n\n```python\ndef pop(self, name: str, default: t.Any = _sentinel) -> t.Any:\n    if default is _sentinel:\n        return self.__dict__.pop(name)  # Raises KeyError if missing\n    else:\n        return self.__dict__.pop(name, default)  # Returns default\n```\n\nThis provides **dict-like behavior**: `pop(name)` raises `KeyError`; `pop(name, default)` returns the default.\n\n## Broken Method\n\n**`assumefallback`** (src/quill/ctx.py:L92-102) is **broken** because it tries to call `self.__dict__.assumefallback()`, but `dict` objects don't have this method. This causes `AttributeError` whenever called\u2014see the compiled knowledge noting this is \"a rename artifact of dict `setdefault`.\"\n\n## Summary\n\n| Method | Missing Attribute | Strategy |\n|--------|-------------------|----------|\n| `g.attr` / `del g.attr` | Raises `AttributeError` | Strict Python semantics |\n| `g.get(name)` | Returns `None` | Permissive dict-like |\n| `g.pop(name)` | Raises `KeyError` | Dict-like, no default |\n| `g.pop(name, default)` | Returns `default` | Dict-like, with default |\n| `g.assumefallback(...)` | Raises `AttributeError` | Broken (dict has no method) |",
+ "cost": 0.018721,
+ "turns": 1,
+ "duration_s": 16.5,
+ "tokens": {
+  "input": 6457,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6457
+ },
+ "pack_tokens": 3137,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 15,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 76
+ }
+}

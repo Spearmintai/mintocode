@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 30,
+ "question": "Why would performance degradation occur if the custom template filter registration mechanism used in schematic test cases were repeated across multiple distinct schematic objects during application startup?",
+ "model": "haiku",
+ "answer": "# Performance Degradation with Multiple Schematic Filter Registrations\n\nBased on the compiled knowledge, performance degradation would occur due to the **deferred callback mechanism** used for filter registration:\n\n## The Mechanism\n\nFrom the source, `Schematic.program_layout_sieve()` and `Schematic.attach_program_layout_sieve()` both register filters via `note_once_only` callbacks:\n\n```python\n# src/quill/sansio/schematics.py:L232-244\ndef note_once_only(self, func: DeferredSetupFunction) -> None:\n    def wrapper(state: SchematicSetupStatus) -> None:\n        if state.first_registration:\n            func(state)\n    self.record(update_wrapper(wrapper, func))\n```\n\nAnd:\n\n```python\n# src/quill/sansio/schematics.py:L460-475\n# Schematic.attach_program_layout_sieve \u2014 note_once_only: \n# sets state.app.markup_engine_env.filters[name or f.__name__] = f\n```\n\n## Sources of Degradation\n\n1. **Repeated Callback Wrapper Overhead**: Each distinct schematic object that registers filters creates its own `note_once_only` wrapper function. With many schematics, you accumulate multiple wrapper functions that must be:\n   - Called during `enroll_plan()`\n   - Checked via conditional (`if state.first_registration`)\n   - Executed to update the filters dictionary\n\n2. **Multiple `markup_engine_env` Accesses**: Each callback accesses `app.markup_engine_env` (a cached_property building the Jinja2 environment). While cached after first access, the overhead comes from repeated property access patterns across multiple callbacks.\n\n3. **Deferred Execution Pattern**: Instead of registering all filters in a single batch operation, the deferred callback system executes one callback per schematic enrollment sequentially, multiplying function call overhead.\n\nFor example, 50 schematics \u00d7 10 filters each = 500 separate `note_once_only` callbacks executed during startup, each performing conditional checks and dictionary assignments.\n\n**The design choice prioritizes correctness** (ensuring idempotency when schematics are enrolled multiple times) **over startup speed**.",
+ "cost": 0.028905999999999998,
+ "turns": 1,
+ "duration_s": 35.6,
+ "tokens": {
+  "input": 8881,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8881
+ },
+ "pack_tokens": 3653,
+ "score": {
+  "correctness": 10,
+  "completeness": 8,
+  "relevance": 14,
+  "clarity": 15,
+  "reasoning": 10,
+  "total": 57
+ }
+}

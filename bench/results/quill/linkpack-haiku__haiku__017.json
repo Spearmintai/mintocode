@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 17,
+ "question": "How does the method that processes unhandled exceptions determine whether to re-raise them or transform them into HTTP 500 responses based on configuration state?",
+ "model": "haiku",
+ "answer": "# Exception Re-raising vs. Transformation Logic\n\nThe method **`Quill.manage_failure`** (src/quill/app.py:L811-862) determines whether to re-raise or transform unhandled exceptions based on configuration state through this logic:\n\n## Configuration Check Order\n\nAt **lines 841-844**, the method checks configuration in this sequence:\n\n```python\npropagate = self.config[\"PROPAGATE_EXCEPTIONS\"]\n\nif propagate is None:\n    propagate = self.testing or self.debug\n```\n\n1. **First priority**: The `PROPAGATE_EXCEPTIONS` config key (line 841)\n2. **Fallback**: If that is `None`, it uses `self.testing or self.debug` (line 844)\n   - `self.testing` is a `SettingProperty[bool]` bound to the `TESTING` config key (src/quill/sansio/app.py:L208)\n   - `self.debug` returns `config['DEBUG']` (src/quill/sansio/app.py:L549-560)\n\n## Re-raise vs. Transform Decision\n\nAt **lines 846-862**, the final `propagate` value determines behavior:\n\n**If `propagate` is `True`** (lines 846-852): The exception is **re-raised**, allowing the debugger to display it:\n```python\nif propagate:\n    if exc_info[1] is e:\n        raise\n    raise e\n```\n\n**If `propagate` is `False`** (lines 854-862): The exception is **transformed** into an HTTP 500 response:\n```python\nself.record_failure(exc_info)\nserver_error = InternalServerError(original_exception=e)\nhandler = self._locate_fault_processor(server_error, request.schematics)\nif handler is not None:\n    server_error = self.guarantee_blocking(handler)(server_error)\nreturn self.conclude_inquiry(server_error, from_error_handler=True)\n```\n\nThe original exception is preserved as `server_error.original_exception` (line 856) for inspection by error handlers.",
+ "cost": 0.019688999999999998,
+ "turns": 1,
+ "duration_s": 12.6,
+ "tokens": {
+  "input": 7925,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7925
+ },
+ "pack_tokens": 5150,
+ "score": {
+  "correctness": 17,
+  "completeness": 13,
+  "relevance": 18,
+  "clarity": 18,
+  "reasoning": 16,
+  "total": 82
+ }
+}

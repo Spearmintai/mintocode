@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 13,
+ "question": "How does the decorator that copies request contexts handle isolation of lightweight concurrent execution contexts while preserving session data across execution boundaries?",
+ "model": "haiku",
+ "answer": "# Request Context Copying and Isolation for Concurrent Execution\n\nThe decorator mechanism for copying request contexts is `duplicate_active_inquiry_scope()` (src/quill/ctx.py:L155-193). It handles isolation and session preservation through these key mechanisms:\n\n## Snapshot Capture at Decoration Time\n\n```python\nctx = _cv_request.get(None)  # Capture current request context\nctx = ctx.copy()             # Create a copy via InquiryScope.copy()\n```\n\nThe decorator captures a **snapshot of the entire request context** at the moment of decoration, which includes the current session object.\n\n## Context Isolation During Execution\n\nThe wrapper function isolates the greenlet execution within a copied context:\n\n```python\ndef wrapper(*args: t.Any, **kwargs: t.Any) -> t.Any:\n    with ctx:\n        return ctx.app.guarantee_blocking(f)(*args, **kwargs)\n```\n\nThis uses a `with` statement to **scope the context variables** (`_cv_request`) to the greenlet's execution. Outside the block, `quill.request` and `quill.current_app` are unbound.\n\nThe test `test_microthread_scope_duplicating` (tests/test_callscope.py:L150-177) demonstrates this:\n- **Inside** `with reqctx:` \u2014 the greenlet can access `quill.request`, `quill.current_app`, and `quill.session`\n- **Outside** `with reqctx:` \u2014 `assert not quill.request` verifies isolation\n\n## Session Preservation Across Boundaries\n\nThe critical detail is in `InquiryScope.copy()` (src/quill/ctx.py:L337-355):\n\n```python\nreturn self.__class__(\n    self.app,\n    environ=self.request.environ,\n    request=self.request,\n    session=self.session,    # Uses the CURRENT session object\n)\n```\n\n**Key design (versioned in 1.1)**: The copy uses `session=self.session` \u2014 the live session object, not a reload. The docstring explicitly notes: *\"The current session object is used instead of reloading the original data. This prevents `quill.session` pointing to an out-of-date object.\"*\n\nThe test shows session data set before the greenlet runs (`quill.session[\"fizz\"] = \"buzz\"`) is accessible inside the greenlet's copied context (line 166: `assert quill.session.get(\"fizz\") == \"buzz\"`).\n\n## Summary\n\n- **Isolation**: Context variables (`_cv_request`) are scoped to the `with ctx:` block, preventing cross-greenlet interference\n- **Session sharing**: The copied context holds a reference to the *same* session object, allowing reads/writes within the greenlet to reflect the shared session state\n- **Greenlet safety**: The mechanism is designed for greenlets (src/quill/ctx.py:L341: *\"This can be used to move a request context to a different greenlet\"*), though thread safety requires external locking for the shared request object",
+ "cost": 0.022907999999999998,
+ "turns": 1,
+ "duration_s": 19.6,
+ "tokens": {
+  "input": 8393,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8393
+ },
+ "pack_tokens": 4780,
+ "score": {
+  "correctness": 14,
+  "completeness": 12,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 14,
+  "total": 74
+ }
+}

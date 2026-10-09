@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 33,
+ "question": "Why does the pass-through dictionary tag class's JSON conversion method apply recursive tagging only to dictionary values while avoiding tagging keys?",
+ "model": "haiku",
+ "answer": "# ForwardMapping and Why Keys Aren't Tagged\n\nThe pass-through dictionary tag class is `ForwardMapping` (lines 119-130 in `src/quill/json/tag.py`). Its `into_json` method applies recursive tagging only to **values**, not keys, explicitly because of a JSON constraint.\n\nThe reason is stated in the code comment itself (lines 126-127):\n\n```python\n# JSON objects may only have string keys, so don't bother tagging the\n# key here.\n```\n\nSince JSON mandates that all object/dictionary keys must be strings, there is no purpose in tagging keys. Keys can never be non-JSON-native types (like bytes, UUIDs, dates, or custom objects) that the tagging system is designed to encode.\n\nIn contrast, **values** need tagging because they can be arbitrary Python types. The `into_json` method at lines 125-128 recursively calls `self.serializer.tag(v)` on each value to handle type conversion, but passes keys through unchanged:\n\n```python\nreturn {k: self.serializer.tag(v) for k, v in value.items()}\n```",
+ "cost": 0.007059,
+ "turns": 1,
+ "duration_s": 10.7,
+ "tokens": {
+  "input": 4219,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 4219
+ },
+ "pack_tokens": 2320,
+ "score": {
+  "correctness": 17,
+  "completeness": 13,
+  "relevance": 18,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 80
+ }
+}

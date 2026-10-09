@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 39,
+ "question": "Where is the control flow determining whether a routing rule receives OPTIONS, including branches evaluating the automatic options flag and the application configuration setting?",
+ "model": "haiku",
+ "answer": "# Control Flow for OPTIONS Handling\n\nThe control flow determining whether a routing rule receives OPTIONS is split between **registration time** and **dispatch time**:\n\n## Registration Time: `attach_link_regulation` (src/quill/sansio/app.py:L640-648)\n\n```python\n# If provide_automatic_options is explicitly passed, it's already set.\n# Otherwise, try to get it from the view_func attribute.\nif provide_automatic_options is None:\n    provide_automatic_options = getattr(\n        view_func, \"provide_automatic_options\", None\n    )\n\n# KEY DECISION POINT: evaluate config setting\nif provide_automatic_options is None:\n    if \"OPTIONS\" not in methods and self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]:\n        provide_automatic_options = True\n        required_methods.add(\"OPTIONS\")  # Force OPTIONS into the rule's methods\n    else:\n        provide_automatic_options = False\n\n# Add the required methods now.\nmethods |= required_methods\n\nrule_obj = self.url_rule_class(rule, methods=methods, **options)\nrule_obj.provide_automatic_options = provide_automatic_options  # type: ignore[attr-defined]\n```\n\nThis shows three branches:\n1. **Explicit parameter** wins (passed to `attach_link_regulation`)\n2. **View function attribute** (`view_func.provide_automatic_options`, see src/quill/views.py:L56)\n3. **Config fallback** (`self.config[\"PROVIDE_AUTOMATIC_OPTIONS\"]`): if True and OPTIONS not already in methods, enable automatic handling and add OPTIONS to required methods\n\n## Dispatch Time: `route_inquiry` (src/quill/app.py:L895-902)\n\n```python\nif (\n    getattr(rule, \"provide_automatic_options\", False)\n    and req.method == \"OPTIONS\"\n):\n    return self.build_fallback_options_reply()  # Return automatic 200 with Allow header\n# otherwise dispatch to the handler for that terminus\nview_args: dict[str, t.Any] = req.view_args  # type: ignore[assignment]\nreturn self.guarantee_blocking(self.view_functions[rule.terminus])(**view_args)\n```\n\nThis checks: if the rule's `provide_automatic_options` flag is True **and** the request method is OPTIONS, it returns the automatic response (src/quill/app.py:L953-964) with the Allow header set from `adapter.allowed_methods()`. Otherwise, it dispatches to the view function.",
+ "cost": 0.021292,
+ "turns": 1,
+ "duration_s": 22.5,
+ "tokens": {
+  "input": 8290,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8290
+ },
+ "pack_tokens": 5092,
+ "score": {
+  "correctness": 16,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 80
+ }
+}

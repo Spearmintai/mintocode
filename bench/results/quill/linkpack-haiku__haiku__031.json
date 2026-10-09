@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 31,
+ "question": "Why does the test that validates schematic names cannot contain dots ensure that creating a modular route component with names containing dot characters raises a ValueError?",
+ "model": "haiku",
+ "answer": "# Why Schematic Names Cannot Contain Dots\n\nThe test `test_periodic_title_forbidden` (at `tests/test_schematics.py:L254-256`) validates this rule:\n\n```python\ndef test_periodic_title_forbidden(app, client):\n    with pytest.raises(ValueError):\n        quill.Schematic(\"app.ui\", __name__)\n```\n\n## The Reason: Dot as Naming Separator\n\n**Dots are reserved as separators in the schematic naming scheme.** When a schematic is enrolled, its name is combined with route endpoint names (termini) using a dot.\n\nThe validation occurs in `Schematic.__init__` at `src/quill/sansio/schematics.py:L198-199`:\n\n```python\nif \".\" in name:\n    raise ValueError(\"'name' may not contain a dot '.' character.\")\n```\n\nAccording to the compiled knowledge:\n\n> \"Names may not contain `.`, because the dot separates nested schematic names from the terminus name (2.0.1).\"\n\n## Why This Matters\n\n- **Terminus Structure**: A route in a schematic named \"bp\" with endpoint \"index\" gets the terminus \"bp.index\"\n- **Nested Schematics**: When schematics are nested, the dots build a hierarchical path (e.g., \"parent.child.endpoint\")\n- **Parsing Ambiguity**: If schematic names contained dots, parsing would become ambiguous\u2014the framework uses `terminus.rpartition('.')` (see `src/quill/envelope_types.py:L175-176`) to extract the schematic name, which relies on dots being unambiguous separators\n\nThe test ensures this constraint is enforced at construction time, preventing subtle bugs that would arise from dot-containing schematic names.",
+ "cost": 0.016197,
+ "turns": 1,
+ "duration_s": 16.0,
+ "tokens": {
+  "input": 6632,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 6632
+ },
+ "pack_tokens": 4191,
+ "score": {
+  "correctness": 15,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 17,
+  "reasoning": 15,
+  "total": 76
+ }
+}

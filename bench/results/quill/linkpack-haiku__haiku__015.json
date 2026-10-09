@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 15,
+ "question": "How does the deferred registration mechanism ensure that custom template filters registered through the schematic's application-level filter registration method are accessible in the template rendering environment when the schematic is mounted with a URL path prefix?",
+ "model": "haiku",
+ "answer": "# Deferred Template Filter Registration in Schematics\n\nThe deferred registration mechanism ensures template filters are accessible regardless of URL path prefix through a three-part system:\n\n## 1. **Deferred Function Registration with `note_once_only`**\n\nWhen you use `@schematic.program_layout_sieve()` (L443-458), it calls `attach_program_layout_sieve`, which creates a callback wrapped in `note_once_only`:\n\n```python\ndef register_template(state: SchematicSetupStatus) -> None:\n    state.app.markup_engine_env.filters[name or f.__name__] = f\n\nself.note_once_only(register_template)  # L475\n```\n\nThe `note_once_only` wrapper ensures this callback is only executed once per schematic object enrollment, preventing duplicate filter registration.\n\n## 2. **Execution During Schematic Enrollment**\n\nWhen `app.enroll_plan(schematic, url_prefix=\"/py\")` is called:\n- `Schematic.enroll(self, app, options)` is invoked (L273-377)\n- **Step 7** explicitly executes all deferred functions with the built `SchematicSetupStatus` state\n- The `SchematicSetupStatus` object provides `state.app` \u2014 the application reference \u2014 not a schematic-specific environment\n\n## 3. **Registration on Application-Level Template Environment**\n\nThe critical point is that the callback registers filters on `state.app.markup_engine_env.filters` (L473), which is the **global application template environment**, not on any schematic-specific environment.\n\nThis means:\n- **URL prefix is irrelevant** \u2014 template filters are application-wide\n- A filter registered via `@schematic.program_layout_sieve()` is available in *all* templates rendered by the app, whether routes are defined on the schematic (under the prefix) or on the main app\n\n## Evidence from Test\n\nIn `test_layout_sieve_with_layout` (L414-428):\n- Filter `super_reverse` is registered on schematic `bp` with `url_prefix=\"/py\"`\n- A route is defined on the **main app** at `/` (not under the prefix)\n- The route still has access to the filter because it's in `app.markup_engine_env.filters`\n- Result: `draw_layout(\"layout_sieve.html\", value=\"abcd\")` correctly applies the filter \u2192 `b\"dcba\"`\n\nThe deferred mechanism solves the timing problem: filters can be declared on the schematic before the app exists, then actually registered to the app's global template environment when the schematic is enrolled.",
+ "cost": 0.020331,
+ "turns": 1,
+ "duration_s": 17.2,
+ "tokens": {
+  "input": 7715,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7715
+ },
+ "pack_tokens": 4486,
+ "score": {
+  "correctness": 15,
+  "completeness": 14,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 16,
+  "total": 79
+ }
+}

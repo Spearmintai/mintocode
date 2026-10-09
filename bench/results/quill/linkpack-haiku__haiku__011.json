@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 11,
+ "question": "What hidden coupling exists between the decorator's state management and response lifecycle that causes issues with nested or conditional registration?",
+ "model": "haiku",
+ "answer": "# Hidden Coupling Between Decorator State Management and Response Lifecycle\n\nBased on the provided source material, the hidden coupling exists between **deferred function execution timing and response hook scope** in nested schematic registration. Here's the specific mechanism:\n\n## The Core Coupling\n\n**From `Schematic.record` (L223-230)** and **`Schematic.enroll` step 7**, decorators like `@faulthandler` don't execute immediately. Instead, they append functions to `deferred_functions`, which are called later during enrollment:\n\n```python\ndef from_blueprint(state: SchematicSetupStatus) -> None:\n    state.app.faulthandler(code)(f)\n```\n\n**The issue:** These deferred functions execute at **parent enrollment time** (not child definition time), receiving a `SchematicSetupStatus` object whose state depends on **how and when the parent is enrolled**.\n\n## Issues with Nested Registration\n\nFrom **`Schematic.enroll` step 9**: \"Recursively enrolls the nested schematics in `self._blueprints`\" \u2014 child schematics are enrolled as a side-effect of parent enrollment.\n\n**This creates two problematic couplings:**\n\n1. **Registration Scope Mismatch**: Response hooks registered via `state.app.faulthandler()` or similar methods operate at the **app level**, not the schematic level. A child's response hook registered during parent enrollment affects **all requests** to the app, not just the child's routes.\n\n2. **State Binding at Wrong Time**: The `SchematicSetupStatus` passed to deferred functions (L246-253) is created fresh per enrollment. For nested schematics, this state object includes `name_prefix`, `options`, and `subdomain` that are **computed at parent enrollment time**. If the same schematic is enrolled on different parents or with different options, the handlers reference inconsistent state.\n\n## Manifestation with Conditional Registration\n\nFrom the **test `test_embedding_link_stems` (L922-950)**: url_prefix can differ between init time and enrollment time. This means:\n\n- Handler registered when child enrolled on parent with `url_prefix=\"/child\"` \n- Handler still references that prefix even if parent later enrolled on app with different prefix computation\n- Multiple `preceding_inquiry`/`following_inquiry` hooks could accumulate unpredictably if conditional enrollment varies\n\n## The Specific Vulnerability\n\nFrom **`Schematic.program_faulthandler` (L595-610)**, the pattern shows `note_once_only` is used to prevent re-registration. But **for regular `@preceding_inquiry` / `@following_inquiry` decorators, there's no such protection**. If a parent schematic conditionally enrolls a child multiple times or on different app instances, the child's response hooks register multiple times without deduplication.\n\nThe coupling is: **temporal mismatch between decorator definition \u2192 enrollment execution \u2192 request handling**, combined with **app-level handler registration from schematic-nested contexts**.",
+ "cost": 0.034835000000000005,
+ "turns": 1,
+ "duration_s": 43.5,
+ "tokens": {
+  "input": 11082,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 11082
+ },
+ "pack_tokens": 5139,
+ "score": {
+  "correctness": 4,
+  "completeness": 3,
+  "relevance": 5,
+  "clarity": 13,
+  "reasoning": 9,
+  "total": 34
+ }
+}

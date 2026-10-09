@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 18,
+ "question": "How does the method that registers URL rules on schematic objects defer registration by storing an anonymous function in the deferred setup functions list instead of immediately calling the setup state's registration method?",
+ "model": "haiku",
+ "answer": "# URL Rule Registration Deferral on Schematics\n\nThe method that defers URL rule registration on schematic objects is **`Schematic.attach_link_regulation`** (src/quill/sansio/schematics.py:L412-441). Here's how it works:\n\n## The Deferral Mechanism\n\n`Schematic.attach_link_regulation` defers registration by creating an anonymous function (lambda) and storing it via `self.record()`:\n\n```python\n@preparationmethod\ndef attach_link_regulation(\n    self,\n    rule: str,\n    terminus: str | None = None,\n    view_func: ft.RouteCallable | None = None,\n    provide_automatic_options: bool | None = None,\n    **options: t.Any,\n) -> None:\n    # Validation...\n    if terminus and \".\" in terminus:\n        raise ValueError(\"'terminus' may not contain a dot '.' character.\")\n    \n    if view_func and hasattr(view_func, \"__name__\") and \".\" in view_func.__name__:\n        raise ValueError(\"'view_func' name may not contain a dot '.' character.\")\n\n    # Store anonymous function for deferred execution\n    self.record(\n        lambda s: s.attach_link_regulation(\n            rule,\n            terminus,\n            view_func,\n            provide_automatic_options=provide_automatic_options,\n            **options,\n        )\n    )\n```\n\n## Storage in Deferred Functions\n\nThe `self.record()` method (L223-230) appends this lambda to the deferred functions list:\n\n```python\n@preparationmethod\ndef record(self, func: DeferredSetupFunction) -> None:\n    \"\"\"Registers a function that is called when the schematic is\n    registered on the application.\"\"\"\n    self.deferred_functions.append(func)\n```\n\n## Deferred Execution\n\nThe lambda is executed later during `Schematic.enroll()` (step 7 of the enroll process in L273-377), where each function in `deferred_functions` is called with the `SchematicSetupStatus` state object. The lambda then invokes the actual registration via `state.attach_link_regulation()` (defined in L87-116).\n\nThis design allows routes to be collected during schematic definition and registered atomically when the schematic is enrolled on the app, rather than being registered immediately.",
+ "cost": 0.021130999999999997,
+ "turns": 1,
+ "duration_s": 16.0,
+ "tokens": {
+  "input": 8181,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8181
+ },
+ "pack_tokens": 5189,
+ "score": {
+  "correctness": 16,
+  "completeness": 12,
+  "relevance": 17,
+  "clarity": 17,
+  "reasoning": 13,
+  "total": 75
+ }
+}

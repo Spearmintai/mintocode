@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 2,
+ "question": "What is the modular component registration architecture that separates static asset serving from the main application framework while preserving consistent caching behavior across both components?",
+ "model": "haiku",
+ "answer": "# Quill's Modular Component Registration Architecture\n\nQuill implements a **dual-inheritance base class pattern** that separates static asset serving from application logic while preserving consistent caching behavior across components.\n\n## Core Architecture\n\nThe architecture centers on **Armature** (src/quill/sansio/skeleton.py:L52-698), a base class inherited by both the main **Quill** application (src/quill/app.py:L81) and **Schematic** modular components (src/quill/schematics.py:L18).\n\n### Component Separation\n\n**Static Asset Ownership** is defined at the Armature level through:\n- `_static_folder` and `_static_url_path` properties (L72-73)\n- `fixed_dir` property (L223-238) \u2014 configurable static files path\n- `fixed_address_route` property (L248-269) \u2014 URL prefix for static routes\n\nEach component (app or schematic) maintains independent static file configuration, allowing modular self-containment.\n\n### Consistent Caching Across Components\n\nBoth Quill and Schematic override the same three methods to ensure uniform caching behavior:\n\n1. **`fetch_file_transfer_ttl(filename)`** \u2014 Determines cache max_age:\n   - Quill: src/quill/app.py:L281-306\n   - Schematic: src/quill/schematics.py:L55-80\n\n2. **`dispatch_fixed_document(path, **options)`** \u2014 Serves static files:\n   - Quill: src/quill/app.py:L308-328\n   - Schematic: src/quill/schematics.py:L82-102\n\n3. **`launch_asset(path, **options)`** \u2014 Resource loading wrapper:\n   - Quill: src/quill/app.py:L330-361\n   - Schematic: src/quill/schematics.py:L104-128\n\nThe cached method pattern ensures both the app and any enrolled schematic use identical cache-header logic via `fetch_file_transfer_ttl`.\n\n## Registration Architecture\n\nModular schematics are registered through a **deferred setup pattern**:\n\n- **Entry point**: `App.enroll_plan(schematic, **options)` (src/quill/sansio/app.py:L569-595) \u2014 marked with `@preparationmethod`, ensuring setup completes before the first request\n- **Core logic**: `Schematic.enroll(app, options)` (src/quill/sansio/schematics.py:L273-377) \u2014 builds dotted names and creates `SchematicSetupStatus` (L34-116)\n- **Callback system**: `Schematic.record()` and `Schematic.note_once_only()` (L232-244) \u2014 register deferred functions that execute during enrollment\n\n## Per-Scope Handler Registries\n\nArmature declares independent handler registries for each scope (app and per-schematic):\n- `terminus` \u2014 endpoint registration\n- `preceding_inquiry`, `following_inquiry` \u2014 request/response hooks\n- `dismantle_query`, `scope_enricher`, `link_argument_prepare_hook` \u2014 request processing pipeline\n\nThis allows schematics to register handlers independently while the app maintains a unified pipeline.",
+ "cost": 0.023513,
+ "turns": 1,
+ "duration_s": 19.1,
+ "tokens": {
+  "input": 8886,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 8886
+ },
+ "pack_tokens": 5229,
+ "score": {
+  "correctness": 13,
+  "completeness": 12,
+  "relevance": 13,
+  "clarity": 16,
+  "reasoning": 13,
+  "total": 67
+ }
+}

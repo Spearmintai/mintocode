@@ -209,40 +209,106 @@ def demo(theme: str) -> str:
 
 
 # ---------------------------------------------------------------- benchmark chart
-ROWS = [
+ROWS = [  # name, score, tokens per answer, API cost per answer, ours
     ("Claude Code, exploring by itself", 78.7, 77900, 0.061, False),
     ("Claude Code + mic hooks", 79.3, 67100, 0.065, True),
-    ("mic ask · link pack, one call", 72.9, 7300, 0.036, True),
-    ("mic ask + local Laya judge", 71.5, 6300, 0.032, True),
+    ("mic ask · Sonnet reads the pack", 72.9, 7300, 0.036, True),
+    ("mic ask · Haiku reads the pack", 68.2, 6500, 0.017, True),
 ]
 
 
 def bench(theme: str) -> str:
     t = THEMES[theme]
-    W, top, rh, x0, bw = 940, 92, 58, 330, 350
+    W, top, rh, x0, bw = 940, 92, 58, 334, 240
     H = top + rh * len(ROWS) + 56
+    base_cost = ROWS[0][3]
+    cs, cp, cc = W - 232, W - 120, W - 24  # score, answers-per-plan, cost columns (right-aligned)
     rows = []
     for k, (name, score, tok, cost, ours) in enumerate(ROWS):
         y = top + k * rh
         w = bw * tok / ROWS[0][2]
         col = t["mint"] if ours else t["muted"]
+        plan = base_cost / cost
         rows.append(
-            f'<text x="24" y="{y + 20}" font-family="{SANS}" font-size="16" font-weight="{700 if k == 2 else 400}" fill="{t["ink"]}">{esc(name)}</text>'
+            f'<text x="24" y="{y + 20}" font-family="{SANS}" font-size="16" font-weight="{700 if k >= 2 else 400}" fill="{t["ink"]}">{esc(name)}</text>'
             f'<rect x="{x0}" y="{y + 6}" width="{max(w, 3):.1f}" height="20" rx="4" fill="{col}" opacity="{1 if ours else 0.55}"/>'
             f'<text x="{x0 + max(w, 3) + 10:.1f}" y="{y + 21}" font-family="{MONO}" font-size="14" fill="{t["ink"]}">{tok:,}</text>'
-            f'<text x="{W - 118}" y="{y + 21}" font-family="{MONO}" font-size="14" fill="{t["ink"]}" text-anchor="end">{score}</text>'
-            f'<text x="{W - 24}" y="{y + 21}" font-family="{MONO}" font-size="14" fill="{t["muted"]}" text-anchor="end">${cost:.3f}</text>'
+            f'<text x="{cs}" y="{y + 21}" font-family="{MONO}" font-size="14" fill="{t["ink"]}" text-anchor="end">{score}</text>'
+            f'<text x="{cp}" y="{y + 21}" font-family="{SANS}" font-size="17" font-weight="800" fill="{t["mint"] if plan > 1.05 else t["ink"]}" text-anchor="end">{plan:.1f}×</text>'
+            f'<text x="{cc}" y="{y + 21}" font-family="{MONO}" font-size="13" fill="{t["muted"]}" text-anchor="end">${cost:.3f}</text>'
             f'<line x1="24" y1="{y + rh - 12}" x2="{W - 24}" y2="{y + rh - 12}" stroke="{t["line"]}"/>')
+    hdr = lambda x, label: (f'<text x="{x}" y="64" font-family="{MONO}" font-size="11.5" fill="{t["muted"]}" '  # noqa: E731
+                            f'text-anchor="end" letter-spacing="1">{label}</text>')
     return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img"
- aria-label="Tokens per answer on 48 de-memorized SWE-QA questions">
+ aria-label="Tokens per answer and answers per plan budget on 48 de-memorized SWE-QA questions">
 <rect x="1" y="1" width="{W - 2}" height="{H - 2}" rx="14" fill="{t["panel"]}" stroke="{t["line"]}" stroke-width="2"/>
-<text x="24" y="40" font-family="{SANS}" font-size="20" font-weight="800" fill="{t["ink"]}">Tokens per answer</text>
-<text x="24" y="64" font-family="{SANS}" font-size="14" fill="{t["muted"]}">48 SWE-QA questions on a de-memorized repo · Sonnet · bars to scale</text>
-<text x="{W - 118}" y="64" font-family="{MONO}" font-size="12" fill="{t["muted"]}" text-anchor="end" letter-spacing="1">SCORE</text>
-<text x="{W - 24}" y="64" font-family="{MONO}" font-size="12" fill="{t["muted"]}" text-anchor="end" letter-spacing="1">COST</text>
+<text x="24" y="40" font-family="{SANS}" font-size="20" font-weight="800" fill="{t["ink"]}">Tokens per answer, and answers per plan</text>
+<text x="24" y="64" font-family="{SANS}" font-size="14" fill="{t["muted"]}">48 SWE-QA questions · de-memorized repo · bars to scale</text>
+{hdr(cs, "SCORE")}{hdr(cp, "PER PLAN")}{hdr(cc, "API $")}
 {"".join(rows)}
-<text x="24" y="{H - 20}" font-family="{SANS}" font-size="13" fill="{t["muted"]}">Score: SWE-QA's strict judge, 0-100. Reproduce with bench/.</text>
+<text x="24" y="{H - 20}" font-family="{SANS}" font-size="13" fill="{t["muted"]}">Per plan: answers the same budget buys vs Claude Code alone (API-equivalent cost as proxy). Score: SWE-QA's strict judge.</text>
 </svg>'''
+
+
+# ---------------------------------------------------------------- link graph illustration (real nodes and edges)
+GRAPH_SEEDS = [("Armature._verify_configuration_completed", "sansio/skeleton.py:L220-221"),
+               ("Schematic._verify_configuration_completed", "sansio/schematics.py:L213-221"),
+               ("test_program_query_handling", "tests/test_schematics.py:L727-763")]
+GRAPH_LINKS = [("preparationmethod", "sansio/skeleton.py:L42-49", "used by", True),
+               ("App", "sansio/app.py:L59-964", "used by", True),
+               ("App.enroll_plan", "sansio/app.py:L569-595", "uses", False)]
+
+
+def graph(theme: str) -> str:
+    t = THEMES[theme]
+    W, H = 940, 452
+    qx, qy, qw, qh = 24, 128, 214, 150
+    sx, sw, lx, lw, bh = 300, 334, 712, 204, 82
+    ys = [40, 160, 280]
+    out = [f'<defs><marker id="ah-{theme}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">'
+           f'<path d="M0,0 L10,5 L0,10 z" fill="{t["link"]}"/></marker></defs>',
+           f'<rect x="1" y="1" width="{W - 2}" height="{H - 2}" rx="14" fill="{t["panel"]}" stroke="{t["line"]}" stroke-width="2"/>']
+    # question
+    words, lines, cur = D["question"].split(), [], ""
+    for w_ in words:
+        if len(cur) + len(w_) > 24:
+            lines.append(cur.strip()); cur = ""
+        cur += w_ + " "
+    lines.append(cur.strip())
+    out.append(f'<rect x="{qx}" y="{qy}" width="{qw}" height="{qh}" rx="12" fill="{t["bg"]}" stroke="{t["line"]}"/>'
+               f'<text x="{qx + 16}" y="{qy + 26}" font-family="{MONO}" font-size="11" letter-spacing="1" fill="{t["muted"]}">QUESTION</text>')
+    for k, ln in enumerate(lines):
+        out.append(f'<text x="{qx + 16}" y="{qy + 52 + k * 20}" font-family="{MONO}" font-size="13" fill="{t["ink"]}">'
+                   f'{"<tspan fill=" + chr(34) + t["mint"] + chr(34) + " font-weight=" + chr(34) + "700" + chr(34) + ">? </tspan>" if k == 0 else ""}{esc(ln)}</text>')
+    # question -> seeds
+    for y in ys:
+        out.append(f'<path d="M{qx + qw},{qy + qh / 2} C{qx + qw + 34},{qy + qh / 2} {sx - 34},{y + bh / 2} {sx},{y + bh / 2}" '
+                   f'fill="none" stroke="{t["mint"]}" stroke-width="1.6" opacity="0.7"/>')
+    out.append(f'<text x="{qx + qw + 31}" y="{qy - 10}" font-family="{MONO}" font-size="10.5" fill="{t["muted"]}" text-anchor="middle">notes +</text>'
+               f'<text x="{qx + qw + 31}" y="{qy + 4}" font-family="{MONO}" font-size="10.5" fill="{t["muted"]}" text-anchor="middle">aliases</text>')
+    for (name, span), y in zip(GRAPH_SEEDS, ys):
+        out.append(f'<rect x="{sx}" y="{y}" width="{sw}" height="{bh}" rx="10" fill="{t["mintsoft"]}" stroke="{t["mint"]}" stroke-width="1.8"/>'
+                   f'<text x="{sx + 14}" y="{y + 22}" font-family="{MONO}" font-size="10.5" letter-spacing="1" fill="{t["mint"]}" font-weight="700">SEED · LIVE SOURCE</text>'
+                   f'<text x="{sx + 14}" y="{y + 46}" font-family="{MONO}" font-size="12.6" font-weight="700" fill="{t["ink"]}">{esc(name)}</text>'
+                   f'<text x="{sx + 14}" y="{y + 67}" font-family="{MONO}" font-size="11" fill="{t["muted"]}">{esc(span)}</text>')
+    for (name, span, rel, incoming), y in zip(GRAPH_LINKS, ys):
+        out.append(f'<rect x="{lx}" y="{y + 8}" width="{lw}" height="{bh - 16}" rx="10" fill="{t["bg"]}" stroke="{t["link"]}" stroke-width="1.5"/>'
+                   f'<text x="{lx + 14}" y="{y + 28}" font-family="{MONO}" font-size="10.5" letter-spacing="1" fill="{t["link"]}" font-weight="700">LINK · ONE LINE</text>'
+                   f'<text x="{lx + 14}" y="{y + 48}" font-family="{MONO}" font-size="12.6" font-weight="700" fill="{t["ink"]}">{esc(name)}</text>'
+                   f'<text x="{lx + 14}" y="{y + 64}" font-family="{MONO}" font-size="10.5" fill="{t["muted"]}">{esc(span)}</text>')
+        x1, x2, yy = sx + sw, lx, y + bh / 2
+        mk = f'marker-start="url(#ah-{theme})"' if incoming else f'marker-end="url(#ah-{theme})"'
+        out.append(f'<line x1="{x1 + 2}" y1="{yy}" x2="{x2 - 2}" y2="{yy}" stroke="{t["link"]}" stroke-width="1.6" {mk}/>'
+                   f'<rect x="{(x1 + x2) / 2 - 30}" y="{yy - 11}" width="60" height="20" rx="10" fill="{t["panel"]}" stroke="{t["line"]}"/>'
+                   f'<text x="{(x1 + x2) / 2}" y="{yy + 4}" font-family="{MONO}" font-size="10.5" fill="{t["link"]}" text-anchor="middle">{rel}</text>')
+    out.append(f'<line x1="24" y1="{H - 72}" x2="{W - 24}" y2="{H - 72}" stroke="{t["line"]}"/>'
+               f'<text x="24" y="{H - 40}" font-family="{SANS}" font-size="15" fill="{t["ink"]}"><tspan font-weight="700">The pack:</tspan> '
+               f'{len(D["seeds"])} seeds as live source + {len(D["links"])} links as one line each = '
+               f'<tspan font-weight="700" fill="{t["mint"]}">{len(D["seeds"]) + len(D["links"])} of {D["n"]:,} paragraphs, {D["packTokens"]:,} tokens</tspan></text>'
+               f'<text x="24" y="{H - 18}" font-family="{SANS}" font-size="12.5" fill="{t["muted"]}">Built in ~30 ms with no model call. Shown: three of the real seeds and links for this question.</text>')
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {W} {H}" width="{W}" height="{H}" role="img" '
+            f'aria-label="mic link graph: a question selects seed paragraphs, which link to the code they use and the code that uses them">'
+            + "".join(out) + "</svg>")
 
 
 def main() -> None:
@@ -252,6 +318,7 @@ def main() -> None:
         out[f"banner-{th}.svg"] = banner(th)
         out[f"demo-{th}.svg"] = demo(th)
         out[f"bench-{th}.svg"] = bench(th)
+        out[f"graph-{th}.svg"] = graph(th)
     out["mark.svg"] = mark_svg()
     for name, svg in out.items():
         with open(os.path.join(HERE, name), "w", encoding="utf-8") as f:

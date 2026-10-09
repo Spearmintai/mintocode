@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 40,
+ "question": "Where in the error handler resolution method does the lookup sequence traverse schematic scopes then HTTP status codes then exception class method resolution order?",
+ "model": "haiku",
+ "answer": "# Error Handler Resolution Traversal Sequence\n\nIn `src/quill/sansio/app.py:L823-846`, the `App._locate_fault_processor` method implements three nested loops for the lookup sequence:\n\n1. **HTTP Status Code Traversal** (Line 834):\n   ```python\n   for c in (code, None) if code is not None else (None,):\n   ```\n   Loops over codes: first the specific `code`, then `None` for non-HTTP errors.\n\n2. **Schematic Scope Traversal** (Line 832-835):\n   ```python\n   names = (*schematics, None)\n   ...\n   for name in names:\n   ```\n   Iterates through schematic names (from `request.schematics`) and finally `None` for app-level handlers. The `schematics` parameter comes from `request.schematics` (envelope_types.py:L180-195), which returns schematic names from current schematic upwards through parents.\n\n3. **Exception Class MRO Traversal** (Line 841):\n   ```python\n   for cls in exc_class.__mro__:\n       handler = handler_map.get(cls)\n   ```\n   Walks the exception class's method resolution order, checking more specific exception classes before their base classes.\n\nThis creates a priority order of **schematic+code > app+code > schematic+class > app+class**, as confirmed by the docstring (L826-829) and the compiled knowledge summary.",
+ "cost": 0.018042,
+ "turns": 1,
+ "duration_s": 10.9,
+ "tokens": {
+  "input": 7502,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7502
+ },
+ "pack_tokens": 4873,
+ "score": {
+  "correctness": 16,
+  "completeness": 13,
+  "relevance": 16,
+  "clarity": 16,
+  "reasoning": 14,
+  "total": 75
+ }
+}

@@ -1,0 +1,27 @@
+{
+ "arm": "linkpack-haiku",
+ "repo": "quill",
+ "k": 5,
+ "question": "What mechanisms ensure that template processing functions registered during modular component registration are accessible when templates are rendered using the shared template environment?",
+ "model": "haiku",
+ "answer": "# Template Processing Function Registration Mechanisms\n\nBased on the provided material, several interconnected mechanisms ensure template processing functions registered during schematic enrollment remain accessible through the shared template environment:\n\n## 1. **Shared Template Environment via Armature**\n\nThe base `Armature` class (L52-698 in `src/quill/sansio/skeleton.py`) \"owns static/template config\" and serves as the foundation for both `Quill` and `Schematic`. This establishes a central template configuration point.\n\n## 2. **Decorator-Based Registration During Preparation Phase**\n\nTemplate filters are registered via decorator factories marked with `@preparationmethod`:\n\n```python\n@preparationmethod\ndef program_layout_sieve(\n    self, name: str | None = None\n) -> t.Callable[[T_template_filter], T_template_filter]:\n    \"\"\"Register a template filter, available in any template rendered by the application.\"\"\"\n    def decorator(f: T_template_filter) -> T_template_filter:\n        self.attach_program_layout_sieve(f, name=name)\n        return f\n    return decorator\n```\n(src/quill/sansio/schematics.py:L443-458)\n\nThe `@preparationmethod` wrapper (src/quill/sansio/skeleton.py:L42-49) ensures `_verify_configuration_completed()` runs before registration, maintaining ordering.\n\n## 3. **Deferred Registration via `note_once_only` Pattern**\n\nSchematic-level functions use deferred registration to populate app-level structures. For example, `preceding_program_inquiry`:\n\n```python\nself.note_once_only(\n    lambda s: s.app.before_request_funcs.assumefallback(None, []).append(f)\n)\n```\n(src/quill/sansio/schematics.py:L558-559)\n\nThis pattern shows how schematic registrations are queued and applied to the shared `app` during enrollment.\n\n## 4. **Enrollment-Time Application via SchematicSetupStatus**\n\nThe `SchematicSetupStatus` object (src/quill/sansio/schematics.py:L34-116) created during `enroll_plan()` provides access to both the schematic and app, enabling deferred functions to register into the shared environment at the right lifecycle moment.\n\n## 5. **Unified Template Environment Access**\n\nTests confirm the shared environment is accessible globally. For example:\n\n```python\n@app.layout_universal()\ndef get_stuff():\n    return 42\n\nassert \"get_stuff\" in app.markup_engine_env.globals.keys()\nassert quill.draw_layout_text(\"{{ get_stuff() }}\") == \"42\"\n```\n(tests/test_layouting.py:L311-321)\n\n---\n\n**Note:** The material does not include the full implementation of `attach_program_layout_sieve()` or the complete enrollment callback chain. For those details, examine `src/quill/sansio/schematics.py` beyond L458 and `src/quill/app.py` for the `enroll_plan()` implementation.",
+ "cost": 0.019964999999999997,
+ "turns": 1,
+ "duration_s": 22.0,
+ "tokens": {
+  "input": 7094,
+  "cache_write": 0,
+  "cache_read": 0,
+  "output": 0,
+  "total": 7094
+ },
+ "pack_tokens": 3652,
+ "score": {
+  "correctness": 11,
+  "completeness": 8,
+  "relevance": 12,
+  "clarity": 14,
+  "reasoning": 10,
+  "total": 55
+ }
+}

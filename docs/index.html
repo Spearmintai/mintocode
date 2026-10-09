@@ -109,14 +109,15 @@ section { padding-block: clamp(48px, 7vw, 88px); border-top: 1px solid var(--lin
 
 /* numbers */
 .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; }
-table { border-collapse: collapse; width: 100%; min-width: 760px; font-variant-numeric: tabular-nums; }
+table { border-collapse: collapse; width: 100%; min-width: 900px; font-variant-numeric: tabular-nums; }
 th, td { text-align: left; padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 th { font: 600 12px var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); background: var(--panel); }
 tr:last-child td { border-bottom: 0; }
 td.num { font-family: var(--font-mono); font-size: 14px; white-space: nowrap; }
+td.plan { font-family: var(--font-display); font-size: 18px; font-weight: 800; color: var(--mint); }
 tr.best td { background: color-mix(in srgb, var(--mint-soft) 60%, transparent); }
 tr.best td:first-child { font-weight: 700; }
-.bar-cell { width: 34%; }
+.bar-cell { width: 22%; }
 .tbar { height: 10px; border-radius: 3px; background: var(--cell); }
 .tbar.m { background: var(--mint); }
 .note { margin-top: 18px; font-size: 14px; color: var(--muted); max-width: 90ch; }
@@ -126,6 +127,7 @@ tr.best td:first-child { font-weight: 700; }
 .fact span { font-size: 15px; color: var(--muted); }
 
 /* stages */
+.graph img { display: block; width: 100%; height: auto; max-width: 940px; margin: 0 0 40px; }
 .stages { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; }
 .stage { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .stage .label b { color: var(--mint); }
@@ -209,27 +211,28 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); display: f
 <div class="wrap">
   <section id="numbers">
     <div class="sec-head">
-      <h2>Measured, not promised</h2>
+      <h2>More answers from the same plan</h2>
       <p>48 SWE-QA questions about flask, with every identifier renamed so the model cannot answer from memory.
         Same Sonnet agent, same prompt, scored 0-100 by SWE-QA's own strict judge against human reference answers.</p>
     </div>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>Setup</th><th>Score</th><th>Tokens per answer</th><th class="bar-cell">Tokens, to scale</th><th>Cost</th></tr></thead>
+        <thead><tr><th>Setup</th><th>Answers per plan</th><th>Frontier calls</th><th>Score</th><th>Tokens per answer</th><th class="bar-cell">Tokens, to scale</th><th>API cost</th></tr></thead>
         <tbody>
-          <tr><td>Claude Code, exploring by itself</td><td class="num">78.7</td><td class="num">77,900</td><td class="bar-cell"><div class="tbar" style="width:100%"></div></td><td class="num">$0.061</td></tr>
-          <tr><td>Claude Code + mic hooks</td><td class="num">79.3</td><td class="num">67,100</td><td class="bar-cell"><div class="tbar m" style="width:86.1%"></div></td><td class="num">$0.065</td></tr>
-          <tr class="best"><td>mic ask: link pack, one call</td><td class="num">72.9</td><td class="num">7,300</td><td class="bar-cell"><div class="tbar m" style="width:9.4%"></div></td><td class="num">$0.036</td></tr>
-          <tr><td>mic ask + local Laya judge</td><td class="num">71.5</td><td class="num">6,300</td><td class="bar-cell"><div class="tbar m" style="width:8.1%"></div></td><td class="num">$0.032</td></tr>
+          <tr><td>Claude Code, exploring by itself</td><td class="num plan">1.0×</td><td class="num">5.2</td><td class="num">78.7</td><td class="num">77,900</td><td class="bar-cell"><div class="tbar" style="width:100%"></div></td><td class="num">$0.061</td></tr>
+          <tr><td>Claude Code + mic hooks</td><td class="num plan">0.94×</td><td class="num">3.8</td><td class="num">79.3</td><td class="num">67,100</td><td class="bar-cell"><div class="tbar m" style="width:86.1%"></div></td><td class="num">$0.065</td></tr>
+          <tr class="best"><td>mic ask, Sonnet reads the pack</td><td class="num plan">1.7×</td><td class="num">1</td><td class="num">72.9</td><td class="num">7,300</td><td class="bar-cell"><div class="tbar m" style="width:9.4%"></div></td><td class="num">$0.036</td></tr>
+          <tr class="best"><td>mic ask, Haiku reads the pack</td><td class="num plan">3.6×</td><td class="num">0</td><td class="num">68.2</td><td class="num">6,500</td><td class="bar-cell"><div class="tbar m" style="width:8.3%"></div></td><td class="num">$0.017</td></tr>
         </tbody>
       </table>
     </div>
-    <p class="note">In a live session the hooks keep the same score and cut turns by a third. <code>mic ask</code> answers a question in one call:
-      it trades about six points of judged quality for a tenth of the tokens. Every row is reproducible with <code>bench/</code>, and the README lists the
+    <p class="note">Answers per plan: how many answers the same coding-plan budget buys compared with Claude Code exploring alone, using API-equivalent
+      cost as the proxy, since plans don't publish their metering. The compile is a one-time cost on top. In a live session the hooks keep the same
+      score and cut frontier calls by a quarter; <code>mic ask</code> answers in one call, or with no frontier call at all, and trades some judged quality for it. Every row is reproducible with <code>bench/</code>, and the README lists the
       approaches that did not pay off.</p>
     <div class="facts">
-      <div class="fact"><b>10.7×</b><span>fewer tokens per answer with <code>mic ask</code></span></div>
-      <div class="fact"><b>~30 ms</b><span>to build a pack; no model call at query time</span></div>
+      <div class="fact"><b>3.6×</b><span>more answers from the same coding plan, with Haiku reading the pack</span></div>
+      <div class="fact"><b>10.7×</b><span>fewer tokens per answer; packs build in ~30 ms with no model call</span></div>
       <div class="fact"><b>~90%</b><span>of compiled citations resolve to exact source spans</span></div>
     </div>
   </section>
@@ -240,6 +243,10 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); display: f
       <p>The expensive understanding happens once, when a strong model compiles the repository. Every question after
         that is a cheap lookup and a link step.</p>
     </div>
+    <picture class="graph">
+      <source media="(prefers-color-scheme: dark)" srcset="assets/graph-dark.svg">
+      <img src="assets/graph-light.svg" alt="mic link graph: the question selects seed paragraphs; seeds link to the code that uses them and the code they use" width="940" height="452">
+    </picture>
     <div class="stages">
       <div class="stage">
         <p class="label"><b>1</b> · Compile, once</p>
