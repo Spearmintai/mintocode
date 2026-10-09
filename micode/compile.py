@@ -462,5 +462,6 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     with open(core_path, "w", encoding="utf-8") as f:
         f.write(core + "\n")
     store.write_json(store.p(root, "manifest.json"), manifest)  # last: marks the artifact complete
+    store.register(root, manifest)
     log(f"done in {time.time() - t0:.0f}s, ${USAGE.cost:.2f} ({USAGE.calls} calls, {USAGE.cached} cached)")
     return manifest

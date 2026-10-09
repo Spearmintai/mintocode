@@ -60,6 +60,23 @@ mic install              # auto-detects Claude Code, Codex, OpenCode, ZCode
 | `opencode` | MCP server in `opencode.json` + a `/mic` command |
 | `agents-md` | a short block in the repo's `AGENTS.md` telling any agent to ask `mic` before exploring |
 
+**Any MCP client.** `mic mcp` is a standalone MCP server (stdio, no dependencies) that serves every repository you
+have compiled, so one entry in your client's config covers all of them:
+
+| Client | Command |
+|---|---|
+| Cursor | `mic install cursor` (writes `~/.cursor/mcp.json`) |
+| VS Code | `mic install vscode` (writes this workspace's `.vscode/mcp.json`) |
+| Claude Desktop | `mic install claude-desktop` |
+| Windsurf | `mic install windsurf` |
+| Gemini CLI | `mic install gemini` |
+| anything else | `mic install mcp-json` prints a config block to paste |
+
+Tools: `ask` (the link pack for a question, no model call), `answer` (one-call answer), `where`, `card`, `module`,
+`deps`, `core`, `status`, `repos` (every compiled repo on the machine) and `update`. Each takes an optional `repo`
+path; otherwise the server uses the client's workspace folders (MCP roots) or the current directory. Each repo's core
+card is also exposed as an MCP resource, and `ask_codebase` as a prompt.
+
 **No agent at all:** `mic ask "how does X work?"` answers in one model call, and
 `mic pack "…" -o pack.md` writes the minimal paragraphs for you to paste into any chat.
 

@@ -39,7 +39,8 @@ def main(argv=None) -> None:
     pk.add_argument("--budget", type=int, default=8000)
     pk.add_argument("-o", "--out", help="write the pack to this file instead of stdout")
     ins = sub.add_parser("install", help="wire mic into coding agents")
-    ins.add_argument("target", nargs="?", default="all", choices=["all", "claude", "codex", "opencode", "zcode", "agents-md"])
+    ins.add_argument("target", nargs="?", default="all", choices=["all", "claude", "codex", "opencode", "zcode", "cursor", "vscode",
+                                                             "claude-desktop", "windsurf", "gemini", "agents-md", "mcp-json"])
     sub.add_parser("setup-judge", help="install the local Laya paragraph judge (torch + laya in its own venv)").add_argument(
         "--gpu", action="store_true", help="install CUDA torch instead of the CPU build")
     sub.add_parser("judge-server", help="(internal) run the Laya judge daemon in the current Python")

@@ -1,4 +1,4 @@
-"""`mic install [claude|codex|opencode|zcode|agents-md|all]`: wire mic into coding agents.
+"""`mic install [claude|codex|opencode|zcode|cursor|vscode|claude-desktop|windsurf|gemini|agents-md|mcp-json|all]`.
 
 Every agent gets the MCP server (tools: ask, where, card, module, deps). Agents with Claude-style lifecycle hooks
 (Claude Code, Codex, ZCode) also get the hooks, so the minimal linked paragraphs are injected on every prompt
@@ -141,15 +141,65 @@ def agents_md(root: str = ".") -> None:
     _say(f"updated {path} (read by Codex, OpenCode, ZCode and others)")
 
 
-TARGETS = {"claude": claude, "codex": codex, "opencode": opencode, "zcode": zcode, "agents-md": agents_md}
+def _mcp_entry(cmd: list[str]) -> dict:
+    return {"command": cmd[0], "args": [*cmd[1:], "mcp"]}
+
+
+def _mcp_servers_file(path: str, label: str, key: str = "mcpServers", extra: dict | None = None) -> None:
+    cmd = mic_command()
+
+    def upd(d):
+        d.setdefault(key, {})["mic"] = dict(_mcp_entry(cmd), **(extra or {}))
+    _merge_json(path, upd)
+    _say(f"{label}: MCP server 'mic' (tools: ask, answer, where, card, module, deps, core, status, repos, update)")
+
+
+def cursor() -> None:
+    _mcp_servers_file(os.path.join(HOME, ".cursor", "mcp.json"), "Cursor")
+
+
+def windsurf() -> None:
+    _mcp_servers_file(os.path.join(HOME, ".codeium", "windsurf", "mcp_config.json"), "Windsurf")
+
+
+def gemini() -> None:
+    _mcp_servers_file(os.path.join(HOME, ".gemini", "settings.json"), "Gemini CLI")
+
+
+def claude_desktop() -> None:
+    if sys.platform == "darwin":
+        path = os.path.join(HOME, "Library", "Application Support", "Claude", "claude_desktop_config.json")
+    elif os.name == "nt":
+        path = os.path.join(os.environ.get("APPDATA", HOME), "Claude", "claude_desktop_config.json")
+    else:
+        path = os.path.join(HOME, ".config", "Claude", "claude_desktop_config.json")
+    _mcp_servers_file(path, "Claude Desktop (restart it to load the server)")
+
+
+def vscode(root: str = ".") -> None:
+    """VS Code reads workspace MCP servers from .vscode/mcp.json."""
+    _mcp_servers_file(os.path.join(root, ".vscode", "mcp.json"), "VS Code (this workspace)", key="servers",
+                      extra={"type": "stdio"})
+
+
+def mcp_json() -> None:
+    """Print a config block for any other MCP client."""
+    print(json.dumps({"mcpServers": {"mic": _mcp_entry(mic_command())}}, indent=2))
+
+
+TARGETS = {"claude": claude, "codex": codex, "opencode": opencode, "zcode": zcode, "cursor": cursor, "vscode": vscode,
+           "claude-desktop": claude_desktop, "windsurf": windsurf, "gemini": gemini, "agents-md": agents_md,
+           "mcp-json": mcp_json}
 
 
 def install(target: str) -> None:
     if target != "all":
         TARGETS[target]()
         return
-    found = [t for t, exe in (("claude", "claude"), ("codex", "codex"), ("opencode", "opencode"), ("zcode", "zcode"))
-             if shutil.which(exe) or os.path.isdir(os.path.join(HOME, "." + t))]
+    probes = (("claude", "claude", ".claude"), ("codex", "codex", ".codex"), ("opencode", "opencode", ".config/opencode"),
+              ("zcode", "zcode", ".zcode"), ("cursor", "cursor", ".cursor"), ("windsurf", "windsurf", ".codeium/windsurf"),
+              ("gemini", "gemini", ".gemini"))
+    found = [t for t, exe, d in probes if shutil.which(exe) or os.path.isdir(os.path.join(HOME, d))]
     if not found:
         _say("no coding agent detected; mic still works on its own: `mic compile .` then `mic ask` / `mic pack`")
     for t in found:

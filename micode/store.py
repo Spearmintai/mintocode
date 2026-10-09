@@ -204,3 +204,26 @@ class Resolver:
             return m.group(0)
 
         return REF_SYM.sub(sub, text)
+
+
+# ---------------------------------------------------------------- machine-wide registry of compiled repositories
+REGISTRY = os.path.join(os.path.expanduser("~"), ".cache", "mic", "repos.json")
+
+
+def register(root: str, manifest: dict) -> None:
+    """Remember a compiled repository so one MCP server can serve all of them."""
+    data = read_json(REGISTRY, {}) or {}
+    data[os.path.abspath(root)] = {"compiled_at": manifest.get("compiled_at"),
+                                   "files": manifest.get("stats", {}).get("files"),
+                                   "lines": manifest.get("stats", {}).get("lines")}
+    try:
+        write_json(REGISTRY, data)
+    except OSError:
+        pass
+
+
+def known_repos() -> list[dict]:
+    """Registered repositories that still have a compiled artifact, most recently compiled first."""
+    data = read_json(REGISTRY, {}) or {}
+    rows = [dict(v, root=k) for k, v in data.items() if os.path.exists(os.path.join(k, DIR, "manifest.json"))]
+    return sorted(rows, key=lambda r: r.get("compiled_at") or "", reverse=True)
