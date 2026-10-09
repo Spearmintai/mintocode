@@ -89,6 +89,29 @@ after about 300 answers, and a committed `.micode/` is shared by the whole team.
 The trade is explicit: one-call answers score lower than a full agent session, so use `mic ask` for "where / how /
 why" questions about the code, and keep the agent's own turns for edits.
 
+### Why the hooks save less than `mic ask`: Claude Code explores anyway
+
+Inside a Claude Code session, mic can only add context. Claude Code still decides how to work, and by default it
+explores: it greps and reads to confirm things for itself, even when the answer and its exact line spans are already in
+front of it. We measured this rather than assumed it:
+
+- **The agent re-checks what it was handed.** With the link pack injected, Sonnet still makes 2.8 tool calls per
+  question (4.2 without mic), often grepping the very names the pack gave it. Telling it, in the injected context,
+  that the spans were verified and it can answer now made no measurable difference.
+- **Turns, not bytes, drive the bill.** Every turn re-sends Claude Code's own ~13k-token system prompt and tool
+  definitions, so a 2,000-token read costs far less than the extra turn it takes to make it. The hooks cut turns from
+  5.2 to 3.8 per question, and that's where their 1.2× token saving comes from.
+- **Injected context is billed at the highest rate.** A link pack is new text on every prompt, so it is written to the
+  prompt cache (the most expensive token class) and then re-read on every later turn. That is why the hooks come out at
+  about the same plan cost as Claude Code alone (0.94×) despite fewer calls.
+- **A plugin can't change any of this.** Hooks can't stop exploration, can't place their context in the cached part of
+  the prompt, and can't replace the output of built-in tools like Grep and Read (only MCP tool output can be rewritten).
+
+So mic gives you two modes. The hooks keep Claude Code's full judgment at the same quality with fewer frontier calls;
+`mic ask` skips the exploration loop entirely and is where the 1.7-3.6× plan savings come from. If Claude Code adds a
+cache-stable slot for hook context, or lets hooks condense built-in tool output, the hooks' savings should grow; we are
+proposing both to the Claude Code team.
+
 ## What it does
 
 Most context tools either paste the repository into the window (repomix, gitingest), or index raw code and let the
