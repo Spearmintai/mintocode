@@ -126,8 +126,8 @@ front of it. We measured this rather than assumed it:
 
 So mic gives you two modes. The hooks keep Claude Code's full judgment at the same quality with fewer frontier calls;
 `mic ask` skips the exploration loop entirely and is where the 1.7-3.6× plan savings come from. If Claude Code adds a
-cache-stable slot for hook context, or lets hooks condense built-in tool output, the hooks' savings should grow; we are
-proposing both to the Claude Code team.
+cache-stable slot for hook context, or lets hooks condense built-in tool output, the hooks' savings should grow; we have
+proposed both to the Claude Code team in [anthropics/claude-code#100709](https://github.com/anthropics/claude-code/issues/100709).
 
 ## What it does
 

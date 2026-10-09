@@ -184,13 +184,14 @@ footer { padding-block: 32px 48px; border-top: 1px solid var(--line); display: f
         <div class="tabs" role="tablist" aria-label="Install">
           <button role="tab" id="tab-cc" aria-selected="true" aria-controls="pane">Claude Code</button>
           <button role="tab" id="tab-cli" aria-selected="false" aria-controls="pane">Any agent · CLI</button>
+          <button role="tab" id="tab-mcp" aria-selected="false" aria-controls="pane">MCP server</button>
         </div>
         <div class="cmd" id="pane" role="tabpanel">
           <pre id="cmdtext"></pre>
           <button class="copy" id="copy" type="button">Copy</button>
         </div>
       </div>
-      <p class="agents">Works with Claude Code, Codex, ZCode and OpenCode, or with no agent at all. Python 3.10+, no dependencies.</p>
+      <p class="agents">Works with Claude Code, Codex, ZCode and OpenCode, any MCP client, or no agent at all. Python 3.10+, no dependencies.</p>
     </div>
 
     <figure class="field" style="margin:0">
@@ -287,6 +288,7 @@ aka: "check preventing configuration
     <div class="sec-head">
       <h2>One tool, every agent</h2>
       <p><code>mic install</code> detects the agents you have and wires each one in, merging into its existing config.
+        Underneath, the same compiled repository is also a standalone MCP server, so any MCP client can use it.
         It compiles with whatever model access you already have: the claude or codex CLI, an Anthropic key, or any
         OpenAI-compatible API such as GLM, DeepSeek, OpenRouter or Ollama.</p>
     </div>
@@ -299,6 +301,8 @@ aka: "check preventing configuration
         <ul><li>loads the Claude plugin as is</li><li>MCP in <code>~/.zcode</code></li></ul></div>
       <div class="target"><h3>OpenCode</h3><span class="pill soft">MCP + command</span>
         <ul><li>MCP tools and a <code>/mic</code> command</li><li><code>AGENTS.md</code> tells it to ask mic first</li></ul></div>
+      <div class="target"><h3>Any MCP client</h3><span class="pill">MCP · 10 tools</span>
+        <ul><li>Cursor, VS Code, Claude Desktop, Windsurf, Gemini CLI</li><li>one server for every compiled repo</li><li><code>ask</code> returns the link pack, no model call</li></ul></div>
       <div class="target"><h3>No agent</h3><span class="pill soft">CLI</span>
         <ul><li><code>mic ask "…"</code>: one-call answer</li><li><code>mic pack "…"</code>: paste into any chat</li></ul></div>
     </div>
@@ -340,7 +344,8 @@ python3 bench/report.py</pre>
   // ---- install tabs
   var CMDS = {
     "tab-cc": '<span class="c"># inside Claude Code</span>\n/plugin marketplace add Spearmintai/mintocode\n/plugin install mic@mintocode\n/mic:compile',
-    "tab-cli": 'pip install git+https://github.com/Spearmintai/mintocode\nmic compile .\nmic install          <span class="c"># Claude Code, Codex, ZCode, OpenCode</span>'
+    "tab-cli": 'pip install git+https://github.com/Spearmintai/mintocode\nmic compile .\nmic install          <span class="c"># Claude Code, Codex, ZCode, OpenCode</span>',
+    "tab-mcp": 'pip install git+https://github.com/Spearmintai/mintocode\nmic compile .\nmic install cursor   <span class="c"># or vscode, claude-desktop, windsurf, gemini</span>'
   };
   var pre = document.getElementById("cmdtext"), tabs = document.querySelectorAll(".tabs button"), current = "tab-cc";
   function show(id) {
