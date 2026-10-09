@@ -21,7 +21,7 @@ Compile your repo once. **mic** links the functions, callers and tests a questio
   <a href="https://spearmintai.github.io/mintocode/"><img alt="Home page" src="https://img.shields.io/badge/home-spearmintai.github.io-5cd2a3?style=flat&labelColor=10261e"></a>
 </p>
 
-[Home page](https://spearmintai.github.io/mintocode/) · [Install](#install) · [Results](#results) · [How it works](#what-it-does) · [Agents](#install) · [Reproduce](bench/)
+[Home page](https://spearmintai.github.io/mintocode/) · [Install](#install) · [Results](#results) · [How it works](#what-it-does) · [Ideas](#what-a-compiled-codebase-makes-possible) · [Agents](#install) · [Reproduce](bench/)
 
 <br>
 
@@ -174,10 +174,12 @@ What we tried and dropped, with numbers in `bench/`:
 - dense vectors from Laya's encoder: anisotropic, no retrieval signal
 - int8 Laya on CPU: slower on SSE-only CPUs and hurts the ranking
 
-## Where this goes: compile with a frontier model, write with a local one
+## What a compiled codebase makes possible
 
-The expensive part of understanding a codebase happens once, at compile time. That opens a split most tools can't
-make:
+mic applies the idea of [Machine-Interpretable Information](https://arxiv.org/abs/2609.23371) to code: a strong model reads everything once, and every later read is cheap. Once
+your repository is compiled, a few things open up. Some work today; some are where we are headed.
+
+### Compile with a frontier model, write with a local one · *partly works today*
 
 1. **Compile with the strongest model you can get**, such as Fable or Opus, once per repository. Its understanding
    (what each function means, its traps, how people describe it, what links to what) is written into `.micode/` as
@@ -186,8 +188,8 @@ make:
    annotated with the frontier model's notes, so the small model works from the frontier model's reading of your code
    instead of its own.
 
-The pieces exist today: `mic compile . --model claude-fable-5-1`, then point `mic ask` at any OpenAI-compatible
-endpoint, for example a local Ollama:
+The pieces exist: `mic compile . --model claude-fable-5-1`, then point `mic ask` at any OpenAI-compatible endpoint,
+for example a local Ollama:
 
 ```bash
 MIC_BACKEND=openai OPENAI_BASE_URL=http://localhost:11434/v1 OPENAI_API_KEY=ollama \
@@ -195,7 +197,36 @@ MIC_OPENAI_MODEL_MEDIUM=qwen3-coder mic ask "where is the retry policy configure
 ```
 
 We have measured Haiku as the reader (the 3.6× row above), not yet a local model, and not yet a small model writing
-code from link packs. That is the next benchmark. If you try it, open an issue with your numbers.
+code from link packs. That is the next benchmark.
+
+### Work offline · *works today*
+
+The compile needs a model; nothing after it does. Building a link pack, `mic pack`, `mic where`, `mic card` and the
+MCP tools are local file reads that take milliseconds, so they work on a plane, behind a firewall, or with your API key
+switched off. Pair them with a local model and the whole question-and-answer loop runs without a network.
+
+### Put a leftover plan to work · *works today*
+
+Coding plans reset every week, and unused quota is simply lost. If you have budget left on a Sunday night and nothing
+to spend it on, run `mic compile` on the repositories you work in, or the libraries you keep reading. The compile
+draws on the same plan through your `claude` CLI, and what it produces stays: a committed `.micode/` keeps saving
+tokens for you and your teammates in every session after.
+
+### One graph across all your code · *idea*
+
+Each repository's link graph is plain data. Linking graphs across repositories (a service and its client SDK, an app
+and the internal libraries it imports) would let a question about one follow the references into the other, and a
+personal agent could carry a compiled memory of every codebase you have touched instead of re-reading each one. Today
+each repository compiles on its own; cross-repo linking is the step we want to build next.
+
+### More places a compile pays off
+
+- **Onboarding** · *works today*: the core card is a two-minute tour of a repository, and `mic ask` answers a new
+  teammate's questions with exact line references.
+- **Change impact** · *works today*: the `deps` MCP tool lists what imports a file, the blast radius of a change.
+- **Compile in CI** · *idea*: run `mic update` on merge so `.micode/` never goes stale and nobody pays for it twice.
+
+If you try any of these, open an issue with what you found.
 
 ## How it compares
 
@@ -224,7 +255,7 @@ bench/             SWE-QA harness, de-memorizer, session benchmark, retrieval ev
 
 ## Ideas it builds on
 
-- Machine-Interpretable Information (Y. Wang, D. Dou): compile once with a strong model, read cheaply many times.
+- [Machine-Interpretable Information](https://arxiv.org/abs/2609.23371) (Y. Wang, D. Dou): compile once with a strong model, read cheaply many times.
 - [Cache-to-Cache](https://arxiv.org/abs/2510.03215) (Yu Wang et al.) and [Cartridges](https://arxiv.org/abs/2506.06266)
   (Eyuboglu et al., Stanford): precompute what a reader needs instead of re-reading the source.
 - [Mostik AI](https://mostik.ai): passing a strong model's understanding to a cheaper one.
