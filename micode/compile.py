@@ -555,7 +555,8 @@ def plan(root: str, model: str = "opus", card_model: str | None = None, extensio
             "modules": len(set(mod_of.values())), "dirty_modules": len(dirty), "card_calls": len(jobs),
             "languages": languages, "by_language": {k: v for k, v in sorted(by_lang.items(), key=lambda kv: -kv[1][1])},
             "estimate": estimate(files, jobs, len(dirty), set() if structure_only else changed, card_model, model, qa=qa),
-            "models": [card_model, model], "mode": "structure-only" if structure_only else ("no-qa" if not qa else "full")}
+            "models": [card_model, model], "mode": "structure-only" if structure_only else ("no-qa" if not qa else "full"),
+            "unknown": sorted(((e, n) for e, n in scan.UNKNOWN.items() if n >= 20), key=lambda kv: -kv[1])[:5]}
 
 
 def print_plan(p: dict) -> None:
@@ -567,6 +568,9 @@ def print_plan(p: dict) -> None:
           f"      ~{e['calls']} model calls, ~{e['input_tokens'] / 1e6:.1f}M input + ~{e['output_tokens'] / 1e6:.2f}M output tokens"
           + (f", about ${e['usd']:,.2f} at API prices (cards: {p['models'][0]}, reasoning: {p['models'][1]})" if e["priced"] else ""),
           file=sys.stderr)
+    if p.get("unknown"):
+        print("      not indexed (no language claims them): " + ", ".join(f"{e} ({n:,} files)" for e, n in p["unknown"])
+              + f"\n      to include one: mic config ext {p['unknown'][0][0]}=LANG", file=sys.stderr)
     if p["languages"]:
         print("      custom file types: " + ", ".join(f"{k}={v}" for k, v in sorted(p["languages"].items())), file=sys.stderr)
 

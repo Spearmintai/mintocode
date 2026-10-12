@@ -66,7 +66,11 @@ class ScanRepo(unittest.TestCase):
             subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
             subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
             with mock.patch.object(scan, "USER_CONFIG", "/nonexistent"):
-                self.assertEqual(scan.scan(repo), [])                                      # not picked up by default
+                auto = {f.path: f.lang for f in scan.scan(repo)}                           # zero config: GCC/OpenFOAM convention
+                self.assertEqual(auto, {"Field.C": "cpp", "Field.H": "cpp"})
+                with open(os.path.join(repo, ".mic.json"), "w") as fh:
+                    json.dump({"auto_extensions": False}, fh)
+                self.assertEqual(scan.scan(repo), [])                                      # opt-out honoured
                 files = {f.path: f for f in scan.scan(repo, scan.load_languages(repo, [".H=cpp", ".C=cpp"]))}
             self.assertEqual({p: f.lang for p, f in files.items()}, {"Field.C": "cpp", "Field.H": "cpp"})
             syms, imps = symbols.extract(SOURCE, "cpp")
@@ -181,3 +185,48 @@ class OpenFOAMStyle(unittest.TestCase):
         self.assertIn("Foam::fvMatrix::solve", syms)                            # return type not captured in name
         self.assertIn("Foam::fvMatrix::operator+=", syms)
         self.assertNotIn("Foam", syms)                                           # namespaces are not symbols
+
+
+REG_C = """namespace Foam
+{
+    defineTypeNameAndDebug(fixedValue, 0);
+    addToRunTimeSelectionTable(distribution, fixedValue, dictionary);
+}
+
+makePatchFields(fixedValue);
+
+void Foam::helper::build()
+{
+    makeSomething(x);
+}
+"""
+
+
+class V111(unittest.TestCase):
+    def test_registrations_indexed_at_file_level_only(self):
+        syms = symbols.extract(REG_C, "cpp")[0]
+        regs = [s["name"] for s in syms if s["kind"] == "registration"]
+        self.assertEqual(regs, ["defineTypeNameAndDebug(fixedValue, 0)",
+                                "addToRunTimeSelectionTable(distribution, fixedValue, dictionary)",
+                                "makePatchFields(fixedValue)"])               # the call inside build() is dropped
+
+    def test_config_command_writes_repo_files(self):
+        from micode import config_cmd
+        with tempfile.TemporaryDirectory() as repo, mock.patch.object(scan, "USER_CONFIG", "/nonexistent"):
+            config_cmd.run(repo, "ext", [".tpp=cpp", ".H"])
+            config_cmd.run(repo, "ignore", ["tutorials/", "tutorials/"])
+            config_cmd.run(repo, "include", ["src/finiteVolume"])
+            cfg = json.load(open(os.path.join(repo, ".mic.json")))
+            self.assertEqual(cfg["extensions"], {".tpp": "cpp", ".H": "cpp"})
+            self.assertEqual(cfg["include"], ["src/finiteVolume/**"])
+            self.assertEqual(open(os.path.join(repo, ".micignore")).read(), "tutorials/\n")   # no duplicates
+
+    def test_unknown_extensions_reported(self):
+        with tempfile.TemporaryDirectory() as repo:
+            for k in range(25):
+                open(os.path.join(repo, f"case{k}.foam"), "w").write("x\n")
+            subprocess.run(["git", "init", "-q"], cwd=repo, check=True)
+            subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+            with mock.patch.object(scan, "USER_CONFIG", "/nonexistent"):
+                scan.scan(repo)
+            self.assertEqual(scan.UNKNOWN.get(".foam"), 25)

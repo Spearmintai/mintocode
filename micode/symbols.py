@@ -144,7 +144,13 @@ DECL["typescript"] = DECL["javascript"] + [
     (rf"^\s{{2,}}(?:(?:public|private|protected|static|readonly|async|abstract|override)\s+)+({_ID})\s*(?:<[^>]*>)?\s*\(", "method"),
 ]
 DECL["vue"] = DECL["svelte"] = DECL["javascript"]
-DECL["cpp"] = DECL["c"] + [
+REGISTRATION = (r"^\s{0,4}((?:add\w*ToRunTimeSelectionTable|addToMemberFunctionSelectionTable|define\w*TypeName\w*"
+                r"|defineRunTimeSelectionTable|declareRunTimeSelectionTable|make[A-Z]\w*)\s*\([^;{}]*\)\s*;?)\s*$")
+DECL["cpp"] = [
+    # OpenFOAM-style runtime-selection and registration macros at file or namespace level: how models and boundary
+    # conditions are wired together, so "which class registers X" is answerable from the index.
+    (REGISTRATION, "registration"),
+] + DECL["c"] + [
     (r"^\s*namespace\s+(\w+)", "namespace"),
     (r"^\s*(?:template\s*<[^>]*>\s*)?(?:class|struct)\s+(\w+)[^;]*$", "class"),
     # out-of-class definition at column 0: optional return type, then Qualified::name with optional template args,
@@ -258,11 +264,13 @@ def _generic_symbols(text: str, lang: str) -> list[Sym]:
                         break
                     name = stripped
                 name = name.split()[-1] if " " in name and "operator" not in name else name  # drop a captured return type
+            if kind == "registration":
+                name = re.sub(r"\s+", " ", name).rstrip(";").strip()
             if name in KEYWORDS:
                 continue
             if lang in END_KEYWORD_LANGS:
                 end = _end_keyword_end(lines, i)
-            elif kind in ("macro", "table", "decl", "ctor_decl"):
+            elif kind in ("macro", "table", "decl", "ctor_decl", "registration"):
                 end = i + 1
             else:
                 end = _brace_end(lines, i)
@@ -299,6 +307,8 @@ def _generic_symbols(text: str, lang: str) -> list[Sym]:
                 continue
             s["name"], s["kind"] = f"{cls['name']}.{s['name']}", "declaration"
         kept.append(s)
+    bodies = [(x["start"], x["end"]) for x in kept if x["kind"] in ("method", "function") and x["end"] > x["start"]]
+    kept = [x for x in kept if x["kind"] != "registration" or not any(a < x["start"] <= b for a, b in bodies)]
     syms[:] = kept
     for s in syms:
         if s["kind"] in ("method", "function") and "." not in s["name"]:

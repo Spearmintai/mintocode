@@ -43,6 +43,10 @@ def main(argv=None) -> None:
     a.add_argument("--model", default=os.environ.get("MICODE_READER", "sonnet"), help="model that answers (default sonnet)")
     a.add_argument("--pack", action="store_true", help="only print the selected paragraphs (no model call)")
     a.add_argument("--no-judge", action="store_true", help="skip the paragraph judge even if one is available")
+    cf = sub.add_parser("config", help="set file types, ignores and scope: mic config ext .H .C | ignore tutorials/ | include src | show")
+    cf.add_argument("action", choices=["show", "ext", "ignore", "include", "auto"])
+    cf.add_argument("values", nargs="*")
+    cf.add_argument("--user", action="store_true", help="write the per-user config (~/.config/mic/config.json) instead of the repo's")
     pk = sub.add_parser("pack", help="print the minimal linked paragraphs for a question (paste into any chat)")
     pk.add_argument("question", nargs="+")
     pk.add_argument("--budget", type=int, default=8000)
@@ -110,6 +114,9 @@ def main(argv=None) -> None:
             print(f"[mic] wrote {args.out} ({len(doc) // 4:,} tokens)", file=sys.stderr)
         else:
             print(doc)
+    elif args.cmd == "config":
+        from .config_cmd import run
+        run(find_root(os.getcwd()) or os.getcwd(), args.action, args.values, user=args.user)
     elif args.cmd == "install":
         from .install import install
         install(args.target)

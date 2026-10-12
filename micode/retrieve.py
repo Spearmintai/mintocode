@@ -334,7 +334,8 @@ def where(store: Store, name: str, limit: int = 10) -> list[str]:
     out = []
     for path, syms in store.symbols.items():
         for sym in syms:
-            if sym["name"] == name or (name_parts(sym["name"]) or [""])[-1] == tail:
+            if sym["name"] == name or (name_parts(sym["name"]) or [""])[-1] == tail or (
+                    sym.get("kind") == "registration" and re.search(rf"\b{re.escape(tail)}\b", sym["name"])):
                 note = next((x.get("does", "") for x in store.cards.get(path, {}).get("symbols", [])
                              if isinstance(x, dict) and x.get("name") == sym["name"]), "")
                 out.append(f"{path}:{_span(sym)} {sym['kind']} {sym['name']}" + (f" — {note[:200]}" if note else ""))

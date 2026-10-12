@@ -5,7 +5,7 @@
   <img alt="mic" src="docs/assets/logo-light.svg" width="240">
 </picture>
 
-<h1>Your agent reads 20 paragraphs.<br>Not your whole repo.</h1>
+<h1>Your agent reads 19 paragraphs.<br>Not your whole repo.</h1>
 
 **mic** compiles your codebase once. Then Claude Code, Codex, or any MCP agent<br>
 gets only the functions, callers and tests a question actually needs.
@@ -85,21 +85,27 @@ mic install              # finds your agents and wires mic into each one
 <details>
 <summary><b>Large and unusual codebases: custom file types, <code>.micignore</code>, scope, cost preview</b></summary>
 
-**Custom file types.** Tell mic which extensions (or exact file names) hold code in your repo. Uppercase `.C`/`.H`
-are read as C++ (the GCC and OpenFOAM convention); anything else takes `EXT=LANG`.
+**C++ with `.C`/`.H` works with no setup.** Uppercase `.C`/`.H` are read as C++ (the GCC and OpenFOAM convention), and
+OpenFOAM's registration macros (`addToRunTimeSelectionTable`, `make*`, `defineTypeNameAndDebug`) are indexed, so
+`mic where fixedValue` shows every place a type is registered.
+
+**Custom file types.** Add any other extension (or exact file name) with one command:
 
 ```bash
-mic compile . --ext .H,.C                    # one-off; remembered by `mic update`
-mic compile . --ext .inl=cpp --ext SConstruct=python
-MIC_EXTENSIONS=".H,.C" mic compile .         # environment
+mic config ext .tpp=cpp .inl=cpp        # this repo (.mic.json); add --user for every repo you compile
+mic config ignore tutorials/ '**/Make/'  # .micignore
+mic config include src/finiteVolume     # compile only part of a huge repo
+mic config show
 ```
 
+In Claude Code the same works as `/mic:config ext .tpp=cpp`. One-off alternatives: `mic compile . --ext .H,.C` or
+`MIC_EXTENSIONS=".H,.C"`. The resulting `.mic.json` looks like:
+
 ```jsonc
-// .mic.json at the repo root (commit it), or ~/.config/mic/config.json for every repo you compile
 {
-  "extensions": [".H", ".C"],                // or {".H": "cpp", ".tpp": "cpp"}
-  "include": ["src/**", "applications/**"],  // optional: compile only part of a huge repo
-  "ignore": ["tutorials/", "**/lnInclude/"]  // same syntax as .micignore
+  "extensions": {".tpp": "cpp", ".inl": "cpp"},
+  "include": ["src/finiteVolume/**"],
+  "ignore": ["tutorials/"]                   // same syntax as .micignore
 }
 ```
 
@@ -205,8 +211,8 @@ session model then relays that answer, which adds its own turn, so the cheapest 
 | Same 48 questions | Answers per plan budget ³ | Frontier-model calls per answer | Cost per answer (API) | Score |
 |---|---|---|---|---|
 | Claude Code, exploring by itself | **1.0×** | 5.2 | $0.061 | 78.7 |
-| Claude Code + mic hooks | **1.1×** | 3.8 | $0.065 | 79.3 |
-| `mic ask`, Sonnet reads the pack | **1.9×** | 1 | $0.036 | 72.9 |
+| Claude Code + mic hooks | **0.94×** | 3.8 | $0.065 | 79.3 |
+| `mic ask`, Sonnet reads the pack | **1.7×** | 1 | $0.036 | 72.9 |
 | `mic ask`, Haiku reads the pack | **3.6×** | 0 | $0.017 | 68.2 |
 
 ³ Plans don't publish their metering, so this uses API-equivalent cost as the proxy: how many answers the same

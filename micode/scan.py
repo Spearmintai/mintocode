@@ -7,6 +7,7 @@ compiled artifact are exact rather than generated.
 from __future__ import annotations
 
 import fnmatch
+from collections import defaultdict
 import hashlib
 import json
 import os
@@ -21,6 +22,7 @@ LANG_BY_EXT = {
     ".go": "go", ".rs": "rust", ".java": "java", ".kt": "kotlin", ".kts": "kotlin",
     ".scala": "scala", ".swift": "swift", ".rb": "ruby", ".php": "php",
     ".c": "c", ".h": "c", ".cc": "cpp", ".cpp": "cpp", ".cxx": "cpp", ".hpp": "cpp", ".hh": "cpp",
+    ".hxx": "cpp", ".ipp": "cpp", ".tpp": "cpp", ".inl": "cpp", ".tcc": "cpp", ".ixx": "cpp", ".cu": "cpp", ".cuh": "cpp",
     ".cs": "csharp", ".lua": "lua", ".sh": "shell", ".bash": "shell", ".zsh": "shell",
     ".sql": "sql", ".proto": "proto", ".graphql": "graphql", ".gql": "graphql",
     ".vue": "vue", ".svelte": "svelte", ".dart": "dart", ".ex": "elixir", ".exs": "elixir",
@@ -42,7 +44,7 @@ CODE_LANGS = {
 }
 
 DEFAULT_IGNORE = [
-    ".git/*", ".micode/*", "node_modules/*", "*/node_modules/*", "vendor/*", "third_party/*",
+    ".git/*", ".micode/*", ".mic.json", ".micignore", ".micodeignore", "node_modules/*", "*/node_modules/*", "vendor/*", "third_party/*",
     "dist/*", "build/*", "out/*", "target/*", ".next/*", ".nuxt/*", "__pycache__/*", "*/__pycache__/*",
     ".venv/*", "venv/*", "env/*", ".tox/*", ".mypy_cache/*", ".pytest_cache/*", "coverage/*",
     "*.min.js", "*.min.css", "*.map", "*.lock", "package-lock.json", "yarn.lock", "pnpm-lock.yaml",
@@ -274,6 +276,11 @@ def scan(root: str, languages: dict | None = None) -> list[FileInfo]:
     pats = load_ignore(root)
     rules, include = load_rules(root)
     custom = load_languages(root) if languages is None else languages
+    # Uppercase .C/.H/.CPP/... are C++ by the GCC and OpenFOAM convention: index them without any setup, unless the
+    # user mapped them explicitly or turned this off with "auto_extensions": false.
+    auto = project_config(root).get("auto_extensions", True)
+    auto_seen: dict = defaultdict(int)
+    UNKNOWN.clear()
     result = []
     for rel in list_files(root):
         user = rules.decide(rel)
@@ -296,7 +303,14 @@ def scan(root: str, languages: dict | None = None) -> list[FileInfo]:
             continue
         lang = _lang(rel, custom)
         if not lang:
-            continue
+            ext = os.path.splitext(rel)[1]
+            if auto and ext in AUTO_CPP and ext not in custom:
+                lang = "cpp"
+                auto_seen[ext] += 1
+            else:
+                if ext and not is_text_extension_ignored(ext):
+                    UNKNOWN[ext] += 1
+                continue
         text = data.decode("utf-8", errors="replace")
         # Skip generated/minified content: very long average line length.
         nlines = text.count("\n") + (0 if text.endswith("\n") else 1)
@@ -304,7 +318,18 @@ def scan(root: str, languages: dict | None = None) -> list[FileInfo]:
             continue
         result.append(FileInfo(path=rel, lang=lang, lines=nlines, bytes=size, sha=sha_of(data),
                                is_code=lang in CODE_LANGS, is_test=_is_test(rel)))
+    if auto_seen:
+        print("[mic] reading " + ", ".join(f"{e} ({n:,} files)" for e, n in sorted(auto_seen.items()))
+              + " as C++ (GCC/OpenFOAM convention); change with `mic config ext .C=LANG`", file=sys.stderr)
     return result
+
+
+AUTO_CPP = {".C", ".H", ".CPP", ".HPP", ".CC", ".HH", ".CXX", ".HXX"}
+UNKNOWN: dict = defaultdict(int)  # extensions seen in the last scan that no language claims (for the dry-run hint)
+
+
+def is_text_extension_ignored(ext: str) -> bool:
+    return ext.lower() in {".txt", ".log", ".csv", ".lock", ".sum", ".orig", ".rej", ".bak", ".tmp", ".out"}
 
 
 def read_text(root: str, rel: str) -> str:

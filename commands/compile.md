@@ -1,6 +1,6 @@
 ---
 description: Compile this repository into .micode/ (one-time; later runs are incremental)
-argument-hint: "[--model opus|fable|sonnet] [--card-model sonnet] [--full]"
+argument-hint: "[--structure-only] [--ext .H,.C] [--no-qa] [--card-model sonnet] [--dry-run]"
 allowed-tools: Bash(python3:*)
 ---
 Compile the current repository with mic. This calls a strong model many times, once per batch of files; it may take a
@@ -9,6 +9,9 @@ few minutes and costs model usage once. Every later session then reads the compi
 Run it in the background with the Bash tool (`run_in_background: true`), from the repository root:
 
 `python3 "${CLAUDE_PLUGIN_ROOT}/bin/mic" compile . $ARGUMENTS`
+
+For a very large repository, suggest `--dry-run` first (it shows the cost) or `--structure-only` (free, no model calls).
+Uppercase .C/.H files are read as C++ automatically; other file types can be added with `/mic:config ext .tpp=cpp`.
 
 When it finishes, report the stats line (files, lines, Q/A items, verified citations, cost). Tell the user that `.micode/`
 is plain text meant to be committed, so teammates and CI reuse the compile, and that `/mic:update` recompiles only changed files.

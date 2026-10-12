@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.1.1
+
+Zero setup for OpenFOAM-style C++.
+
+- Uppercase `.C`/`.H` (and `.CPP`, `.HPP`, `.CC`, `.HH`, `.CXX`, `.HXX`) are read as C++ without any configuration,
+  following the GCC and OpenFOAM convention. An explicit mapping wins; `mic config auto off` turns it off.
+- More C++-family extensions out of the box: `.hxx`, `.ipp`, `.tpp`, `.inl`, `.tcc`, `.ixx`, and CUDA `.cu`/`.cuh`.
+- OpenFOAM registration macros are indexed as symbols (`addToRunTimeSelectionTable`, `make*`,
+  `defineTypeNameAndDebug`, `declare/defineRunTimeSelectionTable`), so `mic where fixedValue` lists every place a type
+  is registered. On OpenFOAM-dev's core: 984 registrations among 22,565 symbols, structure compile in 2.0 s.
+- `mic config show | ext | ignore | include | auto` and `/mic:config` set file types, ignores and scope without editing
+  JSON; `--user` writes the per-user config.
+- `--dry-run` lists extensions no language claims, with the command that adds them.
+- mic's own `.mic.json`, `.micignore` and `.micodeignore` are no longer indexed.
+
 ## 1.1.0
 
 Built for large, real-world codebases, starting with the C++ CFD world (thanks to

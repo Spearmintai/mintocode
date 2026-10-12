@@ -1,6 +1,6 @@
 {
   "name": "mic",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Compile your repository once; your coding agent then gets only the minimal linked paragraphs it needs.",
   "author": {
     "name": "Spearmint AI"
