@@ -18,7 +18,9 @@ def _store(path: str | None = None) -> Store:
 
 
 def main(argv=None) -> None:
+    from . import __version__
     ap = argparse.ArgumentParser(prog="mic", description="Compile a repository once; read the compiled understanding forever.")
+    ap.add_argument("--version", action="version", version=f"mic {__version__}")
     sub = ap.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("compile", help="compile (or incrementally update) the repository")
     c.add_argument("path", nargs="?", default=".")
@@ -27,6 +29,13 @@ def main(argv=None) -> None:
     c.add_argument("-j", "--jobs", type=int, default=8)
     c.add_argument("--qa-per-kloc", type=int, default=14, help="precompiled questions per 1000 source lines")
     c.add_argument("--full", action="store_true", help="ignore the previous compile and rebuild everything")
+    c.add_argument("--structure-only", action="store_true",
+                   help="no model calls: symbol table, link graph and live-source packs only (free; add notes later with a normal compile)")
+    c.add_argument("--no-qa", action="store_true", help="skip the precompiled Q&A stage (cheaper on very large repositories)")
+    c.add_argument("--dry-run", action="store_true", help="show what would be compiled and an estimate of the cost; no model calls")
+    c.add_argument("--ext", action="append", default=[], metavar=".EXT=LANG",
+                   help="treat files with this extension (or exact file name) as LANG, e.g. --ext .H=cpp --ext .C=cpp; "
+                        "repeatable, remembered for `mic update`. Persistent: .mic.json in the repo or ~/.config/mic/config.json")
     sub.add_parser("update", help="alias of compile (incremental)").add_argument("path", nargs="?", default=".")
     sub.add_parser("status", help="compile stats, cost and stale files")
     a = sub.add_parser("ask", help="answer a question from the minimal linked paragraphs, in one model call")
@@ -51,10 +60,17 @@ def main(argv=None) -> None:
     sub.add_parser("mcp", help="(internal) run the MCP server on stdio")
     args = ap.parse_args(argv)
 
+    if args.cmd == "compile" and args.dry_run:
+        from .compile import plan, print_plan
+        print_plan(plan(args.path, model=args.model, card_model=args.card_model, extensions=args.ext, full=args.full,
+                        qa=not args.no_qa, structure_only=args.structure_only))
+        return
     if args.cmd in ("compile", "update"):
         from .compile import compile_repo
         kw = {} if args.cmd == "update" else dict(model=args.model, card_model=args.card_model, jobs=args.jobs,
-                                                  qa_per_kloc=args.qa_per_kloc, full=args.full)
+                                                  qa_per_kloc=args.qa_per_kloc, full=args.full,
+                                                  extensions=args.ext, qa=not args.no_qa,
+                                                  structure_only=args.structure_only)
         if args.cmd == "update":
             prev = Store(find_root(args.path) or args.path).manifest.get("models", {})
             kw = dict(model=prev.get("reasoning", "opus"), card_model=prev.get("cards"))
@@ -63,7 +79,7 @@ def main(argv=None) -> None:
     elif args.cmd == "status":
         s = _store()
         stale = [p for p in s.manifest.get("files", {}) if s.is_stale(p)]
-        print(json.dumps({k: s.manifest.get(k) for k in ("repo", "compiled_at", "models", "stats", "verification", "cost")}, indent=1))
+        print(json.dumps({k: s.manifest.get(k) for k in ("repo", "compiled_at", "models", "languages", "stats", "verification", "cost")}, indent=1))
         print(f"stale files: {len(stale)}" + (f" ({', '.join(stale[:10])})" if stale else ""))
     elif args.cmd == "ask":
         from . import answer, judge

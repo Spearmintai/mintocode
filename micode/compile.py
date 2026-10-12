@@ -25,6 +25,7 @@ BATCH_LINES = 1400          # small files are batched up to this many lines per 
 BATCH_FILES = 12
 QA_SOURCE_CHARS = 110_000   # line-numbered source shown to one QA call
 MODULE_MIN_LINES = 350      # smaller directories fold into their parent module
+TARGET_MODULES = 150        # on large repositories, grow the minimum module size to keep about this many modules
 DATA_MAX_LINES = 400        # non-code data/config files longer than this are indexed but not compiled
 CORE_WORDS = 1100
 PROGRAM_LANGS = {"python", "javascript", "typescript", "go", "rust", "java", "kotlin", "scala", "swift", "ruby", "php",
@@ -44,8 +45,8 @@ def tok_estimate(text: str) -> int:
 
 
 # ---------------------------------------------------------------- stage 0
-def analyse(root: str):
-    files = scan.scan(root)
+def analyse(root: str, languages: dict | None = None):
+    files = scan.scan(root, languages)
     raw_imports, lang_of = {}, {}
     for f in files:
         text = scan.read_text(root, f.path)
@@ -56,22 +57,29 @@ def analyse(root: str):
     return files, graph
 
 
-def assign_modules(files) -> dict[str, str]:
-    """Directory-based modules; small directories fold into their parent."""
-    lines = {f.path: f.lines for f in files}
-    mod_of = {f.path: os.path.dirname(f.path) or "." for f in files}
-    while True:
-        totals = defaultdict(int)
-        for pth, m in mod_of.items():
-            totals[m] += lines[pth]
-        # Fold the deepest undersized module first, then re-total.
-        small = [m for m, t in totals.items() if m != "." and t < MODULE_MIN_LINES]
-        if not small:
-            return mod_of
-        m = max(small, key=lambda x: x.count("/"))
-        parent = os.path.dirname(m) or "."
-        for pth in [q for q, mm in mod_of.items() if mm == m]:
-            mod_of[pth] = parent
+def assign_modules(files, min_lines: int | None = None) -> dict[str, str]:
+    """Directory-based modules; small directories fold into their parent. On large repositories the minimum size grows
+    so a compile writes about TARGET_MODULES module cards (OpenFOAM keeps nearly every class in its own directory)."""
+    total = sum(f.lines for f in files)
+    min_lines = min_lines or max(MODULE_MIN_LINES, total // TARGET_MODULES)
+    lines_in: dict = defaultdict(int)
+    members: dict = defaultdict(list)
+    for f in files:
+        d = os.path.dirname(f.path) or "."
+        lines_in[d] += f.lines
+        members[d].append(f.path)
+    dirs = set(members)
+    for d in list(dirs):  # every ancestor can receive folded children
+        while d not in (".", ""):
+            d = os.path.dirname(d) or "."
+            dirs.add(d)
+    # deepest first: a parent is judged only after its small children have folded into it
+    for d in sorted(dirs, key=lambda x: (-x.count("/"), x)):
+        if d != "." and members.get(d) is not None and lines_in[d] < min_lines:
+            parent = os.path.dirname(d) or "."
+            members[parent].extend(members.pop(d))
+            lines_in[parent] += lines_in.pop(d)
+    return {pth: m for m, paths in members.items() for pth in paths}
 
 
 # ---------------------------------------------------------------- stage 1
@@ -198,7 +206,8 @@ def manifests_text(root: str, files) -> str:
 
 # ---------------------------------------------------------------- driver
 def compile_repo(root: str, model: str = "opus", card_model: str | None = None, jobs: int = 8,
-                 qa_per_kloc: int = 14, full: bool = False) -> dict:
+                 qa_per_kloc: int = 14, full: bool = False, extensions: list | None = None, qa: bool = True,
+                 structure_only: bool = False) -> dict:
     t0 = time.time()
     root = os.path.abspath(root)
     card_model = card_model or model
@@ -208,13 +217,21 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
         f.write(".cache/\n*.tmp\n")
     llm = LLM(os.path.join(sdir, ".cache"))
     old_manifest = store.read_json(store.p(root, "manifest.json"), {}) or {}
+    # upgrading a structure-only compile: every file still needs its card
+    if old_manifest.get("mode") == "structure" and not structure_only:
+        full = True
     old_files = old_manifest.get("files", {}) if not full else {}
     old_cards = {c["path"]: c for c in store.read_jsonl(store.p(root, "cards.jsonl"))} if not full else {}
     old_modules = {m["module"]: m for m in store.read_json(store.p(root, "modules.json"), [])} if not full else {}
     old_qa = store.read_jsonl(store.p(root, "qa.jsonl")) if not full else []
 
     log(f"scanning {root}")
-    files, graph = analyse(root)
+    # Custom file types: user config, the repo's .mic.json, MIC_EXTENSIONS, then --ext (remembered for `mic update`).
+    cli_ext = list(extensions or []) or old_manifest.get("extensions_cli", [])
+    languages = scan.load_languages(root, cli_ext)
+    if languages:
+        log("custom file types: " + ", ".join(f"{k}={v}" for k, v in sorted(languages.items())))
+    files, graph = analyse(root, languages)
     rgraph = defaultdict(list)
     for a, bs in graph.items():
         for b in bs:
@@ -229,7 +246,12 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     # recorded in the manifest too, so they do not count as changed on every run.
     changed = {f.path for f in files if old_files.get(f.path, {}).get("sha") != f.sha}
     cards = {pth: c for pth, c in old_cards.items() if pth in fmap and pth not in changed}
-    card_jobs = plan_card_jobs(root, files, changed)
+    card_jobs = [] if structure_only else plan_card_jobs(root, files, changed)
+    est = estimate(files, card_jobs, 0 if structure_only else (len({mod_of[p] for p in changed}) if old_files
+                                                               else len(set(mod_of.values()))),
+                   set() if structure_only else changed, card_model, model, qa=qa)
+    if changed:
+        log(f"estimate: ~{est['calls']} model calls" + (f", about ${est['usd']:,.2f} at API prices" if est["priced"] else ""))
     log(f"stage 1: {len(changed)} changed files -> {len(card_jobs)} card calls ({card_model})")
     parts = defaultdict(dict)
     done = 0
@@ -262,7 +284,7 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     members = defaultdict(list)
     for pth, m in mod_of.items():
         members[m].append(pth)
-    dirty_mods = {mod_of[pth] for pth in changed} | {m for m in members if m not in old_modules}
+    dirty_mods = set() if structure_only else ({mod_of[pth] for pth in changed} | {m for m in members if m not in old_modules})
     modules = {m: old_modules[m] for m in members if m in old_modules and m not in dirty_mods}
 
     def mod_deps(m):
@@ -341,7 +363,7 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
             it["module"] = m
         return items
 
-    all_qa_jobs = [j for m in sorted(dirty_mods) if m in modules for j in qa_jobs(m)]
+    all_qa_jobs = [j for m in sorted(dirty_mods) if m in modules for j in qa_jobs(m)] if qa else []
     log(f"stage 3: {len(all_qa_jobs)} question-space calls ({model})")
     with ThreadPoolExecutor(jobs) as ex:
         for fut in as_completed([ex.submit(run_qa, m, ch) for m, ch in all_qa_jobs]):
@@ -355,7 +377,11 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     # ---- stage 4: core card + flows (whenever any module changed)
     core_path = store.p(root, "core.md")
     mods_txt = "\n\n".join(module_text(modules[m]) for m in sorted(modules))
-    if dirty_mods or not os.path.exists(core_path):
+    if structure_only:
+        core, flows = structure_core(root, files, mod_of), []
+        modules = {m: {"module": m, "files": sorted(ps), "lines": sum(fmap[p].lines for p in ps)}
+                   for m, ps in members.items()}
+    elif dirty_mods or not os.path.exists(core_path):
         log(f"stage 4: core card + flows ({model})")
         core = llm.complete(prompts.CORE.format(repo=os.path.basename(root), words=CORE_WORDS, modules=mods_txt,
                                                 manifests=manifests_text(root, files)), model, prompts.SYSTEM).strip()
@@ -373,7 +399,7 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     # ---- stage 4b: symbol aliases — how people describe each symbol without knowing its name. This moves the
     # paraphrase matching an LLM would otherwise do at query time into the compile, so runtime stays lexical and fast.
     alias_jobs, batch = [], []
-    for pth in sorted(changed | {p for p in cards if not cards[p].get("aliases_done")}):
+    for pth in ([] if structure_only else sorted(changed | {p for p in cards if not cards[p].get("aliases_done")})):
         c = cards.get(pth)
         if not c:
             continue
@@ -442,6 +468,8 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     manifest = {
         "format": store.FORMAT, "repo": os.path.basename(root), "compiled_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "models": {"cards": card_model, "reasoning": model},
+        "languages": languages, "extensions_cli": cli_ext, "mode": "structure" if structure_only else "full",
+        "qa": bool(qa),
         "stats": {"files": len(files), "lines": total_lines, "modules": len(modules), "cards": len(cards),
                   "qa": len(kept_qa), "flows": len(flows), "symbols": sum(len(f.symbols) for f in files),
                   "source_tokens_est": sum(f.bytes for f in files) // 4, "core_tokens_est": tok_estimate(core)},
@@ -465,3 +493,92 @@ def compile_repo(root: str, model: str = "opus", card_model: str | None = None, 
     store.register(root, manifest)
     log(f"done in {time.time() - t0:.0f}s, ${USAGE.cost:.2f} ({USAGE.calls} calls, {USAGE.cached} cached)")
     return manifest
+
+
+# ---------------------------------------------------------------- planning and cost estimate (no model calls)
+PRICES = {"opus": (5.0, 25.0), "claude-opus-5-5": (5.0, 25.0), "sonnet": (3.0, 15.0), "claude-sonnet-5-5": (3.0, 15.0),
+          "haiku": (1.0, 5.0), "claude-haiku-4-5-20251001": (1.0, 5.0)}  # $ per million input / output tokens
+
+
+def estimate(files, card_jobs, n_modules: int, changed: set, card_model: str, model: str, qa: bool = True) -> dict:
+    """Rough token and dollar estimate for a compile, stage by stage. Calibrated on real compiles of a 34k-line
+    repository; prices are API list prices, and a subscription plan meters the same work against its limits."""
+    fmap = {f.path: f for f in files}
+    card_in = card_out = 0
+    for j in card_jobs:
+        size = sum((f.bytes if "range" not in j else f.bytes * (j["range"][1] - j["range"][0] + 1) / max(1, f.lines))
+                   for f in j["files"])
+        card_in += size / 4 * 1.45 + 1800
+        card_out += 1400 + 500 * len(j["files"])
+    code_bytes = sum(fmap[p].bytes for p in changed if p in fmap and fmap[p].is_code and not fmap[p].is_test)
+    qa_calls = max(1, round(code_bytes / 90_000)) if code_bytes and qa else 0
+    qa_in, qa_out = (code_bytes / 4 * 1.5 + qa_calls * 6000, qa_calls * 4500) if qa_calls else (0, 0)
+    mod_in, mod_out = n_modules * 14_000, n_modules * 2200
+    syms = sum(len(fmap[p].symbols) for p in changed if p in fmap)
+    alias_calls = max(1, syms // 70) if syms else 0
+    al_in, al_out = alias_calls * 7000, alias_calls * 4000
+    core_in, core_out = (60_000, 6000) if n_modules else (0, 0)
+    cin, cout = PRICES.get(card_model, (5.0, 25.0))
+    rin, rout = PRICES.get(model, (5.0, 25.0))
+    # every call also carries the client's own prompt (~5k in) and the model's thinking (~3k out)
+    card_calls, reason_calls = len(card_jobs) + alias_calls, qa_calls + n_modules + (2 if n_modules else 0)
+    card_in, card_out = card_in + 5000 * card_calls, card_out + 3000 * card_calls
+    qa_in, qa_out = qa_in + 5000 * reason_calls, qa_out + 3000 * reason_calls
+    usd = ((card_in + al_in) * cin + (card_out + al_out) * cout + (qa_in + mod_in + core_in) * rin
+           + (qa_out + mod_out + core_out) * rout) / 1e6
+    return {"calls": len(card_jobs) + qa_calls + n_modules + alias_calls + (2 if n_modules else 0),
+            "input_tokens": int(card_in + qa_in + mod_in + al_in + core_in),
+            "output_tokens": int(card_out + qa_out + mod_out + al_out + core_out),
+            "usd": round(usd, 2), "priced": card_model in PRICES and model in PRICES}
+
+
+def plan(root: str, model: str = "opus", card_model: str | None = None, extensions: list | None = None,
+         full: bool = False, qa: bool = True, structure_only: bool = False) -> dict:
+    """What a compile would do, without calling a model or writing anything."""
+    root = os.path.abspath(root)
+    card_model = card_model or model
+    old = {} if full else (store.read_json(store.p(root, "manifest.json"), {}) or {})
+    languages = scan.load_languages(root, list(extensions or []) or old.get("extensions_cli", []))
+    files, _ = analyse(root, languages)
+    mod_of = assign_modules(files)
+    old_files = old.get("files", {})
+    changed = {f.path for f in files if old_files.get(f.path, {}).get("sha") != f.sha}
+    if old.get("mode") == "structure" and not structure_only:
+        changed = {f.path for f in files}
+    jobs = [] if structure_only else plan_card_jobs(root, files, changed)
+    dirty = set() if structure_only else ({mod_of[p] for p in changed} if old_files else set(mod_of.values()))
+    by_lang: dict = defaultdict(lambda: [0, 0])
+    for f in files:
+        by_lang[f.lang][0] += 1
+        by_lang[f.lang][1] += f.lines
+    return {"root": root, "files": len(files), "lines": sum(f.lines for f in files), "changed": len(changed),
+            "modules": len(set(mod_of.values())), "dirty_modules": len(dirty), "card_calls": len(jobs),
+            "languages": languages, "by_language": {k: v for k, v in sorted(by_lang.items(), key=lambda kv: -kv[1][1])},
+            "estimate": estimate(files, jobs, len(dirty), set() if structure_only else changed, card_model, model, qa=qa),
+            "models": [card_model, model], "mode": "structure-only" if structure_only else ("no-qa" if not qa else "full")}
+
+
+def print_plan(p: dict) -> None:
+    e = p["estimate"]
+    langs = ", ".join(f"{k} {v[1]:,} lines" for k, v in list(p["by_language"].items())[:6])
+    print(f"[mic] plan for {p['root']}\n"
+          f"      {p['files']:,} files, {p['lines']:,} lines ({langs})\n"
+          f"      mode {p['mode']}: {p['changed']:,} to compile, {p['card_calls']} card calls, {p['dirty_modules']} of {p['modules']} modules\n"
+          f"      ~{e['calls']} model calls, ~{e['input_tokens'] / 1e6:.1f}M input + ~{e['output_tokens'] / 1e6:.2f}M output tokens"
+          + (f", about ${e['usd']:,.2f} at API prices (cards: {p['models'][0]}, reasoning: {p['models'][1]})" if e["priced"] else ""),
+          file=sys.stderr)
+    if p["languages"]:
+        print("      custom file types: " + ", ".join(f"{k}={v}" for k, v in sorted(p["languages"].items())), file=sys.stderr)
+
+
+def structure_core(root: str, files, mod_of) -> str:
+    """A deterministic core card for --structure-only compiles: languages and the module map, no model involved."""
+    by_lang, by_mod = defaultdict(int), defaultdict(int)
+    for f in files:
+        by_lang[f.lang] += f.lines
+        by_mod[mod_of[f.path]] += f.lines
+    langs = ", ".join(f"{k} ({v:,} lines)" for k, v in sorted(by_lang.items(), key=lambda kv: -kv[1])[:8])
+    mods = "\n".join(f"- `{m}/` · {n:,} lines" for m, n in sorted(by_mod.items(), key=lambda kv: -kv[1])[:60])
+    return (f"## What this is\n{os.path.basename(root)}: {len(files):,} files, {sum(by_lang.values()):,} lines. "
+            f"Languages: {langs}.\n(Structure-only compile: symbol table and link graph without model notes; run "
+            f"`mic compile .` to add compiled cards, Q&A and a written core card.)\n\n## Module map\n{mods}")

@@ -130,7 +130,13 @@ class Store:
 
 
 # ---------------------------------------------------------------- reference resolution
-REF_SYM = re.compile(r"`?([\w./@+-]+\.[A-Za-z0-9]+)::([\w.$<>~]+)`?")
+REF_SYM = re.compile(r"`?([\w./@+-]+\.[A-Za-z0-9]+)::([\w.$<>~]+(?:::[\w.$<>~]+)*)`?")
+LINE_NAME = re.compile(r"L?(\d+)(?:-L?(\d+))?")  # `path::L12-40`: a line citation written with '::'
+
+
+def name_parts(name: str) -> list[str]:
+    """'Field::rms', 'Field.rms' -> ['Field', 'rms'] (C++ and Python qualifiers alike)."""
+    return [p for p in re.split(r"\.|::", name) if p]
 REF_LINE = re.compile(r"`?([\w./@+-]+\.[A-Za-z0-9]+):L?(\d+)(?:-L?(\d+))?`?")
 
 
@@ -148,12 +154,13 @@ class Resolver:
         for s in syms:
             if s["name"] == name:
                 return s
-        tail = name.split(".")[-1]
-        cands = [s for s in syms if s["name"].split(".")[-1] == tail]
+        parts = name_parts(name) or [name]
+        tail = parts[-1]
+        cands = [s for s in syms if (name_parts(s["name"]) or [""])[-1] == tail]
         if len(cands) == 1 or (cands and all(c["name"] == cands[0]["name"] for c in cands)):
             return cands[0]
         if cands:
-            head = name.split(".")[0]
+            head = parts[0]
             for c in cands:
                 if c["name"].startswith(head):
                     return c
@@ -164,6 +171,9 @@ class Resolver:
         """Normalise one reference to `path:Lstart-end` (or `path`), or None if it does not resolve."""
         ref = ref.strip().strip("`")
         m = REF_SYM.fullmatch(ref)
+        if m and LINE_NAME.fullmatch(m.group(2)):
+            ref = f"{m.group(1)}:{m.group(2)}"
+            m = None
         if m:
             s = self.find(m.group(1), m.group(2))
             if s:
@@ -193,6 +203,10 @@ class Resolver:
             return text
 
         def sub(m):
+            ln = LINE_NAME.fullmatch(m.group(2))
+            if ln and m.group(1) in self.lines:
+                self.ok += 1
+                return f"`{m.group(1)}:L{ln.group(1)}" + (f"-{ln.group(2)}`" if ln.group(2) else "`")
             s = self.find(m.group(1), m.group(2))
             if s:
                 self.ok += 1

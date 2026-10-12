@@ -83,6 +83,40 @@ mic install              # finds your agents and wires mic into each one
 ```
 
 <details>
+<summary><b>Large and unusual codebases: custom file types, <code>.micignore</code>, scope, cost preview</b></summary>
+
+**Custom file types.** Tell mic which extensions (or exact file names) hold code in your repo. Uppercase `.C`/`.H`
+are read as C++ (the GCC and OpenFOAM convention); anything else takes `EXT=LANG`.
+
+```bash
+mic compile . --ext .H,.C                    # one-off; remembered by `mic update`
+mic compile . --ext .inl=cpp --ext SConstruct=python
+MIC_EXTENSIONS=".H,.C" mic compile .         # environment
+```
+
+```jsonc
+// .mic.json at the repo root (commit it), or ~/.config/mic/config.json for every repo you compile
+{
+  "extensions": [".H", ".C"],                // or {".H": "cpp", ".tpp": "cpp"}
+  "include": ["src/**", "applications/**"],  // optional: compile only part of a huge repo
+  "ignore": ["tutorials/", "**/lnInclude/"]  // same syntax as .micignore
+}
+```
+
+**`.micignore`** at the repo root uses gitignore syntax: `build/`, `/tutorials`, `**/lnInclude/`, `*.dep`, and
+`!pattern` to re-include. Files your `.gitignore` excludes are skipped already.
+
+**Start free on a huge repo.** `mic compile . --structure-only` makes no model calls: the symbol table, link graph and
+live-source packs work in seconds (OpenFOAM's 546k-line core: 1.7 s). Add the compiled notes later with a normal
+compile, or keep costs down with `--no-qa` and `--card-model sonnet`.
+
+**Preview before you spend.** `mic compile . --dry-run` prints the files, lines per language, modules and model
+calls a compile would make, with a token and dollar estimate, and calls no model. Every real compile prints the same
+estimate first. For very large repositories, `--card-model sonnet` cuts compile cost by about a third.
+
+</details>
+
+<details>
 <summary><b>Every agent, MCP client and model backend</b></summary>
 
 | Agent | What `mic install <agent>` sets up |

@@ -18,7 +18,7 @@ import urllib.parse
 from . import retrieve
 from .store import Store, find_root, known_repos
 
-VERSION = "0.2.0"
+from . import __version__ as VERSION
 REPO = {"type": "string", "description": "path of the repository (optional; defaults to the current project)"}
 
 

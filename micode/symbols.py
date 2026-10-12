@@ -144,8 +144,19 @@ DECL["typescript"] = DECL["javascript"] + [
     (rf"^\s{{2,}}(?:(?:public|private|protected|static|readonly|async|abstract|override)\s+)+({_ID})\s*(?:<[^>]*>)?\s*\(", "method"),
 ]
 DECL["vue"] = DECL["svelte"] = DECL["javascript"]
-DECL["cpp"] = DECL["c"] + [(r"^\s*(?:class|struct|namespace)\s+(\w+)[^;]*$", "class"),
-                           (r"^[\w:<>\*&\s]+?\b(\w+::~?\w+)\s*\(", "method")]
+DECL["cpp"] = DECL["c"] + [
+    (r"^\s*namespace\s+(\w+)", "namespace"),
+    (r"^\s*(?:template\s*<[^>]*>\s*)?(?:class|struct)\s+(\w+)[^;]*$", "class"),
+    # out-of-class definition at column 0: optional return type, then Qualified::name with optional template args,
+    # e.g. `Foam::scalar Foam::Field::rms() const`, `void Foam::fvMatrix<Type>::setValue` with `(` on the next line
+    # (OpenFOAM style). Body statements are indented, so they never match.
+    (r"^(?!\s)(?:[\w:<>,\*&]+[\s\*&]+)*?((?:~?\w+(?:<[^()]*?>)?::)+(?:operator\s*[^\s(]+|~?\w+))\s*(\(|$)", "method"),
+    # in-class member declarations, one line each: `double rms() const;`, `virtual void f() = 0;`
+    (r"^\s+(?:(?:virtual|static|inline|explicit|friend|constexpr)\s+)*(?:[\w:<>\*&,]+[\s\*&]+)+(~?\w+)\s*\([^;{]*\)"
+     r"\s*(?:const)?\s*(?:override|final|noexcept)?\s*(?:=\s*(?:0|default|delete))?\s*;", "decl"),
+    # in-class constructor / destructor declarations: `Field(const Mesh& mesh);`, `~Field();`
+    (r"^\s+(?:explicit\s+)?(~?\w+)\s*\([^;{]*\)\s*(?:noexcept)?\s*(?:=\s*(?:default|delete))?\s*;", "ctor_decl"),
+]
 DECL["objc"] = DECL["c"]
 
 KEYWORDS = {"if", "for", "while", "switch", "catch", "return", "else", "do", "try", "new", "throw",
@@ -230,19 +241,36 @@ def _generic_symbols(text: str, lang: str) -> list[Sym]:
                 syms.append({"name": m.group(2).strip()[:100], "kind": "section", "start": i + 1,
                              "end": i + 1, "sig": line.strip()[:160], "level": len(m.group(1))})
                 break
+            if kind == "namespace":
+                break  # namespaces wrap whole files; indexing them only adds noise
             if lang == "go" and kind == "method":
                 name = f"{m.group(1)}.{m.group(2)}"
             else:
                 name = m.group(1)
+            if lang in ("cpp", "c", "objc") and kind == "method":
+                if m.lastindex and m.lastindex >= 2 and m.group(2) == "":  # name alone: '(' must open the next line
+                    nxt = next((ln.strip() for ln in lines[i + 1:i + 4] if ln.strip()), "")
+                    if not nxt.startswith("("):
+                        continue
+                while True:  # Foam::fvMatrix<Type>::relax -> Foam::fvMatrix::relax
+                    stripped = re.sub(r"<[^<>()]*>", "", name)
+                    if stripped == name:
+                        break
+                    name = stripped
+                name = name.split()[-1] if " " in name and "operator" not in name else name  # drop a captured return type
             if name in KEYWORDS:
                 continue
             if lang in END_KEYWORD_LANGS:
                 end = _end_keyword_end(lines, i)
-            elif kind in ("macro", "table"):
+            elif kind in ("macro", "table", "decl", "ctor_decl"):
                 end = i + 1
             else:
                 end = _brace_end(lines, i)
-            syms.append({"name": name, "kind": kind, "start": i + 1, "end": max(end, i + 1),
+            start = i + 1
+            if lang == "cpp":
+                while start > 1 and lines[start - 2].lstrip().startswith("template"):
+                    start -= 1
+            syms.append({"name": name, "kind": kind, "start": start, "end": max(end, i + 1),
                          "sig": re.sub(r"\s+", " ", line.strip())[:200]})
             break
     if lang == "markdown":
@@ -257,6 +285,21 @@ def _generic_symbols(text: str, lang: str) -> list[Sym]:
             s.pop("level", None)
     # Qualify methods with their enclosing class/impl for readability.
     containers = [s for s in syms if s["kind"] in ("class", "impl", "type", "module")]
+    # C++ member declarations count only inside a class body: qualify them with the innermost enclosing class, and keep a
+    # constructor/destructor declaration only when its name is the class's own (statements in inline bodies drop out).
+    kept = []
+    for s in syms:
+        if s["kind"] in ("decl", "ctor_decl"):
+            inside = [c for c in containers if c["start"] < s["start"] <= c["end"]]
+            first = (s.get("sig") or "").split("(")[0].split()
+            if not inside or (first and first[0] in KEYWORDS):
+                continue
+            cls = max(inside, key=lambda c: c["start"])
+            if s["kind"] == "ctor_decl" and s["name"].lstrip("~") != cls["name"].split(".")[-1]:
+                continue
+            s["name"], s["kind"] = f"{cls['name']}.{s['name']}", "declaration"
+        kept.append(s)
+    syms[:] = kept
     for s in syms:
         if s["kind"] in ("method", "function") and "." not in s["name"]:
             for c in containers:
@@ -288,6 +331,16 @@ def extract(text: str, lang: str) -> tuple[list[Sym], list[str]]:
 
 
 # ---------------------------------------------------------------- import resolution
+def _common(a: str, b: str) -> int:
+    """Length of the shared leading directory path of two repo paths."""
+    n = 0
+    for x, y in zip(a.split("/"), b.split("/")):
+        if x != y:
+            break
+        n += 1
+    return n
+
+
 def resolve_imports(files: dict, lang_of: dict) -> dict[str, list[str]]:
     """Map each file to the in-repo files it imports. files: path -> list of raw import strings."""
     paths = set(files)
@@ -310,6 +363,13 @@ def resolve_imports(files: dict, lang_of: dict) -> dict[str, list[str]]:
     for p in paths:
         if p.endswith(".go"):
             go_dirs.setdefault(os.path.dirname(p), []).append(p)
+
+    by_base: dict[str, list[str]] = {}       # file name -> paths (C/C++ includes)
+    by_stem_base: dict[str, list[str]] = {}  # file name without extension -> paths (JVM/.NET imports)
+    for p in paths:
+        b = os.path.basename(p)
+        by_base.setdefault(b, []).append(p)
+        by_stem_base.setdefault(os.path.splitext(b)[0], []).append(p)
 
     graph: dict[str, list[str]] = {}
     for src, imps in files.items():
@@ -347,7 +407,11 @@ def resolve_imports(files: dict, lang_of: dict) -> dict[str, list[str]]:
                         break
             elif lang in ("c", "cpp", "objc"):
                 stem = os.path.normpath(os.path.join(d, imp)).replace(os.sep, "/")
-                cand = [stem] if stem in paths else [p for p in paths if p.endswith("/" + imp)][:1]
+                if stem in paths:
+                    cand = [stem]
+                else:  # include paths and lnInclude-style trees: match by file name, prefer the nearest file
+                    found = [p for p in by_base.get(os.path.basename(imp), []) if p == imp or p.endswith("/" + imp)]
+                    cand = [max(found, key=lambda p: (_common(p, src), -len(p)))] if found else []
             elif lang == "rust":
                 if "::" not in imp:  # mod foo;
                     cand = by_noext.get(f"{d}/{imp}".lstrip("/"), [])
@@ -364,7 +428,8 @@ def resolve_imports(files: dict, lang_of: dict) -> dict[str, list[str]]:
                                 break
             elif lang in ("java", "kotlin", "scala", "csharp"):
                 tail = imp.replace(".", "/")
-                cand = [p for p in paths if os.path.splitext(p)[0].endswith(tail)][:1]
+                stems = by_stem_base.get(tail.rsplit("/", 1)[-1], [])
+                cand = [p for p in stems if os.path.splitext(p)[0].endswith(tail)][:1]
             elif lang == "ruby":
                 stem = os.path.normpath(os.path.join(d, imp)).replace(os.sep, "/")
                 cand = by_noext.get(stem, []) or by_noext.get("lib/" + imp, [])

@@ -329,11 +329,12 @@ def card_for(store: Store, path: str, max_syms: int = 80) -> str:
 def where(store: Store, name: str, limit: int = 10) -> list[str]:
     """Exact symbol lookup (full name, or last component), with the compiled one-line note."""
     name = name.strip().rstrip("()")
-    tail = name.split(".")[-1].split("::")[-1]
+    from .store import name_parts
+    tail = (name_parts(name) or [name])[-1]
     out = []
     for path, syms in store.symbols.items():
         for sym in syms:
-            if sym["name"] == name or sym["name"].split(".")[-1] == tail:
+            if sym["name"] == name or (name_parts(sym["name"]) or [""])[-1] == tail:
                 note = next((x.get("does", "") for x in store.cards.get(path, {}).get("symbols", [])
                              if isinstance(x, dict) and x.get("name") == sym["name"]), "")
                 out.append(f"{path}:{_span(sym)} {sym['kind']} {sym['name']}" + (f" — {note[:200]}" if note else ""))
@@ -624,6 +625,16 @@ def link_pack(store: Store, query: str, budget: int = 3500, ix: Index | None = N
     linked = [sid for sid, _ in sorted(link_score.items(), key=lambda kv: -kv[1])
               if not any(links_mod._contains(store, sid, s) for s in seeds)][:n_links]
 
+    # A header declaration is only a signature: send the matching definition's code instead (C++ declares in .H and
+    # defines in .C/.cpp), and keep the declaration as a one-line link.
+    swapped = []
+    for k, sid in enumerate(seeds):
+        d = _definition_of(store, sid)
+        if d and d not in seeds:
+            seeds[k] = d
+            swapped.append(sid)
+    linked = swapped + [x for x in linked if x not in swapped and x not in seeds]
+
     if judge is not None:
         # A judgment model decides, per candidate paragraph, whether it is needed. The pool is the best-scoring
         # paragraphs plus the link neighbourhood of the heuristic seeds, so lexical misses can still be chosen.
@@ -685,3 +696,30 @@ def link_pack(store: Store, query: str, budget: int = 3500, ix: Index | None = N
     if rest:
         add("LINKED (definitions used, callers, tests):\n" + "\n".join(rest))
     return "\n\n".join(parts), info
+
+
+
+def _definition_of(store: Store, sid: str):
+    """For a C++ member declaration, the sid of its out-of-class definition (same class and name), if any."""
+    from .store import name_parts
+    path, _, i = sid.rpartition("#")
+    syms = store.symbols.get(path) or []
+    if not i.isdigit() or int(i) >= len(syms) or syms[int(i)].get("kind") != "declaration":
+        return None
+    defs = store._cache.get("cpp_defs")
+    if defs is None:
+        defs = defaultdict(list)
+        for p, ss in store.symbols.items():
+            for k, x in enumerate(ss):
+                if x.get("kind") == "method" and "::" in x["name"]:
+                    parts = x["name"].split("::")  # plain splits: this runs over every symbol of a large repo
+                    if len(parts) >= 2:
+                        defs[tuple(parts[-2:])].append(f"{p}#{k}")
+        store._cache["cpp_defs"] = defs
+    key = tuple(syms[int(i)]["name"].replace("::", ".").split(".")[-2:])
+    cands = defs.get(key, [])
+    if not cands:
+        return None
+    d, stem = os.path.dirname(path), os.path.splitext(os.path.basename(path))[0]
+    return max(cands, key=lambda c: (os.path.dirname(c.rpartition("#")[0]) == d,
+                                     os.path.basename(c.rpartition("#")[0]).startswith(stem)))
